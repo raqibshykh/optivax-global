@@ -22,6 +22,6 @@ export const roleMenu: Record<string, string[]> = {
   sales_admin: ['dashboard', 'leads', 'projects', 'billing', 'notifications'],
   production_admin: ['dashboard', 'tasks', 'projects', 'billing', 'notifications'],
   marketing_admin: ['dashboard', 'leads', 'email_marketing', 'notifications'],
-  hr_admin: ['dashboard', 'users', 'departments', 'notifications'],
+  hr_admin: ['dashboard', 'users', 'payroll', 'departments', 'notifications'],
   management: ['dashboard', 'projects', 'billing', 'reports', 'notifications'],
 };

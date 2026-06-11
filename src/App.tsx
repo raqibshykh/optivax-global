@@ -12,6 +12,7 @@ import SalesPanel from "./pages/Dashboard/SalesPanel";
 import ProductionPanel from "./pages/Dashboard/ProductionPanel";
 import MarketingPanel from "./pages/Dashboard/MarketingPanel";
 import HRPanel from "./pages/Dashboard/HRPanel";
+import Employees from "./pages/HR/Employees";
 import ManagementPanel from "./pages/Dashboard/ManagementPanel";
 
 // Admin pages
@@ -128,8 +129,8 @@ export default function App() {
           <Route element={<ProtectedRoute allowedRoles={["hr_admin"]} />}>
             <Route path="/hr" element={<Navigate to="/hr/dashboard" replace />} />
             <Route path="/hr/dashboard" element={<HRPanel />} />
-            <Route path="/hr/users" element={<Clients />} /> {/* Reusing Clients view for now */}
-            <Route path="/hr/departments" element={<NotFound />} />
+            <Route path="/hr/users" element={<Employees />} />
+            <Route path="/hr/departments" element={<HRPanel />} />
             <Route path="/hr/notifications" element={<AdminNotifications />} />
           </Route>
 

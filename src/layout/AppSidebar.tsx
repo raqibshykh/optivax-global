@@ -73,6 +73,15 @@ const AppSidebar: React.FC = () => {
           { name: "Automation", path: "/admin/email/automation" },
         ];
       }
+      if (key === "departments" && role === "super_admin") {
+        base.subItems = [
+          { name: "Overview", path: "/super-admin/departments" },
+          { name: "HR Department", path: "/hr/dashboard" },
+          { name: "Production", path: "/production/dashboard" },
+          { name: "Sales Department", path: "/sales/dashboard" },
+          { name: "Marketing", path: "/marketing/dashboard" },
+        ];
+      }
       // Assign path for standard items
       if (base.subItems) {
         base.path = undefined;

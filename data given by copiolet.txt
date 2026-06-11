@@ -1,0 +1,136 @@
+This is a MASSIVE request to convert an admin dashboard into a fully working localhost demo without backend. Let me break down what's needed:
+
+Current state: We have a React 19 + TypeScript + Tailwind CSS admin dashboard with some working features
+Goal: Make EVERYTHING work locally using localStorage, Context, mock APIs
+This requires:
+
+Mock backend system (/src/mock/, /src/services/, /src/store/)
+Complete authentication with localStorage
+Admin & Client roles with demo accounts
+CRUD operations for clients, projects, invoices, files
+Notifications system
+Toast notifications
+Data persistence
+Mock data seeding
+Charts with real data
+Calendar with events
+Tables with sorting/searching/filtering/pagination
+Forms with validation
+Modals that work
+Payment flow simulation
+Profile management
+Settings persistence
+File management simulation
+Activity tracking
+Billing system
+This is a 3-4 hour project to implement properly. I need to:
+
+First, understand the current structure better
+Create mock data structure
+Create services layer
+Update authentication context
+Create CRUD hooks
+Update all pages to use mock data
+Add proper state management
+Add validation, toasts, loading states
+Test everything
+Let me start by exploring the current codebase structure and then implement this systematically.
+
+Since this is a huge task, I should:
+
+Create the mock backend infrastructure first
+Update AuthContext properly
+Create service layer
+Update each module one by one
+Add necessary utilities
+Let me start with the foundational pieces.
+
+This is a massive project! Let me build a complete production-like localhost demo. I'll implement this step-by-step with full CRUD, auth, persistence, and all interactive features.
+
+Starting with the mock backend infrastructure and working through each module:
+
+Created 10 todos
+
+Let me start by creating the mock data structures and types. I'll create a comprehensive mock backend system.
+
+Creating the complete mock backend infrastructure now:
+
+Created mock
+
+Created services
+
+Created store
+
+Created utils
+
+Now I'll create the types and interfaces for the mock backend system.
+
+Created index.ts
+
+Now I need to create the mock data initialization file with seed data.
+
+Created data.ts
+
+Now I need to create the localStorage service which will handle all data persistence.
+
+Created storage.ts
+
+Now I need to create the initialization service that seeds the database on first load.
+
+Created initialization.ts
+
+Now I need to create CRUD services for users, clients, projects, invoices, etc. Let me start with the user/auth service.
+
+Created userService.ts
+
+Now creating CRUD services for clients, projects, and invoices.
+
+Created clientService.ts
+
+Creating more services for projects and invoices.
+
+Created projectService.ts
+
+Creating invoice service.
+
+Created invoiceService.ts
+
+Now creating notification and activity services.
+
+Created notificationService.ts
+
+Now I need to update the AuthContext to use these services and properly implement auth with localStorage. This is going to be a significant file. Let me replace the existing AuthContext.
+
+Read AuthContext.tsx, lines 1 to 50
+
+I need to replace the entire AuthContext with a proper implementation using the User service and full authentication.
+
+Edited
+AuthContext.tsx+115-20
+Now I need to read the rest of the AuthContext file and complete it properly.
+
+Read AuthContext.tsx, lines 1 to 100
+
+The file is already updated. Let me check if there's more to the file that needs fixing.
+
+Read AuthContext.tsx, lines 100 to 150
+
+There's some old code at the end that needs to be removed. Let me clean that up.
+
+Edited
+AuthContext.tsx+0-6
+Now I need to create a toast notification system for the application. Let me create a ToastContext and ToastProvider.
+
+Created ToastContext.tsx
+
+Now I need to update the main.tsx to wrap with the ToastProvider and ensure all providers are in place.
+
+Read main.tsx
+
+I need to add the AuthProvider and ToastProvider to main.tsx. Let me update it.
+
+Edited
+main.tsx+11-5
+Now let me check for errors and continue with building the toast UI component and updating the login page to use the new auth system.
+
+Checked main.tsx, AuthContext.tsx, no problems found

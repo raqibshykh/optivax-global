@@ -31,7 +31,12 @@ export function useProjects() {
           data = await ProjectService.getByClientId(user.id);
         }
       } else {
-        data = await ProjectService.getAll();
+        // RLS for members
+        if (user?.role.endsWith("_member")) {
+          data = await ProjectService.getAll(user.id);
+        } else {
+          data = await ProjectService.getAll();
+        }
       }
       setProjects(data);
     } catch (err: any) {

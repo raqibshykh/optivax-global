@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { RequirePermission } from "../../components/auth/RequirePermission";
 import PageMeta from "../../components/common/PageMeta";
 import { api } from "../../lib/client";
 import Chart from "react-apexcharts";
@@ -304,12 +305,14 @@ export default function SuperAdminPanel() {
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
               Departments & Employees
             </h2>
-            <button 
-              onClick={handleDeleteAllDeptEmployees}
-              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              Delete All
-            </button>
+            <RequirePermission domain="hr" action="DELETE" fallback={<button className="bg-gray-200 text-gray-500 px-4 py-2 rounded-lg text-sm">Delete All</button>}>
+              <button 
+                onClick={handleDeleteAllDeptEmployees}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Delete All
+              </button>
+            </RequirePermission>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -332,7 +335,9 @@ export default function SuperAdminPanel() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{emp.role}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                        <button onClick={() => handleDeleteEmployee(emp.id)} className="text-red-500 hover:text-red-700">Remove</button>
+                        <RequirePermission domain="hr" action="DELETE" fallback={<span className="text-gray-400 text-sm">Restricted</span>}>
+                          <button onClick={() => handleDeleteEmployee(emp.id)} className="text-red-500 hover:text-red-700">Remove</button>
+                        </RequirePermission>
                       </td>
                     </tr>
                   ))}

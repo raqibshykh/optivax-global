@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import { RequirePermission } from "../../components/auth/RequirePermission";
 
 // Mock Data Types
 interface Employee { id: string; name: string; role: string; department: string; status: string; }
@@ -183,6 +184,26 @@ export default function ManagementPanel() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Assign Workflow</h3>
+              <RequirePermission domain="production" action="ASSIGN" fallback={
+                <form className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assignment Type</label>
+                    <select className="w-full rounded-lg border border-gray-300 p-2 text-sm" disabled>
+                      <option value="project">Project</option>
+                      <option value="task">Task</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project/Task Name</label>
+                    <input type="text" className="w-full rounded-lg border border-gray-300 p-2 text-sm" disabled />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assign To (Team/Employee)</label>
+                    <input type="text" className="w-full rounded-lg border border-gray-300 p-2 text-sm" disabled />
+                  </div>
+                  <button className="w-full bg-gray-200 text-gray-500 font-medium py-2 px-4 rounded-lg text-sm" disabled>Assign</button>
+                </form>
+              }>
               <form onSubmit={handleAssign} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assignment Type</label>
@@ -221,6 +242,7 @@ export default function ManagementPanel() {
                   Assign {assignmentForm.type === 'project' ? 'Project' : 'Task'}
                 </button>
               </form>
+              </RequirePermission>
             </div>
 
             <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">

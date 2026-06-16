@@ -4,8 +4,9 @@ import { Project } from "../types";
 const BASE = "/saas/v1/projects";
 
 export class ProjectService {
-  static async getAll(): Promise<Project[]> {
-    const data = await api.get<Project[]>(`${BASE}/list`);
+  static async getAll(assignedTo?: string): Promise<Project[]> {
+    const url = assignedTo ? `${BASE}/list?assignedTo=${encodeURIComponent(assignedTo)}` : `${BASE}/list`;
+    const data = await api.get<Project[]>(url);
     return data || [];
   }
 

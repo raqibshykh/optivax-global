@@ -8,14 +8,17 @@ interface SaasApiResponse<T = unknown> {
   error?: string | null;
 }
 
-// Resolve base URL from Vite environment variables
+// Resolve base URL from Vite environment variables.
+// In dev mode the mock server intercepts fetch by pathname, so we must
+// use relative paths (empty string base) — an absolute "http://localhost/api"
+// prefix causes mock server checks like startsWith("/saas/v1/...") to fail.
 const getBaseUrl = (): string => {
   const env = import.meta.env as Record<string, string | undefined>;
   const envUrl = env.VITE_API_URL ?? env.VITE_API_BASE;
   if (envUrl) {
     return envUrl.replace(/\/$/, "");
   }
-  return "http://localhost:5173/api";
+  return "";
 };
 
 // Build request headers, merging extra headers
@@ -119,3 +122,11 @@ export const mockLogin = async (email: string, _password: string): Promise<MockU
 export const fetchSession = async (): Promise<MockUserSession | null> => {
   return null;
 };
+
+// Start the in-browser mock server in dev mode for profile endpoints
+try {
+  if (typeof window !== "undefined" && (import.meta.env?.DEV)) {
+    // dynamic import to avoid bundling in production
+    import("../mock/server").then((m) => m.startMockServer()).catch(() => {});
+  }
+} catch {}

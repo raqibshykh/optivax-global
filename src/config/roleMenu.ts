@@ -1,27 +1,20 @@
-// src/config/roleMenu.ts
-/**
- * Centralised navigation definition per role.
- * Each role returns an array of NavItem identifiers matching the
- * items defined in `AppSidebar`. This allows the sidebar to be
- * generated dynamically and keeps routing logic in a single place.
- */
-export const roleMenu: Record<string, string[]> = {
-  super_admin: [
-    'dashboard',
-    'departments',
-    'clients',
-    'projects',
-    'billing',
-    'files',
-    'notifications',
-    'revisions',
-    'email_marketing',
-    'settings',
-  ],
-  client: ['dashboard', 'projects', 'billing', 'files', 'notifications', 'profile'],
-  sales_admin: ['dashboard', 'leads', 'projects', 'billing', 'notifications'],
-  production_admin: ['dashboard', 'tasks', 'projects', 'billing', 'notifications'],
-  marketing_admin: ['dashboard', 'leads', 'email_marketing', 'notifications'],
-  hr_admin: ['dashboard', 'users', 'payroll', 'departments', 'notifications'],
-  management: ['dashboard', 'projects', 'billing', 'reports', 'notifications'],
+import { PermissionDomain } from "../types";
+
+export const MENU_DOMAINS: Record<string, PermissionDomain | null> = {
+  dashboard: null, // special case, everyone has a dashboard
+  departments: "hr", // super_admin only for overview
+  clients: "clients",
+  projects: "production",
+  billing: "billing",
+  files: "files",
+  notifications: "notifications",
+  revisions: null, // revisions tied to projects/clients, maybe null is fine if we check inside
+  email_marketing: "marketing",
+  settings: "system",
+  leads: "sales",
+  tasks: "production",
+  users: "hr",
+  payroll: "hr",
+  reports: "reports",
+  profile: null, // everyone has a profile
 };

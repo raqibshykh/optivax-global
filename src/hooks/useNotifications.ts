@@ -37,8 +37,9 @@ export function useNotifications() {
         data = await NotificationService.getByUserId(user.id);
       }
       setNotifications(data);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch notifications");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg || "Failed to fetch notifications");
     } finally {
       setIsLoading(false);
     }
@@ -48,14 +49,50 @@ export function useNotifications() {
     fetchNotifications();
   }, [fetchNotifications]);
 
+  // Cross-tab sync: listen for BroadcastChannel messages and storage updates
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let bc: BroadcastChannel | null = null;
+    const storageKey = "__saas_notifications_update";
+
+    const onMessage = (ev: MessageEvent) => {
+      try {
+        // payload can be anything; refresh list to keep authoritative state
+        fetchNotifications();
+      } catch {}
+    };
+
+    try {
+      if ("BroadcastChannel" in window) {
+        bc = new BroadcastChannel("saas_notifications");
+        bc.addEventListener("message", onMessage);
+      }
+    } catch {}
+
+    const onStorage = (ev: StorageEvent) => {
+      try {
+        if (ev.key === storageKey) fetchNotifications();
+      } catch {}
+    };
+
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      try { bc?.removeEventListener("message", onMessage); bc?.close(); } catch {}
+      try { window.removeEventListener("storage", onStorage); } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchNotifications]);
+
   const markAsRead = async (id: string) => {
     try {
       await NotificationService.markAsRead(id);
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
       );
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to mark as read");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(msg || "Failed to mark as read");
     }
   };
 
@@ -73,8 +110,9 @@ export function useNotifications() {
 
       await NotificationService.markAllAsRead(targetId);
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to mark all as read");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(msg || "Failed to mark all as read");
     }
   };
 
@@ -82,8 +120,9 @@ export function useNotifications() {
     try {
       await NotificationService.delete(id);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to delete notification");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(msg || "Failed to delete notification");
     }
   };
 
@@ -92,8 +131,9 @@ export function useNotifications() {
       const newNotification = await NotificationService.create(notification);
       setNotifications((prev) => [newNotification, ...prev]);
       return newNotification;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to add notification");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(msg || "Failed to add notification");
     }
   };
 

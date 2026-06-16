@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import { RequirePermission } from "../../components/auth/RequirePermission";
+import Placeholder from "../../components/common/Placeholder";
 
 // Mock Data Types
 interface Employee { id: string; name: string; email: string; department: string; status: string; }
@@ -142,6 +144,16 @@ export default function HRPanel() {
               ))}
             </div>
 
+            <RequirePermission
+              domain="hr"
+              action="CREATE"
+              fallback={
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+                  <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Add New Employee</h3>
+                  <Placeholder message="You don't have permission to add employees." />
+                </div>
+              }
+            >
             <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Add New Employee</h3>
               <form onSubmit={handleAddEmployee} className="space-y-4">
@@ -181,6 +193,7 @@ export default function HRPanel() {
                 </button>
               </form>
             </div>
+            </RequirePermission>
           </div>
         )}
 
@@ -216,8 +229,12 @@ export default function HRPanel() {
                       <td className="px-4 py-3 text-sm text-right">
                         {lr.status === 'Pending' && (
                           <div className="flex justify-end gap-2">
-                            <button onClick={() => handleLeaveAction(lr.id, 'Approved')} className="text-green-600 hover:text-green-900 bg-green-50 hover:bg-green-100 px-2 py-1 rounded text-xs font-medium">Approve</button>
-                            <button onClick={() => handleLeaveAction(lr.id, 'Rejected')} className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-2 py-1 rounded text-xs font-medium">Reject</button>
+                            <RequirePermission domain="hr" action="APPROVE" fallback={<span className="text-gray-400 text-xs">Restricted</span>}>
+                              <button onClick={() => handleLeaveAction(lr.id, 'Approved')} className="text-green-600 hover:text-green-900 bg-green-50 hover:bg-green-100 px-2 py-1 rounded text-xs font-medium">Approve</button>
+                            </RequirePermission>
+                            <RequirePermission domain="hr" action="APPROVE" fallback={<span className="text-gray-400 text-xs">Restricted</span>}>
+                              <button onClick={() => handleLeaveAction(lr.id, 'Rejected')} className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-2 py-1 rounded text-xs font-medium">Reject</button>
+                            </RequirePermission>
                           </div>
                         )}
                         {lr.status !== 'Pending' && <span className="text-gray-400 text-xs">Processed</span>}

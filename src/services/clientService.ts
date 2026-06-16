@@ -4,8 +4,9 @@ import { Client } from "../types";
 const BASE = "/saas/v1/clients";
 
 export class ClientService {
-  static async getAll(): Promise<Client[]> {
-    const data = await api.get<Client[]>(`${BASE}/list`);
+  static async getAll(assignedTo?: string): Promise<Client[]> {
+    const url = assignedTo ? `${BASE}/list?assignedTo=${encodeURIComponent(assignedTo)}` : `${BASE}/list`;
+    const data = await api.get<Client[]>(url);
     return data || [];
   }
 

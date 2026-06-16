@@ -4,8 +4,9 @@ import { Invoice } from "../types";
 const BASE = "/saas/v1/invoices";
 
 export class InvoiceService {
-  static async getAll(): Promise<Invoice[]> {
-    const data = await api.get<Invoice[]>(`${BASE}/list`);
+  static async getAll(assignedTo?: string): Promise<Invoice[]> {
+    const url = assignedTo ? `${BASE}/list?assignedTo=${encodeURIComponent(assignedTo)}` : `${BASE}/list`;
+    const data = await api.get<Invoice[]>(url);
     return data || [];
   }
 

@@ -12,6 +12,7 @@ import { fetchSession, api, MockUserSession, mockLogin } from "../lib/client";
 import { User, UserRole } from "../types";
 import { useSSE } from "../hooks/useSSE";
 import { getRoleHome } from "../lib/roles";
+import { hasPermission, canView as rbacCanView, canCreate as rbacCanCreate, canEdit as rbacCanEdit, canDelete as rbacCanDelete, canExport as rbacCanExport, canApprove as rbacCanApprove, canAssign as rbacCanAssign } from "../utils/rbac";
 
 // Convert MockUserSession to User
 const sessionToUser = (session: MockUserSession): User => ({
@@ -38,6 +39,14 @@ export interface AuthContextType {
     role?: UserRole
   ) => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
+  checkPermission: (domain: import("../types").PermissionDomain, action: import("../types").PermissionAction) => boolean;
+  canView: (domain: import("../types").PermissionDomain) => boolean;
+  canCreate: (domain: import("../types").PermissionDomain) => boolean;
+  canEdit: (domain: import("../types").PermissionDomain) => boolean;
+  canDelete: (domain: import("../types").PermissionDomain) => boolean;
+  canExport: (domain: import("../types").PermissionDomain) => boolean;
+  canApprove: (domain: import("../types").PermissionDomain) => boolean;
+  canAssign: (domain: import("../types").PermissionDomain) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -151,6 +160,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     register,
     updateProfile,
+    checkPermission: (domain, action) => hasPermission(user, domain, action),
+    canView: (domain) => rbacCanView(user, domain),
+    canCreate: (domain) => rbacCanCreate(user, domain),
+    canEdit: (domain) => rbacCanEdit(user, domain),
+    canDelete: (domain) => rbacCanDelete(user, domain),
+    canExport: (domain) => rbacCanExport(user, domain),
+    canApprove: (domain) => rbacCanApprove(user, domain),
+    canAssign: (domain) => rbacCanAssign(user, domain),
   };
 
   return (

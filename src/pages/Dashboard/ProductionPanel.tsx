@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import { RequirePermission } from "../../components/auth/RequirePermission";
 
 // Mock Data Types
 interface Task { id: string; title: string; assignedBy: string; status: "Pending" | "In Progress" | "Completed"; due_date: string; }
@@ -111,15 +112,23 @@ export default function ProductionPanel() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-right">
-                        <select 
-                          className="rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                          value={task.status}
-                          onChange={(e) => handleTaskStatusChange(task.id, e.target.value as Task["status"])}
-                        >
-                          <option value="Pending">Pending</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Completed">Completed</option>
-                        </select>
+                        <RequirePermission domain="production" action="EDIT" fallback={
+                          <select className="rounded border border-gray-300 px-2 py-1 text-xs" value={task.status} disabled>
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                          </select>
+                        }>
+                          <select 
+                            className="rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                            value={task.status}
+                            onChange={(e) => handleTaskStatusChange(task.id, e.target.value as Task["status"])}
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                          </select>
+                        </RequirePermission>
                       </td>
                     </tr>
                   ))}
@@ -141,20 +150,29 @@ export default function ProductionPanel() {
                       <h4 className="font-medium text-gray-900 dark:text-white">{proj.name}</h4>
                       <p className="text-xs text-gray-500">Client: {proj.client}</p>
                     </div>
-                    <select 
-                      className={`text-xs rounded-full px-2 py-1 font-medium border-0 focus:ring-0 ${
-                        proj.status === 'Completed' ? 'bg-green-100 text-green-800' : 
-                        proj.status === 'Review' ? 'bg-purple-100 text-purple-800' : 
-                        proj.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                      value={proj.status}
-                      onChange={(e) => handleProjectStatusChange(proj.id, e.target.value as Project["status"])}
-                    >
-                      <option value="Planning" className="bg-white text-gray-900">Planning</option>
-                      <option value="In Progress" className="bg-white text-gray-900">In Progress</option>
-                      <option value="Review" className="bg-white text-gray-900">Review</option>
-                      <option value="Completed" className="bg-white text-gray-900">Completed</option>
-                    </select>
+                    <RequirePermission domain="production" action="EDIT" fallback={
+                      <select className="text-xs rounded-full px-2 py-1 font-medium border-0 focus:ring-0" value={proj.status} disabled>
+                        <option value="Planning">Planning</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Review">Review</option>
+                        <option value="Completed">Completed</option>
+                      </select>
+                    }>
+                      <select 
+                        className={`text-xs rounded-full px-2 py-1 font-medium border-0 focus:ring-0 ${
+                          proj.status === 'Completed' ? 'bg-green-100 text-green-800' : 
+                          proj.status === 'Review' ? 'bg-purple-100 text-purple-800' : 
+                          proj.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
+                        }`}
+                        value={proj.status}
+                        onChange={(e) => handleProjectStatusChange(proj.id, e.target.value as Project["status"])}
+                      >
+                        <option value="Planning" className="bg-white text-gray-900">Planning</option>
+                        <option value="In Progress" className="bg-white text-gray-900">In Progress</option>
+                        <option value="Review" className="bg-white text-gray-900">Review</option>
+                        <option value="Completed" className="bg-white text-gray-900">Completed</option>
+                      </select>
+                    </RequirePermission>
                   </div>
                   <div className="flex justify-between text-xs mb-1 mt-4">
                     <span className="text-gray-500">Completion</span>

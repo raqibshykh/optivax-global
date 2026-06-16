@@ -1,5 +1,23 @@
 // User & Auth Types
-export type UserRole = "super_admin" | "management" | "sales_admin" | "production_admin" | "marketing_admin" | "hr_admin" | "client";
+export type UserRole =
+  | "super_admin"
+  | "management"
+  | "sales_admin" | "sales_member"
+  | "production_admin" | "production_member"
+  | "marketing_admin" | "marketing_member"
+  | "hr_admin" | "hr_member"
+  | "client";
+
+export type PermissionDomain =
+  | "sales" | "production" | "marketing" | "hr"
+  | "clients" | "system" | "billing" | "reports"
+  | "files" | "notifications";
+
+export type PermissionAction =
+  | "VIEW" | "CREATE" | "EDIT" | "DELETE"
+  | "EXPORT" | "APPROVE" | "ASSIGN";
+
+// ── Core entity types ──────────────────────────────────────────────────────
 
 export interface User {
   id: string;
@@ -19,17 +37,32 @@ export interface User {
   departmentId?: string;
 }
 
-export interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<string>;
-  logout: () => Promise<void>;
-  register: (email: string, password: string, name: string, role?: UserRole) => Promise<void>;
-  updateProfile: (data: Partial<User>) => Promise<void>;
+export interface Department {
+  id: string;
+  name: string;
+  headUserId?: string;
+  memberCount: number;
+  domain: PermissionDomain;
+  description?: string;
 }
 
-// Client Types
+export interface Employee {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  role: UserRole;
+  departmentId: string;
+  position: string;
+  salary?: number;
+  annualLeaveBalance: number;
+  workMode: "onsite" | "remote" | "hybrid";
+  joinDate: string;
+  status: "active" | "inactive" | "on-leave";
+  avatar?: string;
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -47,7 +80,6 @@ export interface Client {
   tags?: string[];
 }
 
-// Project Types
 export interface Project {
   id: string;
   clientId: string;
@@ -66,7 +98,34 @@ export interface Project {
   updatedAt: string;
 }
 
-// Invoice Types
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: "todo" | "in-progress" | "done" | "blocked";
+  priority: "low" | "medium" | "high";
+  assignedTo?: string;
+  projectId?: string;
+  dueDate?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface Lead {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  source?: string;
+  status?: string;
+  estimated_value?: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+// ── Financial types ────────────────────────────────────────────────────────
+
 export interface Invoice {
   id: string;
   number: string;
@@ -91,7 +150,6 @@ export interface InvoiceItem {
   total: number;
 }
 
-// Payment Types
 export interface Payment {
   id: string;
   invoiceId: string;
@@ -102,7 +160,8 @@ export interface Payment {
   notes?: string;
 }
 
-// File Types
+// ── Supporting types ───────────────────────────────────────────────────────
+
 export interface FileRecord {
   id: string;
   name: string;
@@ -115,7 +174,6 @@ export interface FileRecord {
   url?: string;
 }
 
-// Notification Types
 export interface Notification {
   id: string;
   userId: string;
@@ -128,7 +186,6 @@ export interface Notification {
   actionLabel?: string;
 }
 
-// Activity Types
 export interface Activity {
   id: string;
   userId: string;
@@ -139,7 +196,6 @@ export interface Activity {
   targetType?: string;
 }
 
-// Calendar Event Types
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -151,7 +207,6 @@ export interface CalendarEvent {
   color?: string;
 }
 
-// Dashboard Stats
 export interface DashboardStats {
   totalRevenue: number;
   totalClients: number;
@@ -161,7 +216,6 @@ export interface DashboardStats {
   activeUsers: number;
 }
 
-// Toast Types
 export interface Toast {
   id: string;
   type: "success" | "error" | "warning" | "info";
@@ -169,12 +223,13 @@ export interface Toast {
   duration?: number;
 }
 
-// Email Marketing Types
+// ── Email marketing types ──────────────────────────────────────────────────
+
 export interface EmailTemplate {
   id: string;
   name: string;
   subject: string;
-  content: string; // Stored as HTML or rich text JSON
+  content: string;
   type: "welcome" | "newsletter" | "reminder" | "custom";
   createdAt: string;
   updatedAt: string;
@@ -188,12 +243,8 @@ export interface EmailCampaign {
   status: "draft" | "scheduled" | "sent";
   scheduleDate?: string;
   sentDate?: string;
-  audienceTags: string[]; // empty means all clients
-  stats: {
-    sent: number;
-    opened: number;
-    clicked: number;
-  };
+  audienceTags: string[];
+  stats: { sent: number; opened: number; clicked: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -204,19 +255,51 @@ export interface EmailAutomation {
   triggerType: "new_client" | "invoice_overdue" | "project_complete";
   templateId: string;
   status: "active" | "inactive";
-  delayHours: number; // 0 = immediate
+  delayHours: number;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface Lead {
+// ── Sales Management types ─────────────────────────────────────────────────
+
+export interface CampaignBudget {
   id: string;
-  name: string;
-  email: string;
-  company?: string;
-  source?: string;
-  status?: string;
-  estimated_value?: number;
-  created_at: string;
-  updated_at?: string;
+  campaignName: string;
+  totalBudget: number;
+  budgetSpent: number;
+  startDate: string;
+  endDate: string;
+  assignedMembers: string[]; // user IDs
+  status: "active" | "completed" | "paused" | "planned";
+  notes?: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface SalesTarget {
+  id: string;
+  memberId: string;
+  memberName: string;
+  monthlyTarget: number;
+  quarterlyTarget: number;
+  annualTarget: number;
+  achievedAmount: number;
+  period: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SalesTask {
+  id: string;
+  title: string;
+  description: string;
+  assignedTo: string; // user ID
+  assignedName: string;
+  priority: "low" | "medium" | "high";
+  dueDate: string;
+  status: "todo" | "in-progress" | "done" | "blocked";
+  estimatedValue: number;
+  notes?: string;
+  createdAt: string;
+  createdBy: string;
 }

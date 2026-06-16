@@ -1,18 +1,17 @@
 import { api } from '../lib/client';
-
-export interface Lead {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  company?: string;
-  status: 'Lead' | 'Qualified' | 'Proposal Sent' | 'Won' | 'Lost';
-}
+import { useAuth } from '../context/AuthContext';
+import type { Lead } from '../types';
 
 /** Hook providing CRUD operations for leads */
 export const useLeads = () => {
+  const { user } = useAuth();
+
   const fetchLeads = async (params?: Record<string, any>) => {
-    const response = await api.get<{ leads: Lead[] }>('/saas/v1/leads', { params });
+    const finalParams = { ...(params || {}) };
+    if (user?.role?.endsWith("_member") && !finalParams.assignedTo) {
+      finalParams.assignedTo = user.id;
+    }
+    const response = await api.get<{ leads: Lead[] }>('/saas/v1/leads', { params: finalParams });
     return response.leads;
   };
 

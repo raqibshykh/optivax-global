@@ -1,99 +1,101 @@
-# SaaS Admin Dashboard
+# SaaS Admin Dashboard — Developer README
 
-![Dashboard Mockup](file:///C:/Users/Arbaz%20Khan/.gemini/antigravity/brain/564bc502-5333-4d8f-b4f0-c86f0d287886/dashboard_mockup_1780607915491.png)
+This README documents the current project flow, RBAC behaviour, mock infra, and developer instructions added during the dashboard RBAC enhancements.
 
-## Overview
-A modern, premium‑looking **SaaS admin dashboard** built with:
-- **WordPress** as a headless backend (custom plugin `saas‑core.php`).
-- **React + TypeScript** front‑end using **Tailwind CSS** for a sleek dark‑mode UI.
-- Full REST API (`/wp-json/saas/v1/...`) exposing CRUD for profiles, organizations, clients, projects, invoices, payments, subscriptions, notifications, files, calendar events, email templates & automations.
-- Integrated **Stripe** support for payment intents.
-- Rich UI components (cards, tables, charts, calendar, email campaign builder) with micro‑animations and glass‑morphism aesthetics.
+**Quick start**
+- **Install & run**: `npm install` then `npm run dev` (Vite server at `http://localhost:5173`).
+- **Type-check:** `npx tsc --noEmit`.
 
-## Features
-- Multi‑role authentication (`super_admin`, `client`, etc.).
-- Role‑based data filtering (clients only see their own projects/invoices).
-- Data seeding on plugin activation (demo super‑admin and client). 
-- CORS for local development (localhost:5173 & 3000).
-- Extensible API for future SaaS features.
-- Premium UI with dark mode, gradients, smooth hover effects.
+**What changed (high level)**
+- **Domain-scoped RBAC**: UI enforces domain-scoped visibility so `*_member` roles see only their assigned items; `*_admin` sees domain items; `management` and `super_admin` see all.
+- **Employees pages**: domain-specific routes and menu entries point to `/sales/users`, `/marketing/users`, `/production/users`, `/management/users`, `/admin/users`, `/hr/users` and render `src/pages/HR/Employees.tsx` accordingly.
+- **Tasks**: `src/pages/Common/Tasks.tsx` now persists tasks, shows assignee roles, and notifies admins when tasks are completed.
+- **Mock server & persistence**: localStorage keys used: `mock_profiles`, `mock_tasks`, `mock_notifications`.
+- **Realtime notifications**: when a task is completed the app creates notifications and dispatches a `CustomEvent("saas:notification", { detail })` so the UI (and `useSSE`) can react instantly.
 
-## Tech Stack
-| Layer | Technology |
-|-------|------------|
-| Backend | WordPress (PHP), MySQL, custom tables (`saas_*`) |
-| API | WordPress REST API (`/wp-json/saas/v1/`) |
-| Frontend | React, TypeScript, Tailwind CSS, Axios (`api` client) |
-| Auth | WordPress user system with role stored in `saas_profiles` |
-| Payments | Stripe (publishable key via `/config/stripe`) |
-| Build | Vite (React dev server) |
-
-## Installation
-### 1. Backend (WordPress plugin)
-1. Clone the repo and copy the `saas-core` folder into your WordPress `wp-content/plugins/` directory.
-2. Activate **SaaS Core Backend** from the WordPress admin → Plugins.
-3. On activation the plugin creates all required tables and seeds demo data.
-4. (Optional) Update the Stripe publishable key in `wp-config.php`:
-   ```php
-   define('SAAS_STRIPE_PUBLISHABLE_KEY', 'pk_test_************************');
-   ```
-
-### 2. Frontend
+**Developer checklist / flow**
+- Start dev server:
 ```bash
-# From the project root
-cd src
-npm install   # installs React, Tailwind, Axios, etc.
-npm run dev   # starts Vite dev server on http://localhost:5173
+npm install
+npm run dev
 ```
-The frontend expects the WordPress site to be reachable at the same origin (or configure proxy in `vite.config.ts`).
-
-## Development Workflow
-- **Backend**: edit `saas-core/saas-core.php`. After changes, deactivate/reactivate the plugin or run `wp db query` to apply DB schema updates.
-- **Frontend**: edit React components under `src/`. Hot‑module replacement refreshes the UI instantly.
-- **API**: use the defined routes in `saas-core.php`. See **API Reference** below.
-
-## API Reference (selected)
-| Resource | Endpoints | Description |
-|----------|-----------|-------------|
-| Auth | `POST /saas/v1/auth/signup`<br>`GET /saas/v1/auth/session` | Register a new WordPress user and fetch the current session (role, email, avatar, company). |
-| Projects | `GET /projects/list`<br>`POST /projects/create`<br>`PUT /projects/update`<br>`DELETE /projects/delete` | CRUD for SaaS projects. `list` supports `clientId` filter for client users. |
-| Invoices | `GET /invoices/list`<br>`POST /invoices/create`<br>`POST /invoices/mark-paid` | Manage invoices and mark them as paid. |
-| Payments | `GET /payments/list`<br>`POST /payments/create` | Record payments; integrates with Stripe via `create-payment-intent`. |
-| Subscriptions | `GET /subscriptions/list`<br>`POST /subscriptions/create` | Org‑level subscription data. |
-| Notifications | `GET /notifications/list`<br>`PUT /notifications/mark-all-read`<br>`DELETE /notifications/delete-all` | In‑app alerts. |
-| Files | `GET /files/list`<br>`POST /files/create` | Metadata for uploaded files (URL stored). |
-| Calendar Events | `GET /calendar-events/list`<br>`POST /calendar-events/create` | Simple event schedule. |
-| Email Templates / Campaigns / Automations | CRUD for each email‑related entity. |
-| Stripe Config | `GET /config/stripe` | Returns the publishable key for the front‑end. |
-
-All routes require authentication (`is_user_logged_in()`) except signup and the public Stripe config.
-
-## Front‑end Usage
-```tsx
-import { useAuth } from './context/AuthContext';
-import { useProjects } from './hooks/useProjects';
-
-function Dashboard() {
-  const { user } = useAuth();
-  const { projects, isLoading, error, refreshProjects } = useProjects();
-
-  // Render premium cards, project table, etc.
-}
+- Type-check changes:
+```bash
+npx tsc --noEmit
 ```
-The hook automatically selects the correct data based on `user.role`.
+- Common dev files to inspect:
+  - `src/pages/Common/Tasks.tsx` — task board, persistence, notifications, manager panel.
+  - `src/pages/HR/Employees.tsx` — employees list/create/edit with department scoping.
+  - `src/mock/server.ts` — intercepts `/saas/v1/profiles/*` for local dev.
+  - `src/services/notificationService.ts` — localStorage fallback for notifications (`mock_notifications`).
+  - `src/utils/rbac.ts` — permission helpers used across UI.
+  - `src/config/menuConfig.ts` and `src/App.tsx` — domain-specific routes and menus.
 
-## Styling & Design Guidelines
-- **Dark mode** is the default; colors are derived from a custom HSL palette.
-- **Tailwind** utilities are used throughout; avoid ad‑hoc inline styles.
-- **Micro‑animations** (hover, focus, table row fade‑in) are implemented with `transition` utilities.
-- **Responsive** layout – sidebar collapses on <640px, tables become scrollable.
-- **Typography** – Google Font **Inter** (`font-inter` class) for a modern look.
+**LocalStorage keys & reset**
+- `mock_profiles`: initial users seeded from `src/mock/users.ts` (reset by clearing this key).
+- `mock_tasks`: persisted tasks for the Kanban board.
+- `mock_notifications`: notifications created by mock flows (Tasks completion, manual sends).
 
-## Contributing
-1. Fork the repo.
-2. Create a feature branch.
-3. Follow the existing code style (PHP PSR‑12, TypeScript strict mode, Tailwind conventions).
-4. Submit a pull request with a clear description.
+Reset mocks in the browser console or DevTools Application tab:
+```js
+localStorage.removeItem('mock_profiles');
+localStorage.removeItem('mock_tasks');
+localStorage.removeItem('mock_notifications');
+```
 
-## License
-MIT License – feel free to use, modify, and distribute.
+**Realtime behavior**
+- The app supports two realtime mechanisms:
+  - SSE: `src/hooks/useSSE.ts` connects to `/notifications/stream` when available and dispatches `saas:notification` events on incoming messages.
+  - In-app dispatch: Task completion creates a `saas:notification` `CustomEvent` (same shape as SSE payload) and stores the notification in `mock_notifications`. `src/pages/Admin/Notifications.tsx` listens for this event and refreshes the notification list immediately.
+
+Event shape (payload):
+```js
+{ id: string, type: 'task'|..., payload: { id, userId, title, message, read, createdAt, actionUrl } }
+```
+
+**Notifications UI**
+- Notifications are read from the `NotificationService` which falls back to `mock_notifications` when API calls fail (see `src/services/notificationService.ts`).
+- The Admin Notifications page (`src/pages/Admin/Notifications.tsx`) will refresh when it receives a `saas:notification` event.
+
+**Tasks & admin notifications flow**
+- Members can mark their assigned tasks `done` from the Kanban board (`src/pages/Common/Tasks.tsx`).
+- When a task changes to `done`, the app:
+  - persists tasks to `mock_tasks` (so changes survive reloads),
+  - creates one or more notification records in `mock_notifications` for relevant admins (`*_admin` in the same department, plus `management`, `super_admin`, `hr_admin`),
+  - dispatches `saas:notification` events so listeners update in real-time,
+  - shows a small success toast to the user.
+
+**Manager panel**
+- Managers (`management` role) see a tracking panel in the Tasks page with:
+  - grouping by assignee role,
+  - filters for role and status,
+  - links that navigate to the assignee's employees page (e.g. `/marketing/users?selected=u42`).
+
+**Files I modified during this iteration**
+- [src/pages/Common/Tasks.tsx](src/pages/Common/Tasks.tsx)
+- [src/pages/HR/Employees.tsx](src/pages/HR/Employees.tsx)
+- [src/services/notificationService.ts](src/services/notificationService.ts)
+- [src/mock/server.ts](src/mock/server.ts)
+- [src/config/menuConfig.ts](src/config/menuConfig.ts)
+- [src/App.tsx](src/App.tsx)
+
+**Testing / verification**
+- Start dev server and sign in as different mock users (emails available in `src/mock/users.ts`).
+- Verify:
+  - Member sees only their tasks and can mark them done.
+  - Admin receives the notification in `/[domain]/notifications` immediately (no page reload).
+  - Manager sees role-grouped tasks and can navigate to employee profiles.
+
+**Next recommended improvements**
+- Add a mock `/saas/v1/notifications` and `/saas/v1/tasks` endpoints to `src/mock/server.ts` so the app uses consistent API calls (I can add these if you want).
+- Broadcast notifications to other open tabs with `BroadcastChannel` for multi-tab realtime behavior.
+- Add tests around `useSSE`, `useNotifications`, and `Tasks` RLS behavior.
+
+If you want, I can now:
+- add mock API endpoints for tasks & notifications, or
+- add a sidebar unread badge wired to `useNotifications().unreadCount`, or
+- implement cross-tab broadcasting with `BroadcastChannel`.
+
+---
+
+If you'd like any section expanded (API examples, diagrams, or commands), tell me which part and I'll add it.

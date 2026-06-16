@@ -1,0 +1,143 @@
+import { UserRole, PermissionDomain, PermissionAction, User } from "../types";
+
+type RolePermissions = Partial<Record<PermissionDomain, PermissionAction[]>>;
+
+const ALL_ACTIONS: PermissionAction[] = ["VIEW", "CREATE", "EDIT", "DELETE", "EXPORT", "APPROVE", "ASSIGN"];
+
+export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
+  super_admin: {
+    sales: ALL_ACTIONS,
+    production: ALL_ACTIONS,
+    marketing: ALL_ACTIONS,
+    hr: ALL_ACTIONS,
+    clients: ALL_ACTIONS,
+    system: ALL_ACTIONS,
+    billing: ALL_ACTIONS,
+    reports: ALL_ACTIONS,
+    files: ALL_ACTIONS,
+    notifications: ALL_ACTIONS,
+  },
+  management: {
+    sales: ["VIEW", "EXPORT"],
+    production: ["VIEW", "EXPORT"],
+    marketing: ["VIEW", "EXPORT"],
+    hr: ["VIEW", "EXPORT"],
+    clients: ["VIEW", "EXPORT"],
+    billing: ["VIEW", "EXPORT"],
+    reports: ["VIEW", "EXPORT"],
+    files: ["VIEW", "EXPORT"],
+    notifications: ["VIEW", "EXPORT"],
+  },
+  sales_admin: {
+    sales: ALL_ACTIONS,
+    clients: ALL_ACTIONS,
+    billing: ["VIEW", "CREATE"],
+    reports: ["VIEW", "EXPORT"],
+    files: ["VIEW", "CREATE", "EDIT", "DELETE"],
+    notifications: ["VIEW", "CREATE"],
+  },
+  sales_member: {
+    sales: ["VIEW", "EDIT"],
+    clients: ["VIEW", "EDIT"],
+    files: ["VIEW", "CREATE"],
+    notifications: ["VIEW"],
+  },
+  production_admin: {
+    production: ALL_ACTIONS,
+    clients: ["VIEW"],
+    files: ALL_ACTIONS,
+    reports: ["VIEW", "EXPORT"],
+    notifications: ["VIEW", "CREATE"],
+  },
+  production_member: {
+    production: ["VIEW", "EDIT"],
+    files: ["VIEW", "CREATE"],
+    notifications: ["VIEW"],
+  },
+  marketing_admin: {
+    marketing: ALL_ACTIONS,
+    files: ALL_ACTIONS,
+    reports: ["VIEW", "EXPORT"],
+    notifications: ["VIEW", "CREATE"],
+  },
+  marketing_member: {
+    marketing: ["VIEW", "EDIT"],
+    files: ["VIEW", "CREATE"],
+    notifications: ["VIEW"],
+  },
+  hr_admin: {
+    hr: ALL_ACTIONS,
+    files: ALL_ACTIONS,
+    reports: ["VIEW", "EXPORT"],
+    notifications: ["VIEW", "CREATE"],
+  },
+  hr_member: {
+    hr: ["VIEW", "EDIT"],
+    files: ["VIEW", "CREATE"],
+    notifications: ["VIEW"],
+  },
+  client: {
+    production: ["VIEW"],
+    clients: ["VIEW", "EDIT"],
+    billing: ["VIEW"],
+    files: ["VIEW"],
+    notifications: ["VIEW"],
+  }
+};
+
+export const hasPermission = (user: User | null, domain: PermissionDomain, action: PermissionAction): boolean => {
+  if (!user) return false;
+  
+  const rolePerms = RBAC_MATRIX[user.role];
+  if (!rolePerms) return false;
+
+  const domainPerms = rolePerms[domain];
+  if (!domainPerms) return false;
+
+  return domainPerms.includes(action);
+};
+
+// Map a role to its primary domain. Roles not listed are considered "global" (e.g., super_admin, management).
+const ROLE_PRIMARY_DOMAIN: Partial<Record<UserRole, PermissionDomain>> = {
+  sales_admin: "sales",
+  sales_member: "sales",
+  production_admin: "production",
+  production_member: "production",
+  marketing_admin: "marketing",
+  marketing_member: "marketing",
+  hr_admin: "hr",
+  hr_member: "hr",
+  client: "clients",
+};
+
+export const hasPermissionScoped = (user: User | null, domain: PermissionDomain, action: PermissionAction): boolean => {
+  // super_admin has unrestricted access
+  if (!user) return false;
+  if (user.role === "super_admin") return true;
+
+  // management role is a cross-domain manager and follows RBAC_MATRIX as-is
+  const rolePrimary = ROLE_PRIMARY_DOMAIN[user.role as UserRole] ?? null;
+
+  // Enforce scope: non-manager and non-super_admin cannot perform non-VIEW actions outside their primary domain
+  if (rolePrimary && user.role !== "management") {
+    if (action !== "VIEW" && rolePrimary !== domain) {
+      return false;
+    }
+  }
+
+  // Fallback to the regular matrix check
+  return hasPermission(user, domain, action);
+};
+
+export const canView = (user: User | null, domain: PermissionDomain) => hasPermissionScoped(user, domain, "VIEW");
+export const canCreate = (user: User | null, domain: PermissionDomain) => hasPermissionScoped(user, domain, "CREATE");
+export const canEdit = (user: User | null, domain: PermissionDomain) => hasPermissionScoped(user, domain, "EDIT");
+export const canDelete = (user: User | null, domain: PermissionDomain) => hasPermissionScoped(user, domain, "DELETE");
+export const canExport = (user: User | null, domain: PermissionDomain) => hasPermissionScoped(user, domain, "EXPORT");
+export const canApprove = (user: User | null, domain: PermissionDomain) => hasPermissionScoped(user, domain, "APPROVE");
+export const canAssign = (user: User | null, domain: PermissionDomain) => hasPermissionScoped(user, domain, "ASSIGN");
+
+export const isMember = (user: User | null): boolean => {
+  if (!user) return false;
+  return user.role.endsWith("_member");
+};

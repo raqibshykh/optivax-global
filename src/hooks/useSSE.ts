@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useToast } from "../context/ToastContext";
+import { safeParse } from "../lib/storage";
 
 const buildSseUrl = (): string => {
   const w = (window as any) || {};
@@ -48,23 +49,29 @@ export const useSSE = (enabled: boolean) => {
           console.debug("SSE connected", url);
         };
 
-        es.onmessage = (ev) => {
-          // generic messages (ping) — keep quiet in production
-          // console.debug("SSE message", ev.data);
-        };
-
         es.addEventListener("notification", (ev: MessageEvent) => {
           try {
-            const payload = JSON.parse((ev as MessageEvent).data);
+            const raw = (ev as MessageEvent).data as string;
+            type SSEPayload = { id?: string; type?: string; payload?: Record<string, unknown> };
+            const payload = safeParse<SSEPayload | null>(raw, null);
+            if (!payload) return;
             const title = payload.type || "Notification";
             const body = (payload.payload && (payload.payload.message || payload.payload.body)) || JSON.stringify(payload.payload || payload);
             // show user-facing notification
             showToast(`${title}: ${body}`, "info", 5000);
             // persist last id for reconnects
             if (payload.id) {
-              try { localStorage.setItem('saas:lastNotificationId', String(payload.id)); } catch {}
+              try {
+                localStorage.setItem("saas:lastNotificationId", String(payload.id));
+              } catch {
+                // Ignore storage failures (e.g., blocked cookies/localStorage).
+                console.debug("SSE: localStorage write failed");
+              }
+
             }
+
             // Emit a DOM event so other parts of the app can react
+
             const custom = new CustomEvent("saas:notification", { detail: payload });
             window.dispatchEvent(custom);
           } catch (err) {
@@ -75,7 +82,12 @@ export const useSSE = (enabled: boolean) => {
         es.onerror = () => {
           if (!mounted) return;
           // close and reconnect with jittered backoff
-          try { es.close(); } catch {}
+          try {
+            es.close();
+          } catch {
+            console.debug("SSE: EventSource close failed");
+          }
+
           const attempts = reconnectRef.current = reconnectRef.current + 1;
           const base = Math.min(30000, 1000 * Math.pow(2, attempts));
           const jitter = Math.floor(Math.random() * 1000);
@@ -84,6 +96,7 @@ export const useSSE = (enabled: boolean) => {
         };
       } catch (e) {
         console.error("SSE connection failed", e);
+
         const attempts = reconnectRef.current = reconnectRef.current + 1;
         const base = Math.min(30000, 1000 * Math.pow(2, attempts));
         const jitter = Math.floor(Math.random() * 1000);
@@ -98,7 +111,10 @@ export const useSSE = (enabled: boolean) => {
       if (esRef.current) {
         try {
           esRef.current.close();
-        } catch {}
+        } catch {
+          console.debug("SSE: close on unmount failed");
+        }
+
         esRef.current = null;
       }
     };

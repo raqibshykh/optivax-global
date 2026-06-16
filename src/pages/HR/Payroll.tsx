@@ -2,6 +2,7 @@ import PageMeta from "../../components/common/PageMeta";
 import { UserService, UserProfile } from "../../services/userService";
 import { useState, useEffect } from "react";
 import { useToast } from "../../context/ToastContext";
+import { safeParse } from "../../lib/storage";
 
 interface EmployeeExtraData {
   userId: string;
@@ -36,7 +37,7 @@ export default function Payroll() {
       // Load from localStorage
       const stored = localStorage.getItem("optivax_employee_extra");
       if (stored) {
-        setExtraData(JSON.parse(stored));
+        setExtraData(safeParse<Record<string, EmployeeExtraData>>(stored, {}));
       } else {
         // Initialize defaults
         const defaults: Record<string, EmployeeExtraData> = {};
@@ -52,8 +53,9 @@ export default function Payroll() {
         localStorage.setItem("optivax_employee_extra", JSON.stringify(defaults));
         setExtraData(defaults);
       }
-    } catch (err: any) {
-      showToast(err.message || "Failed to fetch data", "error");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(msg || "Failed to fetch data", "error");
     } finally {
       setIsLoading(false);
     }
@@ -183,7 +185,7 @@ export default function Payroll() {
                           {isEditing ? (
                             <select
                               value={editFields.workMode}
-                              onChange={(e) => setEditFields({ ...editFields, workMode: e.target.value as any })}
+                              onChange={(e) => setEditFields({ ...editFields, workMode: e.target.value as "Onsite" | "Remote" })}
                               className="px-2 py-1 border rounded text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                             >
                               <option value="Onsite">Onsite</option>
@@ -203,7 +205,7 @@ export default function Payroll() {
                           {isEditing ? (
                             <select
                               value={editFields.salaryStatus}
-                              onChange={(e) => setEditFields({ ...editFields, salaryStatus: e.target.value as any })}
+                              onChange={(e) => setEditFields({ ...editFields, salaryStatus: e.target.value as "Paid" | "Unpaid" })}
                               className="px-2 py-1 border rounded text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                             >
                               <option value="Paid">Paid</option>

@@ -1,26 +1,34 @@
 import React, { useState } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import { RequirePermission } from "../../components/auth/RequirePermission";
+import Placeholder from "../../components/common/Placeholder";
 
 // Mock Data Types
-interface Campaign { id: string; name: string; platform: string; status: "Active" | "Draft" | "Completed"; budget: number; spent: number; }
-interface SocialTask { id: string; title: string; platform: string; status: "To Do" | "In Progress" | "Done"; dueDate: string; }
+interface Campaign { id: string; name: string; platform: string; status: "Active" | "Draft" | "Completed"; budget: number; spent: number; ownerId?: string }
+interface SocialTask { id: string; title: string; platform: string; status: "To Do" | "In Progress" | "Done"; dueDate: string; assigneeId?: string }
 interface AdStat { id: string; campaign: string; clicks: number; impressions: number; conversions: number; }
 
+import { useAuth } from "../../context/AuthContext";
+
 export default function MarketingPanel() {
+  const { user } = useAuth();
+  const viewerRole = user?.role || null;
+  const isMember = viewerRole?.endsWith("_member");
+
   const [activeTab, setActiveTab] = useState("campaigns");
 
   // Mock State
   const [campaigns, setCampaigns] = useState<Campaign[]>([
-    { id: "cm1", name: "Summer Sale 2026", platform: "Facebook", status: "Active", budget: 5000, spent: 2340 },
-    { id: "cm2", name: "B2B Lead Gen", platform: "LinkedIn", status: "Active", budget: 10000, spent: 4500 },
-    { id: "cm3", name: "Retargeting Fall", platform: "Google Ads", status: "Draft", budget: 2000, spent: 0 },
+    { id: "cm1", name: "Summer Sale 2026", platform: "Facebook", status: "Active", budget: 5000, spent: 2340, ownerId: "u10" },
+    { id: "cm2", name: "B2B Lead Gen", platform: "LinkedIn", status: "Active", budget: 10000, spent: 4500, ownerId: "u20" },
+    { id: "cm3", name: "Retargeting Fall", platform: "Google Ads", status: "Draft", budget: 2000, spent: 0, ownerId: "u21" },
   ]);
 
   const [socialTasks, setSocialTasks] = useState<SocialTask[]>([
-    { id: "st1", title: "Write Blog Post on CRM", platform: "WordPress", status: "To Do", dueDate: "2026-06-15" },
-    { id: "st2", title: "Create Twitter Thread", platform: "Twitter", status: "In Progress", dueDate: "2026-06-12" },
-    { id: "st3", title: "Instagram Reel Editing", platform: "Instagram", status: "Done", dueDate: "2026-06-10" },
+    { id: "st1", title: "Write Blog Post on CRM", platform: "WordPress", status: "To Do", dueDate: "2026-06-15", assigneeId: "u20" },
+    { id: "st2", title: "Create Twitter Thread", platform: "Twitter", status: "In Progress", dueDate: "2026-06-12", assigneeId: "u21" },
+    { id: "st3", title: "Instagram Reel Editing", platform: "Instagram", status: "Done", dueDate: "2026-06-10", assigneeId: "u14" },
   ]);
 
   const [adStats] = useState<AdStat[]>([
@@ -49,10 +57,23 @@ export default function MarketingPanel() {
     setSocialTasks(socialTasks.map(t => t.id === id ? { ...t, status: newStatus } : t));
   };
 
-  const totalBudget = campaigns.reduce((sum, c) => sum + c.budget, 0);
-  const totalSpent = campaigns.reduce((sum, c) => sum + c.spent, 0);
+  // Apply visibility: members only see campaigns/tasks assigned to them
+  const visibleCampaigns = campaigns.filter((c) => {
+    if (!user) return false;
+    if (isMember) return c.ownerId === user.id;
+    return true;
+  });
+
+  const visibleSocialTasks = socialTasks.filter((t) => {
+    if (!user) return false;
+    if (isMember) return t.assigneeId === user.id;
+    return true;
+  });
+
+  const totalBudget = visibleCampaigns.reduce((sum, c) => sum + c.budget, 0);
+  const totalSpent = visibleCampaigns.reduce((sum, c) => sum + c.spent, 0);
   const totalClicks = adStats.reduce((sum, s) => sum + s.clicks, 0);
-  const activeCampaigns = campaigns.filter(c => c.status === "Active").length;
+  const activeCampaigns = visibleCampaigns.filter(c => c.status === "Active").length;
 
   return (
     <>
@@ -116,7 +137,7 @@ export default function MarketingPanel() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                    {campaigns.map(camp => (
+                    {visibleCampaigns.map(camp => (
                       <tr key={camp.id}>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{camp.name}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{camp.platform}</td>
@@ -136,6 +157,16 @@ export default function MarketingPanel() {
               </div>
             </div>
 
+            <RequirePermission
+              domain="marketing"
+              action="CREATE"
+              fallback={
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+                  <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Create Campaign</h3>
+                  <Placeholder message="You don't have permission to create campaigns." />
+                </div>
+              }
+            >
             <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Create Campaign</h3>
               <form onSubmit={handleAddCampaign} className="space-y-4">
@@ -161,6 +192,7 @@ export default function MarketingPanel() {
                 </button>
               </form>
             </div>
+            </RequirePermission>
           </div>
         )}
 
@@ -180,7 +212,7 @@ export default function MarketingPanel() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                  {socialTasks.map(task => (
+                  {visibleSocialTasks.map(task => (
                     <tr key={task.id}>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{task.title}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{task.platform}</td>
@@ -194,15 +226,23 @@ export default function MarketingPanel() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-right">
-                        <select 
-                          className="rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                          value={task.status}
-                          onChange={(e) => handleTaskStatusChange(task.id, e.target.value as SocialTask["status"])}
-                        >
-                          <option value="To Do">To Do</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Done">Done</option>
-                        </select>
+                        <RequirePermission domain="marketing" action="EDIT" fallback={
+                          <select className="rounded border border-gray-300 px-2 py-1 text-xs" value={task.status} disabled>
+                            <option value="To Do">To Do</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Done">Done</option>
+                          </select>
+                        }>
+                          <select 
+                            className="rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                            value={task.status}
+                            onChange={(e) => handleTaskStatusChange(task.id, e.target.value as SocialTask["status"])}
+                          >
+                            <option value="To Do">To Do</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Done">Done</option>
+                          </select>
+                        </RequirePermission>
                       </td>
                     </tr>
                   ))}

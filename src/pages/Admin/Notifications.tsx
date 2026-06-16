@@ -2,15 +2,59 @@ import PageMeta from "../../components/common/PageMeta";
 import { MailIcon } from "../../icons";
 import { useNotifications } from "../../hooks/useNotifications";
 import { useClients } from "../../hooks/useClients";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import NotificationModal from "./NotificationModal";
 import { useToast } from "../../context/ToastContext";
 
 export default function Notifications() {
-  const { notifications, isLoading, addNotification, deleteNotification } = useNotifications();
+  const { notifications, isLoading, addNotification, deleteNotification, refreshNotifications } = useNotifications();
   const { clients } = useClients();
   const { showToast } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Listen for in-app notification events (dispatched by mock flows) and cross-tab broadcasts
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      try {
+        // ev is CustomEvent with detail payload
+        refreshNotifications();
+        const detail = (ev as CustomEvent).detail;
+        const msg = detail && detail.payload && detail.payload.message ? detail.payload.message : "New notification";
+        showToast(msg, "info", 4000);
+      } catch {}
+    };
+
+    window.addEventListener("saas:notification", handler as EventListener);
+
+    // BroadcastChannel for cross-tab sync
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        bc = new BroadcastChannel("saas_notifications");
+        bc.onmessage = () => {
+          try { refreshNotifications(); } catch {}
+        };
+      } catch {
+        bc = null;
+      }
+    }
+
+    // Fallback storage event for older browsers
+    const storageHandler = (e: StorageEvent) => {
+      try {
+        if (e.key === "__saas_notifications_update") {
+          refreshNotifications();
+        }
+      } catch {}
+    };
+    window.addEventListener("storage", storageHandler);
+
+    return () => {
+      window.removeEventListener("saas:notification", handler as EventListener);
+      window.removeEventListener("storage", storageHandler);
+      try { if (bc) bc.close(); } catch {}
+    };
+  }, [refreshNotifications, showToast]);
 
   const handleSend = async (notificationData: any) => {
     try {

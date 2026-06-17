@@ -6,13 +6,14 @@ import { UserService, UserProfile } from "../../services/userService";
 import { useToast } from "../../context/ToastContext";
 import { NotificationService } from "../../services/notificationService";
 import { safeParse } from "../../lib/storage";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type TaskStatus = "todo" | "in-progress" | "done" | "blocked";
 type Priority   = "low" | "medium" | "high";
+type TaskCategory = "general" | "campaign" | "content" | "analytics";
 
-interface MockTask {
+export interface MockTask {
   id: string;
   title: string;
   description: string;
@@ -21,6 +22,9 @@ interface MockTask {
   assignee: string;
   assigneeId?: string;
   dueDate: string;
+  budget?: number;
+  budgetUsed?: number;
+  category?: TaskCategory;
 }
 
 // ── Mock data ─────────────────────────────────────────────────────────────
@@ -50,22 +54,42 @@ const priorityBadge = (p: Priority) => {
   return "bg-gray-100 text-gray-600";
 };
 
+const categoryBadge = (c?: TaskCategory) => {
+  if (c === "campaign")  return "bg-purple-100 text-purple-700";
+  if (c === "content")   return "bg-blue-100 text-blue-700";
+  if (c === "analytics") return "bg-cyan-100 text-cyan-700";
+  return "bg-gray-100 text-gray-600";
+};
+
 export default function Tasks() {
-  const { canCreate } = useAuth();
   const [tasks, setTasks] = useState<MockTask[]>(INITIAL_TASKS);
   const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const viewerRole = user?.role || null;
   const isMember = viewerRole?.endsWith("_member");
-  const isDeptAdmin = viewerRole?.endsWith("_admin");
   const isHRAdmin = viewerRole === "hr_admin" || viewerRole?.startsWith("hr");
   const isManager = viewerRole === "management";
   const isSuper = viewerRole === "super_admin";
+  const isDeptAdmin = viewerRole?.endsWith("_admin") && !isHRAdmin && !isSuper && !isManager;
+  const viewerDept = viewerRole ? viewerRole.replace("_admin", "").replace("_member", "") : null;
+  // HR admin cannot assign tasks — only super, manager, and dept admins (non-HR) can
+  const canAddTask = isSuper || isManager || isDeptAdmin;
+
+  // Marketing-specific context
+  const isMarketingRoute = location.pathname.startsWith("/marketing");
+  const isMarketingAdmin = viewerRole === "marketing_admin";
+  const isMarketingMember = viewerRole === "marketing_member";
+  const showBudgetFields = isMarketingRoute && (isMarketingAdmin || isDeptAdmin);
+
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle]   = useState("");
   const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [newAssigneeId, setNewAssigneeId] = useState<string | undefined>(undefined);
+  const [newCategory, setNewCategory] = useState<TaskCategory>("general");
+  const [newBudget, setNewBudget] = useState<number>(0);
+  const [newDueDate, setNewDueDate] = useState<string>("");
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -79,7 +103,6 @@ export default function Tasks() {
       } catch {
         setUsers([]);
       }
-      // load persisted tasks from localStorage
       try {
         const raw = localStorage.getItem("mock_tasks");
         if (raw) {
@@ -97,6 +120,7 @@ export default function Tasks() {
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
+    const isCampaignTask = isMarketingRoute && newCategory === "campaign";
     setTasks((prev) => [
       ...prev,
       {
@@ -107,10 +131,16 @@ export default function Tasks() {
         priority: newPriority,
         assignee: (newAssigneeId && usersById[newAssigneeId]?.full_name) || user?.name || "Me",
         assigneeId: newAssigneeId || user?.id,
-        dueDate: "—",
+        dueDate: newDueDate || "—",
+        category: isMarketingRoute ? newCategory : undefined,
+        budget: isCampaignTask && newBudget > 0 ? newBudget : undefined,
+        budgetUsed: isCampaignTask && newBudget > 0 ? 0 : undefined,
       },
     ]);
     setNewTitle("");
+    setNewCategory("general");
+    setNewBudget(0);
+    setNewDueDate("");
     setShowForm(false);
   };
 
@@ -121,14 +151,19 @@ export default function Tasks() {
     } catch {}
   }, [tasks]);
 
+  const updateBudgetUsed = (taskId: string, amount: number) => {
+    setTasks((prev) =>
+      prev.map((t) => t.id === taskId ? { ...t, budgetUsed: Math.max(0, Math.min(amount, t.budget ?? amount)) } : t)
+    );
+    showToast("Budget usage updated", "success");
+  };
+
   const moveTask = (id: string, newStatus: TaskStatus) => {
     const t = tasks.find((x) => x.id === id);
     if (!t) return;
     const prevStatus = t.status;
-    // Determine permissions: super/hr/manager can move any; members only their tasks; dept admins can move tasks for their department
-    if (isSuper || isHRAdmin || isManager) {
+    if (isSuper || isManager) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)));
-      // notify on completion
       if (newStatus === "done" && prevStatus !== "done") {
         notifyAdminsOfCompletion(t);
         showToast("Task marked complete — admins notified", "success");
@@ -136,7 +171,8 @@ export default function Tasks() {
       return;
     }
 
-    if (isMember) {
+    // HR admin and members can only update their own assigned tasks
+    if (isMember || isHRAdmin) {
       if (t.assigneeId !== user?.id) return;
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)));
       if (newStatus === "done" && prevStatus !== "done") {
@@ -149,8 +185,7 @@ export default function Tasks() {
     if (isDeptAdmin) {
       const assignee = t.assigneeId ? usersById[t.assigneeId] : undefined;
       const assigneeDept = assignee ? assignee.departmentId : undefined;
-      const viewerDomain = viewerRole ? viewerRole.split("_")[0] : null;
-      if (viewerDomain && assigneeDept === `dept-${viewerDomain}`) {
+      if (viewerDept && (assigneeDept === `dept-${viewerDept}` || (assignee?.role && assignee.role.startsWith(viewerDept)))) {
         setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)));
         if (newStatus === "done" && prevStatus !== "done") {
           notifyAdminsOfCompletion(t);
@@ -164,7 +199,6 @@ export default function Tasks() {
     if (!task.assigneeId) return;
     const assignee = usersById[task.assigneeId];
     const assigneeDept = assignee ? assignee.departmentId : undefined;
-    // find admins to notify: dept admins of same department, plus management, super_admin, hr_admin
     const admins = users.filter((u) => {
       if (u.role === "super_admin" || u.role === "management" || u.role === "hr_admin") return true;
       if (u.role.endsWith("_admin") && u.departmentId && assigneeDept && u.departmentId === assigneeDept) return true;
@@ -193,16 +227,15 @@ export default function Tasks() {
     });
   };
 
-  // Visible tasks: members see only tasks assigned to them; admins/management see domain/all
+  // Visible tasks: super/manager see all; dept admins see their dept; HR admin/members see own tasks
   const visibleTasks = tasks.filter((t) => {
     if (!user) return false;
-    if (isMember) return t.assigneeId === user.id;
-    if (isSuper || isHRAdmin || isManager) return true;
+    if (isMember || isHRAdmin) return t.assigneeId === user.id;
+    if (isSuper || isManager) return true;
     if (isDeptAdmin) {
       const assignee = t.assigneeId ? usersById[t.assigneeId] : undefined;
       const assigneeDept = assignee ? assignee.departmentId : undefined;
-      const viewerDomain = viewerRole ? viewerRole.split("_")[0] : null;
-      return assigneeDept === `dept-${viewerDomain}` || (assignee && assignee.role && assignee.role.startsWith(viewerDomain || ""));
+      return assigneeDept === `dept-${viewerDept}` || (assignee && assignee.role && assignee.role.startsWith(viewerDept || ""));
     }
     return false;
   });
@@ -219,10 +252,10 @@ export default function Tasks() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {totalDone} of {tasks.length} tasks complete — <span className="font-semibold text-brand-500">{completion}%</span>
+            {totalDone} of {visibleTasks.length} tasks complete — <span className="font-semibold text-brand-500">{completion}%</span>
           </p>
         </div>
-        {canCreate("production") && (
+        {canAddTask && (
           <button
             onClick={() => setShowForm(!showForm)}
             className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
@@ -234,44 +267,92 @@ export default function Tasks() {
 
       {/* ── Quick-add form ───────────────────────────────────────────── */}
       {showForm && (
-        <form onSubmit={handleAdd} className="mb-6 flex gap-3 rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
-          <input
-            autoFocus
-            type="text"
-            placeholder="Task title…"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-          <select
-            value={newPriority}
-            onChange={(e) => setNewPriority(e.target.value as Priority)}
-            className="rounded-lg border border-gray-300 px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-          >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
-          {(isSuper || isHRAdmin || isManager || isDeptAdmin) && (
+        <form
+          onSubmit={handleAdd}
+          className="mb-6 rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm space-y-3"
+        >
+          <div className="flex gap-3 flex-wrap">
+            <input
+              autoFocus
+              type="text"
+              placeholder="Task title…"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              className="flex-1 min-w-48 rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
             <select
-              value={newAssigneeId || ""}
-              onChange={(e) => setNewAssigneeId(e.target.value || undefined)}
+              value={newPriority}
+              onChange={(e) => setNewPriority(e.target.value as Priority)}
               className="rounded-lg border border-gray-300 px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
             >
-              <option value="">Assign to (me)</option>
-              {users
-                .filter(u => u.role !== 'client')
-                .map(u => (
-                  <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
-              ))}
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
             </select>
-          )}
-          <button type="submit" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">
-            Add
-          </button>
-          <button type="button" onClick={() => setShowForm(false)} className="rounded-lg px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
-            Cancel
-          </button>
+            <input
+              type="date"
+              value={newDueDate}
+              onChange={(e) => setNewDueDate(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            />
+          </div>
+
+          <div className="flex gap-3 flex-wrap">
+            {(isSuper || isManager || isDeptAdmin) && (
+              <select
+                value={newAssigneeId || ""}
+                onChange={(e) => setNewAssigneeId(e.target.value || undefined)}
+                className="rounded-lg border border-gray-300 px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white flex-1 min-w-40"
+              >
+                <option value="">Assign to (me)</option>
+                {users
+                  .filter((u) => {
+                    if (u.role === "client") return false;
+                    // super admin and manager can assign to ANY department admin or employee
+                    if (isSuper || isManager) return true;
+                    // dept admin can only assign to their own department's employees
+                    return u.role?.startsWith(viewerDept || "") || u.departmentId === `dept-${viewerDept}`;
+                  })
+                  .map(u => (
+                    <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>
+                  ))}
+              </select>
+            )}
+
+            {/* Marketing-specific: category + budget */}
+            {showBudgetFields && (
+              <select
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value as TaskCategory)}
+                className="rounded-lg border border-gray-300 px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              >
+                <option value="general">General</option>
+                <option value="campaign">Campaign</option>
+                <option value="content">Content</option>
+                <option value="analytics">Analytics</option>
+              </select>
+            )}
+
+            {showBudgetFields && newCategory === "campaign" && (
+              <input
+                type="number"
+                min={0}
+                placeholder="Budget (Rs.)…"
+                value={newBudget || ""}
+                onChange={(e) => setNewBudget(parseInt(e.target.value) || 0)}
+                className="rounded-lg border border-gray-300 px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white w-40"
+              />
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button type="submit" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">
+              Add Task
+            </button>
+            <button type="button" onClick={() => setShowForm(false)} className="rounded-lg px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+              Cancel
+            </button>
+          </div>
         </form>
       )}
 
@@ -292,47 +373,24 @@ export default function Tasks() {
                   <p className="text-xs text-gray-400 italic text-center mt-6">No tasks here</p>
                 )}
                 {colTasks.map((task) => (
-                  <div
+                  <TaskCard
                     key={task.id}
-                    className="rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug">{task.title}</p>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${priorityBadge(task.priority)}`}>
-                        {task.priority}
-                      </span>
-                    </div>
-                    {task.description && (
-                      <p className="text-xs text-gray-500 mb-2">{task.description}</p>
-                    )}
-                    <div className="flex items-center justify-between mt-2">
-                      <div>
-                        <span className="text-xs text-gray-400">{task.assignee}</span>
-                        {task.assigneeId && usersById[task.assigneeId] && (
-                          <span className="ml-2 inline-block text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">{usersById[task.assigneeId].role}</span>
-                        )}
-                      </div>
-                      <span className="text-xs text-gray-400">{task.dueDate}</span>
-                    </div>
-                    {/* Quick move buttons */}
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {COLUMNS.filter((c) => c.id !== col.id).map((c) => (
-                        <button
-                          key={c.id}
-                          onClick={() => moveTask(task.id, c.id)}
-                          className="rounded px-2 py-0.5 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors"
-                        >
-                          → {c.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                    task={task}
+                    col={col}
+                    usersById={usersById}
+                    isMember={!!isMember}
+                    isOwnTask={task.assigneeId === user?.id}
+                    onMove={(newStatus) => moveTask(task.id, newStatus)}
+                    onUpdateBudget={(amount) => updateBudgetUsed(task.id, amount)}
+                    columns={COLUMNS}
+                  />
                 ))}
               </div>
             </div>
           );
         })}
       </div>
+
       {/* Manager tracking panel */}
       {isManager && (
         <div className="mt-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
@@ -359,7 +417,7 @@ export default function Tasks() {
                 acc[r].push(t);
                 return acc;
               }, {})
-            ).filter(([role, tasksForRole]) => (roleFilter === "all" || role === roleFilter)).map(([role, tasksForRole]) => (
+            ).filter(([role]) => roleFilter === "all" || role === roleFilter).map(([role, tasksForRole]) => (
               <div key={role} className="rounded-lg border border-gray-100 dark:border-gray-800 p-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-sm font-medium">{role}</div>
@@ -371,7 +429,6 @@ export default function Tasks() {
                     .map((t) => (
                       <li key={t.id} className="flex items-center justify-between gap-2">
                         <button onClick={() => {
-                          // navigate to assignee's employees page and highlight
                           const domain = usersById[t.assigneeId || ""]?.departmentId?.replace("dept-", "") || "hr";
                           navigate(`/${domain}/users?selected=${t.assigneeId}`);
                         }} className="text-left text-sm hover:underline">
@@ -379,7 +436,7 @@ export default function Tasks() {
                         </button>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700">{t.status}</span>
                       </li>
-                  ))}
+                    ))}
                 </ul>
               </div>
             ))}
@@ -387,5 +444,155 @@ export default function Tasks() {
         </div>
       )}
     </>
+  );
+}
+
+// ── Extracted TaskCard component ──────────────────────────────────────────
+interface TaskCardProps {
+  task: MockTask;
+  col: { id: TaskStatus; label: string; color: string };
+  usersById: Record<string, UserProfile>;
+  isMember: boolean;
+  isOwnTask: boolean;
+  onMove: (status: TaskStatus) => void;
+  onUpdateBudget: (amount: number) => void;
+  columns: typeof COLUMNS;
+}
+
+function TaskCard({ task, usersById, isMember, isOwnTask, onMove, onUpdateBudget, columns }: TaskCardProps) {
+  const [budgetInput, setBudgetInput] = useState<string>("");
+  const [showBudgetEdit, setShowBudgetEdit] = useState(false);
+
+  const hasBudget = task.budget !== undefined && task.budget > 0;
+  const budgetUsed = task.budgetUsed ?? 0;
+  const budgetRemaining = hasBudget ? (task.budget! - budgetUsed) : 0;
+  const budgetPct = hasBudget ? Math.min(100, Math.round((budgetUsed / task.budget!) * 100)) : 0;
+
+  const handleBudgetSave = () => {
+    const val = parseFloat(budgetInput);
+    if (!isNaN(val) && val >= 0) {
+      onUpdateBudget(val);
+    }
+    setBudgetInput("");
+    setShowBudgetEdit(false);
+  };
+
+  return (
+    <div className="rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 shadow-sm hover:shadow-md transition-shadow">
+      {/* Title + priority */}
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <p className="text-sm font-medium text-gray-900 dark:text-white leading-snug">{task.title}</p>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${priorityBadge(task.priority)}`}>
+          {task.priority}
+        </span>
+      </div>
+
+      {/* Category badge */}
+      {task.category && task.category !== "general" && (
+        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium mb-1 ${categoryBadge(task.category)}`}>
+          {task.category}
+        </span>
+      )}
+
+      {task.description && (
+        <p className="text-xs text-gray-500 mb-2">{task.description}</p>
+      )}
+
+      {/* Assignee + due date */}
+      <div className="flex items-center justify-between mt-2">
+        <div>
+          <span className="text-xs text-gray-400">{task.assignee}</span>
+          {task.assigneeId && usersById[task.assigneeId] && (
+            <span className="ml-2 inline-block text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+              {usersById[task.assigneeId].role}
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-gray-400">{task.dueDate}</span>
+      </div>
+
+      {/* Budget section — visible to assignee and admins */}
+      {hasBudget && (
+        <div className="mt-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Budget Allocated</span>
+            <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300">Rs. {task.budget!.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-[11px] mb-1">
+            <span className="text-gray-500 dark:text-gray-400">Used</span>
+            <span className="text-red-600 dark:text-red-400 font-medium">Rs. {budgetUsed.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-[11px] mb-2">
+            <span className="text-gray-500 dark:text-gray-400">Remaining</span>
+            <span className={`font-semibold ${budgetRemaining < 0 ? "text-red-600" : "text-blue-600 dark:text-blue-400"}`}>
+              Rs. {budgetRemaining.toLocaleString()}
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-2">
+            <div
+              className={`h-1.5 rounded-full transition-all ${budgetPct >= 90 ? "bg-red-500" : budgetPct >= 70 ? "bg-amber-500" : "bg-emerald-500"}`}
+              style={{ width: `${Math.min(budgetPct, 100)}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-gray-400 mb-1">{budgetPct}% used</p>
+
+          {/* Member can update their spending */}
+          {isMember && isOwnTask && (
+            <div className="mt-1">
+              {showBudgetEdit ? (
+                <div className="flex gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={task.budget}
+                    autoFocus
+                    placeholder="Total spent so far…"
+                    value={budgetInput}
+                    onChange={(e) => setBudgetInput(e.target.value)}
+                    className="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 dark:bg-gray-800 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleBudgetSave}
+                    className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1 rounded"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowBudgetEdit(false); setBudgetInput(""); }}
+                    className="text-xs text-gray-500 hover:text-gray-700 px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowBudgetEdit(true)}
+                  className="text-[11px] text-blue-600 hover:text-blue-800 dark:text-blue-400 underline"
+                >
+                  Update spending
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Status move buttons */}
+      <div className="mt-2 flex flex-wrap gap-1">
+        {columns.filter((c) => c.id !== task.status).map((c) => (
+          <button
+            key={c.id}
+            onClick={() => onMove(c.id)}
+            className="rounded px-2 py-0.5 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors"
+          >
+            → {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

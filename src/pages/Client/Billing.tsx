@@ -9,10 +9,6 @@ import { PaymentService } from "../../services/paymentService";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
-const stripePromise = api.get<{ publishableKey: string }>("/saas/v1/config/stripe")
-  .then((res) => res?.publishableKey ? loadStripe(res.publishableKey) : null)
-  .catch(() => null);
-
 interface PaymentRecord {
   id: string;
   invoiceNumber: string;
@@ -25,6 +21,14 @@ interface PaymentRecord {
 export default function Billing() {
   const { invoices, isLoading: isLoadingInvoices, markAsPaid } = useInvoices();
   const { showToast } = useToast();
+
+  // Initialized lazily after mock server is ready (avoids module-level race with fetch intercept)
+  const [stripePromise, setStripePromise] = useState<ReturnType<typeof loadStripe> | null>(null);
+  useEffect(() => {
+    api.get<{ publishableKey: string }>("/saas/v1/config/stripe")
+      .then((res) => { if (res?.publishableKey) setStripePromise(loadStripe(res.publishableKey)); })
+      .catch(() => {});
+  }, []);
 
   const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
   const [isLoadingPayments, setIsLoadingPayments] = useState(true);
@@ -42,9 +46,11 @@ export default function Billing() {
   const fetchPayments = useCallback(async () => {
     try {
       setIsLoadingPayments(true);
-      const data = await api.get<any[]>("/saas/v1/payments/list");
+      const allData = await api.get<any[]>("/saas/v1/payments/list");
+      const myInvoiceIds = new Set(invoices.map((i) => i.id));
+      const data = (allData || []).filter((p: any) => myInvoiceIds.has(p.invoiceId));
 
-      const formatted: PaymentRecord[] = (data || []).map((p: any) => {
+      const formatted: PaymentRecord[] = data.map((p: any) => {
         const inv = invoices.find((i) => i.id === p.invoiceId);
         return {
           id: p.id,
@@ -326,7 +332,7 @@ export default function Billing() {
                   }
                 }}
                 disabled={isProcessing}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-55"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:outline-none disabled:opacity-55"
               >
                 <option value="">Choose an invoice...</option>
                 {pendingInvoices.map((invoice) => (
@@ -347,7 +353,7 @@ export default function Billing() {
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
                 disabled={isProcessing}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm disabled:opacity-55"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm disabled:opacity-55"
                 placeholder="Enter amount"
               />
             </div>
@@ -485,7 +491,7 @@ const StripeCheckoutForm = ({
             onChange={(e) => setCardName(e.target.value)}
             disabled={isProcessing}
             placeholder="John Doe"
-            className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none text-xs disabled:opacity-55"
+            className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:outline-none text-xs disabled:opacity-55"
           />
         </div>
         <div>

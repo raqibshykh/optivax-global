@@ -24,7 +24,8 @@ export function useClients() {
         } else {
           data = [];
         }
-      } else if (user?.role?.endsWith("_member")) {
+      } else if (user?.role === "production_member") {
+        // Only production members are stored in assignedProductionMembers
         data = await ClientService.getAll(user.id);
       } else {
         data = await ClientService.getAll();
@@ -35,7 +36,7 @@ export function useClients() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchClients();

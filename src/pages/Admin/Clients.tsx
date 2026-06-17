@@ -4,10 +4,15 @@ import { useState, useEffect } from "react";
 import ClientModal from "./ClientModal";
 import { Client } from "../../types";
 import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../context/AuthContext";
+import { UserService } from "../../services/userService";
+import { storeMockPassword } from "../../lib/client";
+import { notifyClientCreated } from "../../services/notificationHelpers";
 
 export default function Clients() {
   const { clients, isLoading, addClient, updateClient, deleteClient } = useClients();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   
@@ -37,13 +42,30 @@ export default function Clients() {
     }
   };
 
-  const handleSave = async (clientData: Omit<Client, "id">) => {
+  const handleSave = async (clientData: Omit<Client, "id">, password?: string) => {
     try {
       if (editingClient) {
         await updateClient(editingClient.id, clientData);
         showToast("Client updated successfully", "success");
       } else {
-        await addClient(clientData);
+        // Create login profile first (mock server matches email → uses same id for client record)
+        const newProfile = await UserService.create({
+          full_name: clientData.name,
+          email: clientData.email,
+          avatar_url: "",
+          company: clientData.company,
+          role: "client",
+          created_at: new Date().toISOString(),
+        });
+        if (password) storeMockPassword(clientData.email, password);
+        await addClient({
+          ...clientData,
+          createdBy: user?.id ?? "",
+          createdByName: user?.name ?? "",
+        });
+        if (user) {
+          notifyClientCreated(user.id, user.name, user.role, clientData.name, newProfile.id);
+        }
         showToast("Client created successfully", "success");
       }
     } catch (err: any) {
@@ -104,7 +126,7 @@ export default function Clients() {
               placeholder="Search clients..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+              className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             />
             <svg
               className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"

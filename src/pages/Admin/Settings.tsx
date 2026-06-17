@@ -17,11 +17,11 @@ export default function Settings() {
 
   const saveStripeSettings = async () => {
     try {
-      await fetch("/wp-json/saas/v1/settings/stripe", {
+      const apiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "/api";
+      await fetch(`${apiBase}/settings/stripe`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-WP-Nonce": (window as any).SaaSCoreConfig?.nonce,
         },
         body: JSON.stringify({
           enabled: stripeEnabled,
@@ -59,11 +59,11 @@ export default function Settings() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Company Name</label>
-                <input type="text" defaultValue="Optivax Global" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white" />
+                <input type="text" defaultValue="Optivax Global" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                <input type="email" defaultValue="admin@optivaxglobal.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white" />
+                <input type="email" defaultValue="admin@optivaxglobal.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
               </div>
             </div>
             <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700">Save Changes</button>
@@ -105,18 +105,18 @@ export default function Settings() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Stripe Publishable Key</label>
-              <input type="text" value={publishableKey} onChange={(e) => setPublishableKey(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white" placeholder="pk_live_..." />
+              <input type="text" value={publishableKey} onChange={(e) => setPublishableKey(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-800 dark:text-white" placeholder="pk_live_..." />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Stripe Secret Key</label>
               <div className="relative">
-                <input name="stripe-secret" type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full pr-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white" placeholder="sk_live_..." />
+                <input name="stripe-secret" type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full pr-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-800 dark:text-white" placeholder="sk_live_..." />
                 <button type="button" className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500" onClick={toggleSecretVisibility}>👁</button>
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Stripe Webhook Secret</label>
-              <input type="text" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-700 dark:text-white" placeholder="whsec_..." />
+              <input type="text" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-800 dark:text-white" placeholder="whsec_..." />
             </div>
             <div className="flex justify-end">
               <button type="button" onClick={saveStripeSettings} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700">Save Stripe Settings</button>

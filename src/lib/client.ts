@@ -102,25 +102,88 @@ export interface MockUserSession {
   };
 }
 
-// Mock login function
-export const mockLogin = async (email: string, _password: string): Promise<MockUserSession | null> => {
-  const user = mockUsers.find((u) => u.email === email);
-  if (!user) return null;
-  return {
-    id: user.id,
-    email: user.email,
-    user_metadata: {
-      role: user.role as MockUserSession["user_metadata"]["role"],
-      full_name: user.name,
-      avatar_url: user.avatar,
-      company: undefined,
-    },
-  };
+const MOCK_PROFILES_KEY = "mock_profiles";
+const MOCK_PASSWORDS_KEY = "mock_passwords";
+const MOCK_SESSION_KEY = "mock_session";
+
+export const clearMockSession = (): void => {
+  localStorage.removeItem(MOCK_SESSION_KEY);
 };
 
-// Fetch current mock session – returns null for now
+/** Store a password for a dynamically-created mock user (keyed by email). */
+export const storeMockPassword = (email: string, password: string): void => {
+  try {
+    const raw = localStorage.getItem(MOCK_PASSWORDS_KEY);
+    const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+    map[email] = password;
+    localStorage.setItem(MOCK_PASSWORDS_KEY, JSON.stringify(map));
+  } catch {}
+};
+
+// Mock login function
+export const mockLogin = async (email: string, password: string): Promise<MockUserSession | null> => {
+  // 1. Check hardcoded mock users first (any password accepted for built-in devs)
+  const staticUser = mockUsers.find((u) => u.email === email);
+  if (staticUser) {
+    const session: MockUserSession = {
+      id: staticUser.id,
+      email: staticUser.email,
+      user_metadata: {
+        role: staticUser.role as MockUserSession["user_metadata"]["role"],
+        full_name: staticUser.name,
+        avatar_url: staticUser.avatar,
+        company: undefined,
+      },
+    };
+    try { localStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(session)); } catch {}
+    return session;
+  }
+
+  // 2. Fall back to dynamically-created profiles in localStorage
+  try {
+    const profilesRaw = localStorage.getItem(MOCK_PROFILES_KEY);
+    const profiles: Array<{
+      id: string; email: string; full_name: string;
+      avatar_url?: string; company?: string; role: string;
+    }> = profilesRaw ? JSON.parse(profilesRaw) : [];
+
+    const profile = profiles.find((p) => p.email === email);
+    if (!profile) return null;
+
+    // Validate password against mock_passwords store
+    const pwRaw = localStorage.getItem(MOCK_PASSWORDS_KEY);
+    const passwords: Record<string, string> = pwRaw ? JSON.parse(pwRaw) : {};
+    const stored = passwords[email];
+    if (stored && stored !== password) return null;
+
+    const session: MockUserSession = {
+      id: profile.id,
+      email: profile.email,
+      user_metadata: {
+        role: profile.role as MockUserSession["user_metadata"]["role"],
+        full_name: profile.full_name,
+        avatar_url: profile.avatar_url,
+        company: profile.company,
+      },
+    };
+    try { localStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(session)); } catch {}
+    return session;
+  } catch {
+    return null;
+  }
+};
+
+// Fetch current mock session from localStorage
 export const fetchSession = async (): Promise<MockUserSession | null> => {
-  return null;
+  try {
+    const raw = localStorage.getItem(MOCK_SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw) as MockUserSession;
+    if (!session?.id || !session?.email || !session?.user_metadata?.role) return null;
+    return session;
+  } catch {
+    return null;
+  }
 };
 
 // Start the in-browser mock server in dev mode for profile endpoints

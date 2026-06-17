@@ -16,12 +16,10 @@ export function useFiles(projectId?: string) {
       let data: FileRecord[] = [];
       if (projectId) {
         data = await FileService.getByProjectId(projectId);
+      } else if (user?.role === "client" && user.id) {
+        data = await FileService.getByClientId(user.id);
       } else {
         data = await FileService.getAll();
-        // Client filtering if needed, but keeping it simple for super_admin first
-        if (user?.role === "client") {
-          data = data.filter(f => f.clientId === user.id);
-        }
       }
       setFiles(data);
     } catch (err: any) {

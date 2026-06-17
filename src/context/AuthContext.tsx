@@ -8,7 +8,7 @@ import React, {
 } from "react";
 
 // Updated imports for pure React
-import { fetchSession, api, MockUserSession, mockLogin } from "../lib/client";
+import { fetchSession, api, MockUserSession, mockLogin, clearMockSession } from "../lib/client";
 import { User, UserRole } from "../types";
 import { useSSE } from "../hooks/useSSE";
 import { getRoleHome } from "../lib/roles";
@@ -113,6 +113,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch {
       // ignore — still clear local state
     }
+    clearMockSession();
     setUser(null);
   };
 

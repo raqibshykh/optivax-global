@@ -3,6 +3,7 @@ import PageMeta from "../../components/common/PageMeta";
 import { api } from "../../lib/client";
 import { useProjects } from "../../hooks/useProjects";
 import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../context/AuthContext";
 
 interface Revision {
   id: string;
@@ -22,21 +23,23 @@ const statusStyles: Record<string, string> = {
 export default function MyRevisions() {
   const { projects } = useProjects();
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchRevisions = useCallback(async () => {
+    if (!user?.id) return;
     setIsLoading(true);
     try {
-      const data = await api.get<Revision[]>("/saas/v1/revisions/list");
+      const data = await api.get<Revision[]>(`/saas/v1/revisions/list?clientId=${encodeURIComponent(user.id)}`);
       setRevisions(data || []);
     } catch (err: any) {
       showToast(err.message || "Failed to load revision requests.", "error");
     } finally {
       setIsLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, user?.id]);
 
   useEffect(() => {
     fetchRevisions();

@@ -3,6 +3,10 @@ import { RequirePermission } from "../../components/auth/RequirePermission";
 import PageMeta from "../../components/common/PageMeta";
 import { api } from "../../lib/client";
 import Chart from "react-apexcharts";
+import { UserService } from "../../services/userService";
+import { notifyUserCreated } from "../../services/notificationHelpers";
+import { useAuth } from "../../context/AuthContext";
+import { storeMockPassword } from "../../lib/client";
 
 interface UserProfile {
   id: string;
@@ -56,13 +60,76 @@ interface MockDeptEmployee {
   role: string;
 }
 
+const ALL_ROLES = [
+  { value: "management",        label: "Management" },
+  { value: "hr_admin",          label: "HR Admin" },
+  { value: "hr_member",         label: "HR Member" },
+  { value: "sales_admin",       label: "Sales Admin" },
+  { value: "sales_member",      label: "Sales Member" },
+  { value: "production_admin",  label: "Production Admin" },
+  { value: "production_member", label: "Production Member" },
+  { value: "marketing_admin",   label: "Marketing Admin" },
+  { value: "marketing_member",  label: "Marketing Member" },
+  { value: "client",            label: "Client" },
+];
+
+interface CreateUserForm {
+  full_name: string; email: string; password: string;
+  role: string; company: string;
+}
+
 export default function SuperAdminPanel() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // ── Create User Modal ─────────────────────────────────────────────────────
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateUserForm>({
+    full_name: "", email: "", password: "", role: "hr_admin", company: "Optivax Global",
+  });
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState("");
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createForm.full_name || !createForm.email || !createForm.password || !createForm.role) {
+      setCreateError("All fields are required.");
+      return;
+    }
+    setCreateLoading(true);
+    setCreateError("");
+    try {
+      const newUser = await UserService.create({
+        full_name: createForm.full_name,
+        email: createForm.email,
+        avatar_url: "",
+        company: createForm.company,
+        role: createForm.role,
+        created_at: new Date().toISOString(),
+      });
+      // Store password so the new user can log in
+      storeMockPassword(createForm.email, createForm.password);
+      if (currentUser) {
+        notifyUserCreated(
+          currentUser.id, currentUser.name, currentUser.role,
+          newUser.id, newUser.full_name, newUser.email, newUser.role
+        );
+      }
+      setShowCreateUser(false);
+      setCreateForm({ full_name: "", email: "", password: "", role: "hr_admin", company: "Optivax Global" });
+      // Refresh user list
+      fetchData();
+    } catch (err) {
+      setCreateError("Failed to create user. Email may already be in use.");
+    } finally {
+      setCreateLoading(false);
+    }
+  };
 
   // Mock Departments Data
   const [deptEmployees, setDeptEmployees] = useState<MockDeptEmployee[]>([
@@ -213,10 +280,13 @@ export default function SuperAdminPanel() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Total Users</h3>
-            <p className="text-3xl font-bold text-blue-600 mt-2">{users.length}</p>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Total Employees</h3>
+            <p className="text-3xl font-bold text-blue-600 mt-2">
+              {users.filter((u) => u.role !== "client").length}
+            </p>
+            <p className="text-sm text-gray-500 mt-1">Internal staff across all departments</p>
           </div>
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Organizations</h3>
@@ -234,10 +304,15 @@ export default function SuperAdminPanel() {
               ${revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow md:col-span-2 lg:col-span-4 border-l-4 border-brand-500">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Active Departments</h3>
             <p className="text-3xl font-bold text-brand-500 mt-2">{uniqueDepartmentsCount}</p>
-            <p className="text-sm text-gray-500 mt-1">Total operational departments tracked globally</p>
+            <p className="text-sm text-gray-500 mt-1">Operational departments</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Total Users</h3>
+            <p className="text-3xl font-bold text-indigo-600 mt-2">{users.length}</p>
+            <p className="text-sm text-gray-500 mt-1">All platform accounts</p>
           </div>
         </div>
 
@@ -254,12 +329,20 @@ export default function SuperAdminPanel() {
         {/* Recent Payments */}
         {/* Admin Users Section */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-            Admin Users
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Admin Users
+            </h2>
+            <button
+              onClick={() => { setShowCreateUser(true); setCreateError(""); }}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              + Create User
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800/50">
                 <tr>
                   {["Name", "Email", "Role"].map((h) => (
                     <th
@@ -318,7 +401,7 @@ export default function SuperAdminPanel() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             <div className="lg:col-span-2 overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-800/50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Employee Name</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Department</th>
@@ -377,7 +460,7 @@ export default function SuperAdminPanel() {
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Recent Payments</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800/50">
                 <tr>
                   {["Transaction ID", "Amount", "Method", "Status", "Date"].map((h) => (
                     <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -427,7 +510,7 @@ export default function SuperAdminPanel() {
           </h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800/50">
                 <tr>
                   {["Company", "Contact Email", "Active Plan", "Status"].map((h) => (
                     <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -459,6 +542,63 @@ export default function SuperAdminPanel() {
           </div>
         </div>
       </div>
+
+      {/* ── Create User Modal ──────────────────────────────────────────────── */}
+      {showCreateUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Create New User</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Super Admin can create any role</p>
+              </div>
+              <button onClick={() => setShowCreateUser(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none">&times;</button>
+            </div>
+            <form onSubmit={handleCreateUser} className="p-6 space-y-4">
+              {createError && (
+                <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 rounded-lg px-3 py-2">{createError}</div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
+                <input type="text" required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  value={createForm.full_name} onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+                <input type="email" required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Temporary Password</label>
+                <input type="password" required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
+                <select required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  value={createForm.role} onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}>
+                  {ALL_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Company</label>
+                <input type="text" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  value={createForm.company} onChange={(e) => setCreateForm((f) => ({ ...f, company: e.target.value }))} />
+              </div>
+              <div className="flex gap-3 justify-end pt-2">
+                <button type="button" onClick={() => setShowCreateUser(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={createLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50">
+                  {createLoading ? "Creating…" : "Create User"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

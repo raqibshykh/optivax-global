@@ -78,6 +78,13 @@ export interface Client {
   totalBilled: number;
   lastPaymentDate?: string;
   tags?: string[];
+  // StoredClient compatibility fields — auto-populated by mock server
+  contactName?: string;
+  companyName?: string;
+  createdAt?: string;
+  createdBy?: string;
+  createdByName?: string;
+  assignedProductionMembers?: string[];
 }
 
 export interface Project {
@@ -258,6 +265,66 @@ export interface EmailAutomation {
   delayHours: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Audit & Activity types ─────────────────────────────────────────────────
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  entityName: string;
+  performedBy: string;
+  performedByName: string;
+  performedByRole: string;
+  timestamp: string;
+  description: string;
+  department?: string;
+  oldValue?: Record<string, unknown>;
+  newValue?: Record<string, unknown>;
+}
+
+// ── Deliverables types ─────────────────────────────────────────────────────
+
+export type DeliverableStatus = "Pending" | "In Progress" | "Review" | "Approved" | "Delivered";
+
+export interface Deliverable {
+  id: string;
+  clientId: string;
+  clientName: string;
+  projectId?: string;
+  projectName?: string;
+  title: string;
+  description: string;
+  status: DeliverableStatus;
+  dueDate: string;
+  uploadedBy: string;
+  uploadedByName: string;
+  uploadedAt: string;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: string;
+  fileUrl?: string;
+  notes?: string;
+}
+
+// ── Stored Client (created by Sales Admin, with production assignment) ─────
+
+export interface StoredClient {
+  id: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  status: "active" | "inactive";
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+  assignedProductionMembers: string[];
 }
 
 // ── Sales Management types ─────────────────────────────────────────────────

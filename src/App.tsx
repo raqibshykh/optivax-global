@@ -1,7 +1,5 @@
 import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import SignIn from "./pages/AuthPages/SignIn";
-import SignUp from "./pages/AuthPages/SignUp";
-import ResetPassword from "./pages/AuthPages/ResetPassword";
 import NotFound from "./pages/OtherPage/NotFound";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
@@ -28,6 +26,7 @@ import AdminFiles from "./pages/Admin/Files";
 import AdminNotifications from "./pages/Admin/Notifications";
 import AdminRevisions from "./pages/Admin/Revisions";
 import Settings from "./pages/Admin/Settings";
+import AuditLogs from "./pages/Admin/AuditLogs";
 
 // ── Email marketing pages ─────────────────────────────────────────────────
 import Campaigns from "./pages/Admin/Email/Campaigns";
@@ -45,6 +44,9 @@ import CampaignBudgets from "./pages/Sales/CampaignBudgets";
 import SalesTargets from "./pages/Sales/SalesTargets";
 import SalesTasks from "./pages/Sales/SalesTasks";
 import TeamPerformance from "./pages/Sales/TeamPerformance";
+
+// ── Production pages ──────────────────────────────────────────────────────
+import Deliverables from "./pages/Production/Deliverables";
 
 // ── Client pages ──────────────────────────────────────────────────────────
 import MyProjects from "./pages/Client/MyProjects";
@@ -69,8 +71,9 @@ export default function App() {
         {/* ── Public ──────────────────────────────────────────────────── */}
         <Route element={<PublicRoute />}>
           <Route path="/login"          element={<SignIn />} />
-          <Route path="/signup"         element={<SignUp />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Signup disabled — all accounts created by admins */}
+          <Route path="/signup"         element={<Navigate to="/login" replace />} />
+          <Route path="/reset-password" element={<Navigate to="/login" replace />} />
         </Route>
 
         {/* ── Protected (inside AppLayout) ─────────────────────────── */}
@@ -78,8 +81,8 @@ export default function App() {
 
           {/* ── SUPER ADMIN ───────────────────────────────────────── */}
           <Route element={<ProtectedRoute allowedDomain="system" allowedRoles={["super_admin"]} />}>
-            <Route path="/super-admin"            element={<Navigate to="/super-admin/dashboard" replace />} />
-            <Route path="/super-admin/dashboard"  element={<SuperAdminPanel />} />
+            <Route path="/super-admin"             element={<Navigate to="/super-admin/dashboard" replace />} />
+            <Route path="/super-admin/dashboard"   element={<SuperAdminPanel />} />
             <Route path="/super-admin/departments" element={<SuperAdminPanel />} />
           </Route>
 
@@ -95,12 +98,13 @@ export default function App() {
             <Route path="/admin/revisions"             element={<AdminRevisions />} />
             <Route path="/admin/settings"              element={<Settings />} />
             <Route path="/admin/reports"               element={<Reports />} />
+            <Route path="/admin/audit-logs"            element={<AuditLogs />} />
             <Route path="/admin/email/campaigns"       element={<Campaigns />} />
             <Route path="/admin/email/templates"       element={<Templates />} />
             <Route path="/admin/email/audience"        element={<Audience />} />
             <Route path="/admin/email/analytics"       element={<Analytics />} />
             <Route path="/admin/email/automation"      element={<Automation />} />
-            <Route path="/admin/users"                  element={<Employees />} />
+            <Route path="/admin/users"                 element={<Employees />} />
           </Route>
 
           {/* ── SALES ─────────────────────────────────────────────── */}
@@ -131,6 +135,7 @@ export default function App() {
             <Route path="/production/dashboard"     element={<ProductionPanel />} />
             <Route path="/production/projects"      element={<Projects />} />
             <Route path="/production/tasks"         element={<Tasks />} />
+            <Route path="/production/deliverables"  element={<Deliverables />} />
             <Route path="/production/files"         element={<AdminFiles />} />
             <Route path="/production/reports"       element={<Reports />} />
             <Route path="/production/notifications" element={<AdminNotifications />} />
@@ -146,6 +151,7 @@ export default function App() {
             <Route path="/marketing"                       element={<Navigate to="/marketing/dashboard" replace />} />
             <Route path="/marketing/dashboard"             element={<MarketingPanel />} />
             <Route path="/marketing/leads"                 element={<MarketingPanel />} />
+            <Route path="/marketing/tasks"                 element={<Tasks />} />
             <Route path="/marketing/reports"               element={<Reports />} />
             <Route path="/marketing/files"                 element={<AdminFiles />} />
             <Route path="/marketing/notifications"         element={<AdminNotifications />} />
@@ -169,6 +175,7 @@ export default function App() {
               <Route path="/hr/users" element={<Employees />} />
             </Route>
             <Route path="/hr/payroll"       element={<Payroll />} />
+            <Route path="/hr/tasks"         element={<Tasks />} />
             <Route path="/hr/departments"   element={<HRPanel />} />
             <Route path="/hr/reports"       element={<Reports />} />
             <Route path="/hr/notifications" element={<AdminNotifications />} />
@@ -177,15 +184,17 @@ export default function App() {
 
           {/* ── MANAGEMENT ────────────────────────────────────────── */}
           <Route element={<ProtectedRoute allowedDomain="reports" allowedRoles={["management"]} />}>
-            <Route path="/management"               element={<Navigate to="/management/dashboard" replace />} />
-            <Route path="/management/dashboard"     element={<ManagementPanel />} />
-            <Route path="/management/projects"      element={<Projects />} />
-            <Route path="/management/clients"       element={<Clients />} />
-            <Route path="/management/billing"       element={<AdminBilling />} />
-            <Route path="/management/reports"       element={<Reports />} />
-            <Route path="/management/tasks"         element={<Tasks />} />
-            <Route path="/management/notifications" element={<AdminNotifications />} />
-            <Route path="/management/profile"       element={<Profile />} />
+            <Route path="/management"                element={<Navigate to="/management/dashboard" replace />} />
+            <Route path="/management/dashboard"      element={<ManagementPanel />} />
+            <Route path="/management/projects"       element={<Projects />} />
+            <Route path="/management/clients"        element={<Clients />} />
+            <Route path="/management/billing"        element={<AdminBilling />} />
+            <Route path="/management/reports"        element={<Reports />} />
+            <Route path="/management/tasks"          element={<Tasks />} />
+            <Route path="/management/notifications"  element={<AdminNotifications />} />
+            <Route path="/management/audit-logs"     element={<AuditLogs />} />
+            <Route path="/management/deliverables"   element={<Deliverables />} />
+            <Route path="/management/profile"        element={<Profile />} />
             <Route element={<ProtectedRoute allowedDomain="reports" allowedRoles={["management", "hr_admin"]} />}>
               <Route path="/management/users" element={<Employees />} />
             </Route>

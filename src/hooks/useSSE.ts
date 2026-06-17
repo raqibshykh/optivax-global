@@ -3,22 +3,13 @@ import { useToast } from "../context/ToastContext";
 import { safeParse } from "../lib/storage";
 
 const buildSseUrl = (): string => {
-  const w = (window as any) || {};
-  // If localized config provides apiBase (e.g. rest_url('saas/v1'))
-  if (w.SaaSCoreConfig?.apiBase) {
-    const base: string = String(w.SaaSCoreConfig.apiBase).replace(/\/$/, "");
-    return `${base}/notifications/stream`;
-  }
-  if (w.wpSaaSContext?.root) {
-    const base: string = String(w.wpSaaSContext.root).replace(/\/$/, "");
-    return `${base}/notifications/stream`;
-  }
-  // Fallback to site origin + WP REST root
+  const apiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "");
+  const ssePath = (import.meta.env.VITE_SSE_PATH as string | undefined) ?? "/notifications/stream";
+  if (apiBase) return `${apiBase}${ssePath}`;
   if (typeof window !== "undefined") {
-    const origin = window.location.origin.replace(/\/$/, "");
-    return `${origin}/wp-json/saas/v1/notifications/stream`;
+    return `${window.location.origin}/api${ssePath}`;
   }
-  return "/wp-json/saas/v1/notifications/stream";
+  return `/api${ssePath}`;
 };
 
 export const useSSE = (enabled: boolean) => {

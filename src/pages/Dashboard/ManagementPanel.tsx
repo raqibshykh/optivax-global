@@ -1,308 +1,456 @@
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
-import PageBreadcrumb from "../../components/common/PageBreadCrumb";
-import { RequirePermission } from "../../components/auth/RequirePermission";
+import { UserService, UserProfile } from "../../services/userService";
+import EmployeeHierarchy from "../../components/dashboard/EmployeeHierarchy";
+import ActivityFeed from "../../components/dashboard/ActivityFeed";
+import { safeParse } from "../../lib/storage";
+import { StoredClient, Deliverable } from "../../types";
 
-// Mock Data Types
-interface Employee { id: string; name: string; role: string; department: string; status: string; }
-interface Team { id: string; name: string; lead: string; department: string; }
-interface Project { id: string; name: string; assignedTo: string; status: string; progress: number; }
-interface Department { id: string; name: string; head: string; employeeCount: number; }
+const CLIENTS_KEY  = "optivax_clients";
+const DELIVS_KEY   = "optivax_deliverables";
+const TASKS_KEY    = "mock_tasks";
+const EXTRA_KEY    = "optivax_employee_extra";
+const LEAVES_KEY   = "optivax_leave_requests";
+const ATTEND_KEY   = "optivax_attendance";
+const CAMPAIGNS_KEY = "marketing_campaigns";
+
+interface ExtraData { userId: string; leavesTaken: number; salary: number; salaryStatus: string; workMode: string; }
+interface MockTask  { id: string; status: string; assigneeId?: string; budget?: number; budgetUsed?: number; }
+interface LeaveReq  { status: string; }
+interface Campaign  { id: string; name: string; budget: number; spent: number; status: string; }
+
+function KPI({ title, value, sub, color = "blue" }: { title: string; value: string | number; sub?: string; color?: string }) {
+  const ring: Record<string, string> = {
+    blue: "border-blue-500", green: "border-green-500", purple: "border-purple-500",
+    orange: "border-orange-500", red: "border-red-500", indigo: "border-indigo-500",
+  };
+  return (
+    <div className={`rounded-2xl border-l-4 ${ring[color] ?? ring.blue} bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 shadow-sm`}>
+      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
+      <h4 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{value}</h4>
+      {sub && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{sub}</p>}
+    </div>
+  );
+}
+
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white">{title}</h3>
+      </div>
+      <div className="p-5">{children}</div>
+    </div>
+  );
+}
+
+const DEPT_COLORS: Record<string, string> = {
+  sales: "bg-green-500", marketing: "bg-pink-500",
+  production: "bg-orange-500", hr: "bg-indigo-500",
+};
 
 export default function ManagementPanel() {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [tab, setTab] = useState("overview");
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [clients, setClients] = useState<StoredClient[]>([]);
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
+  const [tasks, setTasks] = useState<MockTask[]>([]);
+  const [extras, setExtras] = useState<Record<string, ExtraData>>({});
+  const [leaves, setLeaves] = useState<LeaveReq[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
 
-  // Mock State
-  const [employees] = useState<Employee[]>([
-    { id: "e1", name: "Alice Johnson", role: "Developer", department: "Production", status: "Active" },
-    { id: "e2", name: "Bob Smith", role: "Designer", department: "Production", status: "Active" },
-    { id: "e3", name: "Charlie Davis", role: "Sales Rep", department: "Sales", status: "Active" },
-    { id: "e4", name: "Diana Prince", role: "Marketing Lead", department: "Marketing", status: "On Leave" },
-  ]);
+  useEffect(() => {
+    UserService.getAll().then(setAllUsers).catch(() => {});
+    setClients(safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []));
+    setDeliverables(safeParse<Deliverable[]>(localStorage.getItem(DELIVS_KEY), []));
+    setTasks(safeParse<MockTask[]>(localStorage.getItem(TASKS_KEY), []));
+    setExtras(safeParse<Record<string, ExtraData>>(localStorage.getItem(EXTRA_KEY), {}));
+    setLeaves(safeParse<LeaveReq[]>(localStorage.getItem(LEAVES_KEY), []));
+    setCampaigns(safeParse<Campaign[]>(localStorage.getItem(CAMPAIGNS_KEY), []));
+  }, []);
 
-  const [teams] = useState<Team[]>([
-    { id: "t1", name: "Alpha Squad", lead: "Alice Johnson", department: "Production" },
-    { id: "t2", name: "Sales Ninjas", lead: "Charlie Davis", department: "Sales" },
-    { id: "t3", name: "Growth Hackers", lead: "Diana Prince", department: "Marketing" },
-  ]);
+  const employees = allUsers.filter((u) => u.role !== "client");
+  const totalEmployees = employees.length;
 
-  const [departments] = useState<Department[]>([
-    { id: "d1", name: "Production", head: "Alice Johnson", employeeCount: 15 },
-    { id: "d2", name: "Sales", head: "Charlie Davis", employeeCount: 8 },
-    { id: "d3", name: "Marketing", head: "Diana Prince", employeeCount: 12 },
-    { id: "d4", name: "HR", head: "Eve Adams", employeeCount: 4 },
-  ]);
+  // Dept breakdown
+  const depts = ["sales", "marketing", "production", "hr"];
+  const deptCounts = depts.map((d) => ({
+    dept: d,
+    count: employees.filter((u) => u.role.startsWith(d)).length,
+  }));
 
-  const [projects, setProjects] = useState<Project[]>([
-    { id: "p1", name: "Website Redesign", assignedTo: "Alpha Squad", status: "In Progress", progress: 65 },
-    { id: "p2", name: "Q3 Sales Campaign", assignedTo: "Sales Ninjas", status: "Planning", progress: 10 },
-    { id: "p3", name: "Social Media Push", assignedTo: "Growth Hackers", status: "In Progress", progress: 40 },
-  ]);
+  // Task metrics
+  const doneTasks     = tasks.filter((t) => t.status === "done").length;
+  const pendingTasks  = tasks.filter((t) => t.status === "todo").length;
+  const inProgTasks   = tasks.filter((t) => t.status === "in-progress").length;
+  const totalBudget   = tasks.reduce((s, t) => s + (t.budget ?? 0), 0);
+  const usedBudget    = tasks.reduce((s, t) => s + (t.budgetUsed ?? 0), 0);
 
-  const [assignmentForm, setAssignmentForm] = useState({ project: "", assignee: "", type: "project" });
+  // Deliverable metrics
+  const delivByStatus = (s: string) => deliverables.filter((d) => d.status === s).length;
 
-  const handleAssign = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!assignmentForm.project || !assignmentForm.assignee) return;
-    
-    // Mock updating project/task assignment
-    setProjects([...projects, {
-      id: `p${projects.length + 1}`,
-      name: assignmentForm.project,
-      assignedTo: assignmentForm.assignee,
-      status: "Just Assigned",
-      progress: 0
-    }]);
-    setAssignmentForm({ project: "", assignee: "", type: "project" });
-    alert(`Successfully assigned ${assignmentForm.project} to ${assignmentForm.assignee}!`);
-  };
+  // Attendance (today)
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todayAttend = safeParse<Record<string, Record<string, string>>>(localStorage.getItem(ATTEND_KEY), {})[todayStr] ?? {};
+  const presentToday = Object.values(todayAttend).filter((s) => s === "Present").length;
+  const absentToday  = Object.values(todayAttend).filter((s) => s === "Absent").length;
+
+  // Payroll
+  const totalPayroll = Object.values(extras).reduce((s, e) => s + (e.salary ?? 0), 0);
+
+  // Leave summary
+  const pendingLeaves  = leaves.filter((l) => l.status === "Pending").length;
+  const approvedLeaves = leaves.filter((l) => l.status === "Approved").length;
+
+  // Campaign performance
+  const activeCampaigns = campaigns.filter((c) => c.status === "Active").length;
+  const totalCampBudget = campaigns.reduce((s, c) => s + (c.budget ?? 0), 0);
+  const totalCampSpent  = campaigns.reduce((s, c) => s + (c.spent ?? 0), 0);
+
+  const TABS = [
+    { key: "overview",   label: "Overview" },
+    { key: "analytics",  label: "Analytics" },
+    { key: "hierarchy",  label: "Hierarchy" },
+    { key: "activity",   label: "Activity Feed" },
+  ];
 
   return (
     <>
-      <PageMeta title="Management Dashboard | Optivax CRM" description="Management Dashboard for tracking high-level metrics" />
-      <PageBreadcrumb pageTitle="Management Dashboard" />
-      
-      {/* Top Level KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Employees</p>
-          <h4 className="mt-2 text-2xl font-bold text-gray-800 dark:text-white">{employees.length}</h4>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Active Teams</p>
-          <h4 className="mt-2 text-2xl font-bold text-gray-800 dark:text-white">{teams.length}</h4>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Departments</p>
-          <h4 className="mt-2 text-2xl font-bold text-gray-800 dark:text-white">{departments.length}</h4>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Ongoing Projects</p>
-          <h4 className="mt-2 text-2xl font-bold text-gray-800 dark:text-white">{projects.length}</h4>
-        </div>
+      <PageMeta title="Management Dashboard | Optivax Global" description="Executive management dashboard" />
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Executive Dashboard</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Company-wide performance and metrics</p>
       </div>
 
-      {/* Tabs Navigation */}
-      <div className="mb-6 border-b border-gray-200 dark:border-gray-800">
-        <nav className="-mb-px flex space-x-8">
-          {["overview", "directory", "workflow", "communication"].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab 
-                  ? "border-brand-500 text-brand-600 dark:text-brand-400" 
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </nav>
+      {/* Tab bar */}
+      <div className="flex gap-1 mb-6 overflow-x-auto border-b border-gray-200 dark:border-gray-700 pb-px">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
+              tab === t.key
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Tab Content */}
-      <div className="space-y-6">
-        
-        {/* Overview Tab (Reports & Stats) */}
-        {activeTab === "overview" && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-            <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Management Reports</h3>
-            <div className="h-64 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
-              <p className="text-gray-500 dark:text-gray-400">Visual performance charts and department analytics go here.</p>
-            </div>
+      {/* ── Overview ─────────────────────────────────────────────────────── */}
+      {tab === "overview" && (
+        <div className="space-y-6">
+          {/* Top KPIs */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <KPI title="Total Employees" value={totalEmployees} sub={`${deptCounts.map((d) => `${d.dept}: ${d.count}`).join(" · ")}`} color="blue" />
+            <KPI title="Active Clients" value={clients.filter((c) => c.status === "active").length} sub={`${clients.length} total`} color="green" />
+            <KPI title="Tasks Completed" value={doneTasks} sub={`${inProgTasks} in progress · ${pendingTasks} pending`} color="purple" />
+            <KPI title="Deliverables" value={deliverables.length} sub={`${delivByStatus("Approved")} approved · ${delivByStatus("Delivered")} delivered`} color="orange" />
           </div>
-        )}
 
-        {/* Directory Tab (Teams, Employees, Departments) */}
-        {activeTab === "directory" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">All Departments</h3>
-              <ul className="divide-y divide-gray-200 dark:divide-gray-800">
-                {departments.map(dept => (
-                  <li key={dept.id} className="py-3 flex justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{dept.name}</p>
-                      <p className="text-xs text-gray-500">Head: {dept.head}</p>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* Department Headcount */}
+            <SectionCard title="Employee Count by Department">
+              <div className="space-y-3">
+                {deptCounts.map(({ dept, count }) => (
+                  <div key={dept}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="capitalize text-gray-700 dark:text-gray-300">{dept}</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{count}</span>
                     </div>
-                    <span className="text-sm text-gray-500">{dept.employeeCount} Employees</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">All Teams</h3>
-              <ul className="divide-y divide-gray-200 dark:divide-gray-800">
-                {teams.map(team => (
-                  <li key={team.id} className="py-3 flex justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{team.name}</p>
-                      <p className="text-xs text-gray-500">Lead: {team.lead} | {team.department}</p>
+                    <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+                      <div
+                        className={`${DEPT_COLORS[dept] ?? "bg-gray-400"} h-2 rounded-full`}
+                        style={{ width: totalEmployees > 0 ? `${(count / totalEmployees) * 100}%` : "0%" }}
+                      />
                     </div>
-                  </li>
+                  </div>
                 ))}
-              </ul>
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900 lg:col-span-2">
-              <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Employee Directory</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                    {employees.map(emp => (
-                      <tr key={emp.id}>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{emp.name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{emp.role}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{emp.department}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`px-2 py-1 text-xs rounded-full ${emp.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                            {emp.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="mt-4 text-xs text-gray-500 italic">* Managers have view-only access to employee records. Deletion is restricted to Super Admins.</p>
               </div>
-            </div>
-          </div>
-        )}
+            </SectionCard>
 
-        {/* Workflow Tab (Assign Tasks/Projects, Monitor Ongoing) */}
-        {activeTab === "workflow" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Assign Workflow</h3>
-              <RequirePermission domain="production" action="ASSIGN" fallback={
-                <form className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assignment Type</label>
-                    <select className="w-full rounded-lg border border-gray-300 p-2 text-sm" disabled>
-                      <option value="project">Project</option>
-                      <option value="task">Task</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project/Task Name</label>
-                    <input type="text" className="w-full rounded-lg border border-gray-300 p-2 text-sm" disabled />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assign To (Team/Employee)</label>
-                    <input type="text" className="w-full rounded-lg border border-gray-300 p-2 text-sm" disabled />
-                  </div>
-                  <button className="w-full bg-gray-200 text-gray-500 font-medium py-2 px-4 rounded-lg text-sm" disabled>Assign</button>
-                </form>
-              }>
-              <form onSubmit={handleAssign} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assignment Type</label>
-                  <select 
-                    className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                    value={assignmentForm.type}
-                    onChange={(e) => setAssignmentForm({...assignmentForm, type: e.target.value})}
-                  >
-                    <option value="project">Project</option>
-                    <option value="task">Task</option>
-                  </select>
+            {/* Leave & Attendance */}
+            <SectionCard title="HR Summary">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
+                  <div className="text-2xl font-bold text-green-700 dark:text-green-300">{presentToday}</div>
+                  <div className="text-xs text-gray-500 mt-1">Present Today</div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{assignmentForm.type === 'project' ? 'Project' : 'Task'} Name</label>
-                  <input 
-                    type="text" 
-                    required
-                    className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                    value={assignmentForm.project}
-                    onChange={(e) => setAssignmentForm({...assignmentForm, project: e.target.value})}
-                    placeholder="e.g. New Marketing Campaign"
-                  />
+                <div className="text-center p-3 rounded-lg bg-red-50 dark:bg-red-900/20">
+                  <div className="text-2xl font-bold text-red-700 dark:text-red-300">{absentToday}</div>
+                  <div className="text-xs text-gray-500 mt-1">Absent Today</div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assign To (Team/Employee)</label>
-                  <input 
-                    type="text" 
-                    required
-                    className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                    value={assignmentForm.assignee}
-                    onChange={(e) => setAssignmentForm({...assignmentForm, assignee: e.target.value})}
-                    placeholder="e.g. Alpha Squad"
-                  />
+                <div className="text-center p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                  <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">{pendingLeaves}</div>
+                  <div className="text-xs text-gray-500 mt-1">Pending Leaves</div>
                 </div>
-                <button type="submit" className="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm">
-                  Assign {assignmentForm.type === 'project' ? 'Project' : 'Task'}
-                </button>
-              </form>
-              </RequirePermission>
-            </div>
+                <div className="text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20">
+                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{approvedLeaves}</div>
+                  <div className="text-xs text-gray-500 mt-1">Approved Leaves</div>
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Monthly Payroll</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    Rs. {totalPayroll.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </SectionCard>
 
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Ongoing Projects Monitor</h3>
-              <div className="space-y-4">
-                {projects.map(proj => (
-                  <div key={proj.id} className="p-4 border border-gray-100 dark:border-gray-800 rounded-lg">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="font-medium text-gray-900 dark:text-white">{proj.name}</h4>
-                        <p className="text-xs text-gray-500">Assigned to: {proj.assignedTo}</p>
+            {/* Deliverables Status */}
+            <SectionCard title="Deliverables Status">
+              {deliverables.length === 0 ? (
+                <p className="text-sm text-gray-500">No deliverables yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {(["Pending", "In Progress", "Review", "Approved", "Delivered"] as const).map((s) => {
+                    const cnt = delivByStatus(s);
+                    return (
+                      <div key={s} className="flex items-center justify-between text-sm">
+                        <span className="text-gray-700 dark:text-gray-300">{s}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
+                            <div
+                              className="bg-blue-500 h-1.5 rounded-full"
+                              style={{ width: deliverables.length > 0 ? `${(cnt / deliverables.length) * 100}%` : "0%" }}
+                            />
+                          </div>
+                          <span className="w-6 text-right font-medium text-gray-900 dark:text-white">{cnt}</span>
+                        </div>
                       </div>
-                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">{proj.status}</span>
+                    );
+                  })}
+                </div>
+              )}
+            </SectionCard>
+
+            {/* Task Completion Metrics */}
+            <SectionCard title="Task Completion Metrics">
+              <div className="space-y-3">
+                {[
+                  { label: "Completed", count: doneTasks, color: "bg-green-500" },
+                  { label: "In Progress", count: inProgTasks, color: "bg-blue-500" },
+                  { label: "Pending", count: pendingTasks, color: "bg-gray-400" },
+                  { label: "Blocked", count: tasks.filter((t) => t.status === "blocked").length, color: "bg-red-500" },
+                ].map(({ label, count, color }) => {
+                  const total = tasks.length || 1;
+                  return (
+                    <div key={label}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-700 dark:text-gray-300">{label}</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{count} / {tasks.length}</span>
+                      </div>
+                      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+                        <div className={`${color} h-2 rounded-full`} style={{ width: `${(count / total) * 100}%` }} />
+                      </div>
                     </div>
-                    <div className="flex justify-between text-xs mb-1 mt-3">
-                      <span className="text-gray-500">Progress</span>
-                      <span className="font-medium text-gray-900 dark:text-white">{proj.progress}%</span>
+                  );
+                })}
+                {totalBudget > 0 && (
+                  <div className="pt-2 border-t border-gray-100 dark:border-gray-800 text-sm flex justify-between">
+                    <span className="text-gray-500">Budget Utilization</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      Rs. {usedBudget.toLocaleString()} / {totalBudget.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          </div>
+
+          {/* Campaign & Sales */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <SectionCard title="Campaign Performance">
+              {campaigns.length === 0 ? (
+                <p className="text-sm text-gray-500">No campaigns yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="text-center">
+                      <div className="text-xl font-bold text-gray-900 dark:text-white">{campaigns.length}</div>
+                      <div className="text-xs text-gray-500">Total</div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700">
-                      <div className="bg-brand-500 h-1.5 rounded-full" style={{ width: `${proj.progress}%` }} />
+                    <div className="text-center">
+                      <div className="text-xl font-bold text-green-600">{activeCampaigns}</div>
+                      <div className="text-xs text-gray-500">Active</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xl font-bold text-blue-600">
+                        {totalCampBudget > 0 ? Math.round((totalCampSpent / totalCampBudget) * 100) : 0}%
+                      </div>
+                      <div className="text-xs text-gray-500">Budget Used</div>
                     </div>
                   </div>
-                ))}
+                  {campaigns.slice(0, 4).map((c) => (
+                    <div key={c.id} className="flex items-center justify-between text-sm py-1 border-b border-gray-100 dark:border-gray-800 last:border-0">
+                      <span className="text-gray-700 dark:text-gray-300 truncate max-w-[200px]">{c.name}</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        c.status === "Active" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                        : c.status === "Completed" ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                        : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300"
+                      }`}>{c.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard title="Client Overview">
+              {clients.length === 0 ? (
+                <p className="text-sm text-gray-500">No clients yet. Sales Admin must create clients.</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="text-center p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
+                      <div className="text-xl font-bold text-green-700 dark:text-green-300">{clients.filter((c) => c.status === "active").length}</div>
+                      <div className="text-xs text-gray-500">Active Clients</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                      <div className="text-xl font-bold text-gray-700 dark:text-gray-300">{clients.filter((c) => c.status === "inactive").length}</div>
+                      <div className="text-xs text-gray-500">Inactive</div>
+                    </div>
+                  </div>
+                  {clients.slice(0, 4).map((c) => (
+                    <div key={c.id} className="flex items-center justify-between text-sm py-1.5">
+                      <div>
+                        <div className="font-medium text-gray-900 dark:text-white">{c.contactName}</div>
+                        <div className="text-xs text-gray-500">{c.companyName}</div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        c.status === "active" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-gray-100 text-gray-600"
+                      }`}>{c.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+          </div>
+        </div>
+      )}
+
+      {/* ── Analytics ────────────────────────────────────────────────────── */}
+      {tab === "analytics" && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Sales Analytics */}
+          <SectionCard title="Sales Analytics">
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Total Clients</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{clients.length}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Active Clients</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{clients.filter((c) => c.status === "active").length}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Sales Team Size</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{employees.filter((u) => u.role.startsWith("sales")).length}</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-gray-600 dark:text-gray-400">Revenue (mock)</span>
+                <span className="font-semibold text-gray-900 dark:text-white">Rs. 12,50,000</span>
               </div>
             </div>
-          </div>
-        )}
+          </SectionCard>
 
-        {/* Communication Tab (Coordinate with departments/admins) */}
-        {activeTab === "communication" && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900 max-w-2xl">
-            <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Coordinate & Communicate</h3>
-            <p className="text-sm text-gray-500 mb-6">Send messages or coordinate workflows directly with Department Heads or Admins.</p>
-            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); alert("Message sent successfully!"); }}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">To</label>
-                <select className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                  <option>All Department Heads</option>
-                  <option>HR Admin</option>
-                  <option>Production Admin</option>
-                  <option>Sales Admin</option>
-                  <option>Marketing Admin</option>
-                </select>
+          {/* Marketing Analytics */}
+          <SectionCard title="Marketing Analytics">
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Total Campaigns</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{campaigns.length}</span>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subject</label>
-                <input type="text" className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="Workflow alignment for Q3" />
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Active Campaigns</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{activeCampaigns}</span>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Message</label>
-                <textarea rows={4} className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="Type your message here..."></textarea>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Total Budget</span>
+                <span className="font-semibold text-gray-900 dark:text-white">Rs. {totalCampBudget.toLocaleString()}</span>
               </div>
-              <button type="submit" className="bg-brand-500 hover:bg-brand-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm">
-                Send Message
-              </button>
-            </form>
-          </div>
-        )}
+              <div className="flex justify-between py-2">
+                <span className="text-gray-600 dark:text-gray-400">Budget Utilization</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {totalCampBudget > 0 ? Math.round((totalCampSpent / totalCampBudget) * 100) : 0}%
+                </span>
+              </div>
+            </div>
+          </SectionCard>
 
-      </div>
+          {/* Production Analytics */}
+          <SectionCard title="Production Analytics">
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Active Projects</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{tasks.filter((t) => t.status === "in-progress").length}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Total Deliverables</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{deliverables.length}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Completion Rate</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {deliverables.length > 0 ? Math.round((delivByStatus("Delivered") / deliverables.length) * 100) : 0}%
+                </span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-gray-600 dark:text-gray-400">Production Team</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{employees.filter((u) => u.role.startsWith("production")).length}</span>
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* HR Analytics */}
+          <SectionCard title="HR Analytics">
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Present Today</span>
+                <span className="font-semibold text-green-600">{presentToday}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Absent Today</span>
+                <span className="font-semibold text-red-600">{absentToday}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Pending Leave Requests</span>
+                <span className="font-semibold text-yellow-600">{pendingLeaves}</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-gray-600 dark:text-gray-400">Monthly Payroll</span>
+                <span className="font-semibold text-gray-900 dark:text-white">Rs. {totalPayroll.toLocaleString()}</span>
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+      )}
+
+      {/* ── Hierarchy ────────────────────────────────────────────────────── */}
+      {tab === "hierarchy" && (
+        <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 shadow-sm p-6">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-5">
+            Organizational Hierarchy
+          </h3>
+          <EmployeeHierarchy />
+        </div>
+      )}
+
+      {/* ── Activity Feed ─────────────────────────────────────────────────── */}
+      {tab === "activity" && (
+        <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 shadow-sm">
+          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Activity Feed</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Newest events first · auto-refreshes every 30s</p>
+          </div>
+          <div className="p-5">
+            <ActivityFeed limit={50} />
+          </div>
+        </div>
+      )}
     </>
   );
 }

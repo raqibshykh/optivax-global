@@ -124,7 +124,7 @@ export default function Templates() {
               </button>
             </div>
             <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-4 flex-1">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Template Name *</label>
                   <input

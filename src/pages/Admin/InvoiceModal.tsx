@@ -120,7 +120,7 @@ export default function InvoiceModal({ isOpen, onClose, invoice, onSave }: Invoi
       </h3>
       {error && <div className="mb-4 text-sm text-red-500">{error}</div>}
       <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label>Client *</Label>
             <select
@@ -158,7 +158,7 @@ export default function InvoiceModal({ isOpen, onClose, invoice, onSave }: Invoi
           <Input name="description" value={formData.description} onChange={handleChange} required />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label>Issue Date</Label>
             <Input type="date" name="issueDate" value={formData.issueDate} onChange={handleChange} required />

@@ -3,11 +3,13 @@ import PageMeta from "../../components/common/PageMeta";
 import { Modal } from "../../components/ui/modal";
 import { useProjects } from "../../hooks/useProjects";
 import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../context/AuthContext";
 import { api } from "../../lib/client";
 
 export default function MyProjects() {
   const { projects, isLoading } = useProjects();
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -29,9 +31,10 @@ export default function MyProjects() {
 
     setIsSubmittingRevision(true);
     try {
-      await api.post("/saas/v1/revisions/create", { 
-        projectId: selectedProjectId, 
-        comment: revisionComment 
+      await api.post("/saas/v1/revisions/create", {
+        projectId: selectedProjectId,
+        clientId: user?.id,
+        comment: revisionComment,
       });
       showToast("Revision request sent to the team.", "success");
       setIsRevisionModalOpen(false);
@@ -131,7 +134,7 @@ export default function MyProjects() {
         <textarea
           value={revisionComment}
           onChange={(e) => setRevisionComment(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-blue-400 min-h-[120px]"
+          className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 focus:border-brand-500 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-brand-400 min-h-[120px]"
           placeholder="E.g., Please change the color of the header, update the logo, etc."
         />
         <div className="mt-6 flex justify-end gap-3">

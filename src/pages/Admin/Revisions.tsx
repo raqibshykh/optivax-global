@@ -186,7 +186,7 @@ export default function AdminRevisions() {
                         value={revision.status}
                         disabled={updatingId === revision.id}
                         onChange={(e) => handleStatusChange(revision.id, e.target.value)}
-                        className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-wait"
+                        className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-wait"
                       >
                         {STATUS_OPTIONS.map((s) => (
                           <option key={s} value={s}>

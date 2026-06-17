@@ -30,8 +30,6 @@ export function useInvoices() {
         } else {
           data = await InvoiceService.getByClientId(user.id);
         }
-      } else if (user?.role?.endsWith("_member")) {
-        data = await InvoiceService.getAll(user.id);
       } else {
         data = await InvoiceService.getAll();
       }

@@ -5,6 +5,7 @@ import { useLocation } from "react-router-dom";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import { safeParse } from "../../lib/storage";
+import { storeMockPassword } from "../../lib/client";
 
 interface EmployeeExtraData {
   userId: string;
@@ -28,6 +29,7 @@ export default function Employees() {
   const [formRole, setFormRole] = useState("management");
 
   // New Fields for Employee Addition
+  const [formPassword, setFormPassword] = useState("");
   const [formSalary, setFormSalary] = useState(35000);
   const [formLeavesTaken, setFormLeavesTaken] = useState(0);
   const [formWorkMode, setFormWorkMode] = useState<"Onsite" | "Remote">("Onsite");
@@ -51,6 +53,7 @@ export default function Employees() {
   const viewerDomain = viewerRole ? viewerRole.split("_")[0] : null;
 
   const isGlobalViewer = isSuper || isManager || isHRAdmin;
+  const canSeeSalary = isSuper || isManager || isHRAdmin;
 
   const canAdd = isSuper || isHRAdmin;
 
@@ -118,6 +121,7 @@ export default function Employees() {
     setFormName("");
     setFormEmail("");
     setFormRole("management");
+    setFormPassword("");
     setFormDepartment(viewerDomain ? `dept-${viewerDomain}` : "");
     setFormSalary(35000);
     setFormLeavesTaken(0);
@@ -160,6 +164,10 @@ export default function Employees() {
         });
         showToast("Employee updated successfully", "success");
       } else {
+        if (!formPassword) {
+          showToast("Password is required", "error");
+          return;
+        }
         const newEmp = await UserService.create({
           full_name: formName,
           email: formEmail,
@@ -169,7 +177,9 @@ export default function Employees() {
           departmentId: formDepartment || (viewerDomain ? `dept-${viewerDomain}` : undefined),
           created_at: new Date().toISOString(),
         });
-        
+        // Store password so the new user can log in
+        storeMockPassword(formEmail, formPassword);
+
         // Save initial extra details to localStorage
         const stored = localStorage.getItem("optivax_employee_extra");
         const currentExtras = safeParse<Record<string, EmployeeExtraData>>(stored, {});
@@ -210,9 +220,13 @@ export default function Employees() {
           <tr>
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Employee</th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Leaves (Taken / Left)</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Salary</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Deduction</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+            {canSeeSalary && (
+              <>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Salary</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Deduction</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Salary Status</th>
+              </>
+            )}
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Mode</th>
             <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
           </tr>
@@ -229,7 +243,7 @@ export default function Employees() {
             const deduction = extra.leavesTaken > 10 ? Math.round((extra.leavesTaken - 10) * (extra.salary / 30)) : 0;
 
             return (
-              <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/50">
+              <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
                 <td className="px-4 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900 dark:text-white">{emp.full_name || "N/A"}</div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">{emp.email}</div>
@@ -238,13 +252,17 @@ export default function Employees() {
                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                   <span className="font-semibold text-gray-900 dark:text-white">{extra.leavesTaken}</span> taken / <span className="font-semibold text-green-600">{leavesLeft}</span> remaining
                 </td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">Rs. {extra.salary.toLocaleString()}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-red-500">Rs. {deduction.toLocaleString()}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm">
-                  <span className={`inline-flex px-2 text-xs font-semibold leading-5 rounded-full ${
-                    extra.salaryStatus === "Paid" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                  }`}>{extra.salaryStatus}</span>
-                </td>
+                {canSeeSalary && (
+                  <>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">Rs. {extra.salary.toLocaleString()}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-red-500">Rs. {deduction.toLocaleString()}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      <span className={`inline-flex px-2 text-xs font-semibold leading-5 rounded-full ${
+                        extra.salaryStatus === "Paid" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                      }`}>{extra.salaryStatus}</span>
+                    </td>
+                  </>
+                )}
                 <td className="px-4 py-4 whitespace-nowrap text-sm">
                   <span className={`inline-flex px-2 text-xs font-semibold leading-5 rounded-full ${
                     extra.workMode === "Onsite" ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" : "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
@@ -258,7 +276,7 @@ export default function Employees() {
                     <button onClick={() => handleDelete(emp.id)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Delete</button>
                   ) : null}
                   {!canEditEmployee(emp) && !canDeleteEmployee(emp) && (
-                    <span className="text-xs text-gray-400 italic">No permission</span>
+                    <span className="text-xs text-gray-400 italic">View only</span>
                   )}
                 </td>
               </tr>
@@ -399,9 +417,9 @@ export default function Employees() {
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden overflow-y-auto outline-none focus:outline-none">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden overflow-y-auto outline-none focus:outline-none p-4">
           <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={() => setIsModalOpen(false)}></div>
-          <div className="relative w-full max-w-md mx-auto my-6 z-50">
+          <div className="relative w-full max-w-md mx-auto z-50">
             <div className="relative flex flex-col w-full bg-white border border-gray-300 rounded-lg shadow-lg outline-none focus:outline-none dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-start justify-between p-5 border-b border-solid border-gray-200 rounded-t dark:border-gray-800">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -438,6 +456,22 @@ export default function Employees() {
                       placeholder="e.g. john@example.com"
                     />
                   </div>
+                  {!editingEmployee && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Password <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={formPassword}
+                        onChange={(e) => setFormPassword(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-brand-500 focus:border-brand-500 sm:text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                        placeholder="Set a login password for this user"
+                      />
+                      <p className="mt-1 text-xs text-gray-400">The user will log in with this password.</p>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
                     <select
@@ -474,12 +508,12 @@ export default function Employees() {
                     </select>
                   </div>
 
-                  {/* Show payroll & leave configurations ONLY when adding new employee */}
-                  {!editingEmployee && (
+                  {/* Show payroll & leave configurations ONLY when adding new employee and viewer can manage salary */}
+                  {!editingEmployee && canSeeSalary && (
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-800 space-y-4">
                       <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Payroll & Leave Settings</h4>
                       
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Monthly Salary (Rs.)</label>
                           <input
@@ -502,7 +536,7 @@ export default function Employees() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Work Mode</label>
                           <select
@@ -533,7 +567,7 @@ export default function Employees() {
                 <div className="flex items-center justify-end p-6 border-t border-solid border-gray-200 rounded-b dark:border-gray-800 space-x-2">
                   <button
                     type="button"
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-850 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-800"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                     onClick={() => setIsModalOpen(false)}
                   >
                     Cancel

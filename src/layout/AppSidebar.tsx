@@ -10,8 +10,13 @@ import {
   TaskIcon,
   DollarLineIcon,
   FileIcon,
+  FolderIcon,
   MailIcon,
+  EnvelopeIcon,
   UserCircleIcon,
+  BoltIcon,
+  LockIcon,
+  PieChartIcon,
 } from "../icons";
 
 import { MENU_CONFIG, MenuItem } from "../config/menuConfig";
@@ -27,13 +32,13 @@ const resolveIcon = (icon: MenuItem["icon"]): React.ReactNode => {
     case "task":        return <TaskIcon />;
     case "dollar":      return <DollarLineIcon />;
     case "file":        return <FileIcon />;
-    case "folder":      return <FileIcon />;
+    case "folder":      return <FolderIcon />;
     case "mail":        return <MailIcon />;
     case "user-circle": return <UserCircleIcon />;
-    case "bell":        return <MailIcon />;
-    case "settings":    return <UserCircleIcon />;
-    case "shield":      return <GridIcon />;
-    case "chart":       return <FileIcon />;
+    case "bell":        return <EnvelopeIcon />;
+    case "settings":    return <BoltIcon />;
+    case "shield":      return <LockIcon />;
+    case "chart":       return <PieChartIcon />;
     default:            return <GridIcon />;
   }
 };
@@ -44,16 +49,7 @@ const AppSidebar: React.FC = () => {
   const { unreadCount } = useNotifications();
   const location = useLocation();
 
-  // Logo URL from WordPress config or Vite env
-  const logoUrl: string = (() => {
-    const win = window as unknown as Record<string, unknown>;
-    const cfg = win.SaaSCoreConfig;
-    if (cfg && typeof cfg === "object") {
-      const url = (cfg as Record<string, string>).logoUrl;
-      if (url) return url;
-    }
-    return (import.meta.env.VITE_LOGO_URL as string | undefined) ?? "";
-  })();
+  const logoUrl: string = (import.meta.env.VITE_LOGO_URL as string | undefined) ?? "";
 
   // Derive menu items from the central config
   const navItems: MenuItem[] = user?.role ? (MENU_CONFIG[user.role] ?? []) : [];
@@ -103,7 +99,7 @@ const AppSidebar: React.FC = () => {
 
   return (
     <aside
-      className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-5 left-0 bg-slate-20 dark:bg-slate-900 dark:border-slate-700 text-white h-screen transition-all duration-300 ease-in-out z-50 border-r border-slate-700
+      className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 h-screen transition-all duration-300 ease-in-out z-50
         ${isExpanded || isMobileOpen ? "w-[290px]" : isHovered ? "w-[290px]" : "w-[90px]"}
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
         lg:translate-x-0`}
@@ -130,7 +126,7 @@ const AppSidebar: React.FC = () => {
           <div className="flex flex-col gap-4">
             <div>
               <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-blue-200 ${
+                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 dark:text-gray-500 font-semibold tracking-wider ${
                   !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
                 }`}
               >

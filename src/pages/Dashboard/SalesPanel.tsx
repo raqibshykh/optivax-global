@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { RequirePermission } from "../../components/auth/RequirePermission";
@@ -6,11 +6,24 @@ import Placeholder from "../../components/common/Placeholder";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { getCampaigns, getTargets, getSalesTasks } from "../../mock/salesData";
+import { safeParse } from "../../lib/storage";
+import { StoredClient } from "../../types";
+import { UserService } from "../../services/userService";
+import { ClientService } from "../../services/clientService";
+import { notifyClientCreated } from "../../services/notificationHelpers";
+import { storeMockPassword } from "../../lib/client";
+
+const CLIENTS_KEY = "optivax_clients";
 
 // Local types for leads/deals/commissions (not shared with global types)
 interface SalesLead { id: string; name: string; email: string; company: string; status: "New" | "Contacted" | "Qualified" | "Lost"; estimated_value: number; }
 interface SalesDeal { id: string; title: string; client: string; amount: number; stage: "Proposal" | "Negotiation" | "Won" | "Lost"; }
 interface SalesCommission { id: string; amount: number; deal_id: string; status: "Pending" | "Paid"; date: string; }
+
+interface ClientForm {
+  companyName: string; contactName: string; email: string;
+  phone: string; password: string;
+}
 
 export default function SalesPanel() {
   const { user } = useAuth();
@@ -22,6 +35,93 @@ export default function SalesPanel() {
     user?.role === "management";
 
   const [activeTab, setActiveTab] = useState("leads");
+
+  // ── Stored clients ────────────────────────────────────────────────────────
+  const [storedClients, setStoredClients] = useState<StoredClient[]>(() =>
+    safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), [])
+  );
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === CLIENTS_KEY) setStoredClients(safeParse<StoredClient[]>(e.newValue, []));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // ── Client creation form ──────────────────────────────────────────────────
+  const [clientForm, setClientForm] = useState<ClientForm>({
+    companyName: "", contactName: "", email: "", phone: "", password: "",
+  });
+  const [clientFormLoading, setClientFormLoading] = useState(false);
+  const [clientFormError, setClientFormError]     = useState("");
+  const [clientFormSuccess, setClientFormSuccess] = useState("");
+  const [editingClientStatus, setEditingClientStatus] = useState<string | null>(null);
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setClientFormError(""); setClientFormSuccess("");
+    const { companyName, contactName, email, phone, password } = clientForm;
+    if (!companyName || !contactName || !email || !phone || !password) {
+      setClientFormError("All fields are required.");
+      return;
+    }
+    setClientFormLoading(true);
+    try {
+      // Create login profile first (server will match email to use same id for client record)
+      const newProfile = await UserService.create({
+        full_name: contactName,
+        email,
+        avatar_url: "",
+        company: companyName,
+        role: "client",
+        created_at: new Date().toISOString(),
+      });
+      storeMockPassword(email, password);
+
+      // Create unified client record via mock server (writes to optivax_clients with all fields)
+      await ClientService.create({
+        name: contactName,
+        company: companyName,
+        email,
+        phone,
+        address: "",
+        city: "",
+        status: "active",
+        joinDate: new Date().toISOString(),
+        totalProjects: 0,
+        totalBilled: 0,
+        createdBy: user?.id ?? "",
+        createdByName: user?.name ?? "",
+      });
+
+      if (user) {
+        notifyClientCreated(user.id, user.name, user.role, contactName, newProfile.id);
+      }
+
+      // Re-read from localStorage (mock server wrote the unified record there)
+      setStoredClients(safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []));
+      setClientFormSuccess(`Client "${contactName}" created successfully!`);
+      setClientForm({ companyName: "", contactName: "", email: "", phone: "", password: "" });
+    } catch {
+      setClientFormError("Failed to create client. Email may already be in use.");
+    } finally {
+      setClientFormLoading(false);
+    }
+  };
+
+  const toggleClientStatus = async (id: string) => {
+    const current = storedClients.find((c) => c.id === id);
+    if (!current) return;
+    const newStatus: "active" | "inactive" = current.status === "active" ? "inactive" : "active";
+    try {
+      await ClientService.update(id, { status: newStatus });
+      setStoredClients(safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []));
+    } catch {
+      showToast("Failed to update client status", "error");
+    }
+    setEditingClientStatus(null);
+  };
 
   // ── Real sales data KPIs ──────────────────────────────────────────────────
   const targets   = useMemo(() => getTargets(), []);
@@ -147,8 +247,8 @@ export default function SalesPanel() {
 
       {/* ── Tabs ────────────────────────────────────────────────────────── */}
       <div className="mb-6 border-b border-gray-200 dark:border-gray-800">
-        <nav className="-mb-px flex gap-6">
-          {["leads", "deals", "commissions"].map(tab => (
+        <nav className="-mb-px flex gap-4 overflow-x-auto pb-px">
+          {["leads", "deals", "commissions", "clients"].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === tab
@@ -257,6 +357,117 @@ export default function SalesPanel() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ── Clients Tab ─────────────────────────────────────────────────── */}
+      {activeTab === "clients" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Client list */}
+          <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+              <h3 className="text-lg font-bold text-gray-800 dark:text-white">Clients</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {storedClients.length} client{storedClients.length !== 1 ? "s" : ""} created · manage status here
+              </p>
+            </div>
+            <div className="p-6">
+              {storedClients.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
+                  No clients yet. Use the form to create your first client.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-800/50">
+                        {["Contact", "Company", "Email", "Phone", "Created", "Status", ""].map((h) => (
+                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                      {storedClients.map((c) => (
+                        <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                          <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{c.contactName}</td>
+                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{c.companyName}</td>
+                          <td className="px-4 py-3 text-brand-500 whitespace-nowrap">{c.email}</td>
+                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{c.phone}</td>
+                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                            {new Date(c.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                              c.status === "active"
+                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                            }`}>{c.status}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {isAdmin && (
+                              <button
+                                onClick={() => toggleClientStatus(c.id)}
+                                className="text-xs text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 font-medium"
+                              >
+                                {c.status === "active" ? "Deactivate" : "Activate"}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Create Client Form */}
+          <RequirePermission domain="sales" action="CREATE"
+            fallback={
+              <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-6">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Add Client</h3>
+                <Placeholder message="Only Sales Admins can create clients." />
+              </div>
+            }>
+            <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-6">
+              <h3 className="mb-1 text-lg font-bold text-gray-800 dark:text-white">Add New Client</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Creates a client account and login credentials.</p>
+
+              {clientFormSuccess && (
+                <div className="mb-4 text-sm text-green-700 bg-green-50 dark:bg-green-900/20 dark:text-green-400 rounded-lg px-3 py-2 border border-green-200 dark:border-green-800">
+                  {clientFormSuccess}
+                </div>
+              )}
+              {clientFormError && (
+                <div className="mb-4 text-sm text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 rounded-lg px-3 py-2 border border-red-200 dark:border-red-800">
+                  {clientFormError}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateClient} className="space-y-4">
+                {[
+                  { key: "companyName",  label: "Company Name",  type: "text",     placeholder: "e.g. Acme Corp" },
+                  { key: "contactName",  label: "Contact Name",  type: "text",     placeholder: "e.g. John Smith" },
+                  { key: "email",        label: "Email",         type: "email",    placeholder: "john@acmecorp.com" },
+                  { key: "phone",        label: "Phone",         type: "tel",      placeholder: "+1-555-0100" },
+                  { key: "password",     label: "Temp Password", type: "password", placeholder: "Minimum 8 characters" },
+                ].map(({ key, label, type, placeholder }) => (
+                  <div key={key}>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
+                    <input type={type} required placeholder={placeholder}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                      value={(clientForm as unknown as Record<string, string>)[key]}
+                      onChange={(e) => setClientForm((f) => ({ ...f, [key]: e.target.value }))} />
+                  </div>
+                ))}
+                <button type="submit" disabled={clientFormLoading}
+                  className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm">
+                  {clientFormLoading ? "Creating…" : "Create Client"}
+                </button>
+              </form>
+            </div>
+          </RequirePermission>
         </div>
       )}
 

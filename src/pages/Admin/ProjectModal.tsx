@@ -124,7 +124,7 @@ export default function ProjectModal({ isOpen, onClose, project, onSave }: Proje
             className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-3 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label>Status</Label>
             <select
@@ -153,7 +153,7 @@ export default function ProjectModal({ isOpen, onClose, project, onSave }: Proje
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label>Start Date</Label>
             <Input type="date" name="startDate" value={formData.startDate} onChange={handleChange} />

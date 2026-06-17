@@ -113,7 +113,7 @@ export default function TeamPerformance() {
       </div>
 
       {/* Task Summary Row */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: "Active Tasks",   value: activeTasks,  color: "text-blue-600 dark:text-blue-400",  bg: "bg-blue-50 dark:bg-blue-900/10" },
           { label: "Completed Tasks", value: doneTasks,   color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/10" },

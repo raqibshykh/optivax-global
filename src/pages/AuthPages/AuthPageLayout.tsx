@@ -21,7 +21,7 @@ export default function AuthLayout({
                 <img
                   width={231}
                   height={48}
-                  src="http://localhost/optivax-global/wp-content/uploads/2026/06/logo-icon.png"
+                  src={(import.meta.env.VITE_LOGO_URL as string | undefined) ?? "/logo-icon.png"}
                   alt="Logo"
                 />
               </Link>

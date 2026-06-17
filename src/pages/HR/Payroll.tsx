@@ -148,7 +148,7 @@ export default function Payroll() {
                     const isEditing = editingId === emp.id;
 
                     return (
-                      <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/50">
+                      <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
                         <td className="px-4 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">{emp.full_name || "N/A"}</div>
                           <div className="text-xs text-gray-500 dark:text-gray-400">{emp.email}</div>
@@ -214,7 +214,7 @@ export default function Payroll() {
                           ) : (
                             <span className={`inline-flex px-2 text-xs font-semibold leading-5 rounded-full ${
                               data.salaryStatus === "Paid"
-                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-450"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                                 : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                             }`}>
                               {data.salaryStatus}

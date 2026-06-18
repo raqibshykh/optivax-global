@@ -12,6 +12,7 @@ export default function Projects() {
   const { showToast } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleAdd = () => {
     setEditingProject(null);
@@ -24,13 +25,16 @@ export default function Projects() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this project?")) {
-      try {
-        await deleteProject(id);
-        showToast("Project deleted successfully", "success");
-      } catch (err: any) {
-        showToast(err.message, "error");
-      }
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
+    setConfirmDeleteId(null);
+    try {
+      await deleteProject(id);
+      showToast("Project deleted successfully", "success");
+    } catch (err: any) {
+      showToast(err.message, "error");
     }
   };
 
@@ -119,24 +123,41 @@ export default function Projects() {
                 </div>
               </div>
               <div className="mt-4 flex justify-between text-sm text-gray-500 dark:text-gray-400 pt-4 border-t border-gray-100 dark:border-gray-800">
-                <span>Due: {project.deadline}</span>
+                <span>Due: {project.deadline ? new Date(project.deadline).toLocaleDateString() : "—"}</span>
                 <span className="truncate max-w-[120px]" title={getClientName(project.clientId)}>
                   {getClientName(project.clientId)}
                 </span>
               </div>
               <div className="mt-4 flex gap-2 pt-2">
-                <button 
+                <button
                   onClick={() => handleEdit(project)}
                   className="flex-1 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors"
                 >
                   Edit
                 </button>
-                <button 
-                  onClick={() => handleDelete(project.id)}
-                  className="flex-1 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-600 rounded dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:text-red-400 transition-colors"
-                >
-                  Delete
-                </button>
+                {confirmDeleteId === project.id ? (
+                  <div className="flex-1 flex items-center justify-center gap-1">
+                    <button
+                      onClick={() => handleDelete(project.id)}
+                      className="flex-1 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="flex-1 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded dark:bg-gray-700 dark:text-gray-300 transition-colors"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleDelete(project.id)}
+                    className="flex-1 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-600 rounded dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:text-red-400 transition-colors"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           ))

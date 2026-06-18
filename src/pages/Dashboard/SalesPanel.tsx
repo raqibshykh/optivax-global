@@ -26,13 +26,10 @@ interface ClientForm {
 }
 
 export default function SalesPanel() {
-  const { user } = useAuth();
+  const { user, checkPermission } = useAuth();
   const { showToast } = useToast();
 
-  const isAdmin =
-    user?.role === "sales_admin" ||
-    user?.role === "super_admin" ||
-    user?.role === "management";
+  const isAdmin = checkPermission("sales", "APPROVE") || user?.role === "management";
 
   const [activeTab, setActiveTab] = useState("leads");
 
@@ -141,23 +138,35 @@ export default function SalesPanel() {
   const activeTasks = myTasks.filter(t => t.status === "in-progress" || t.status === "todo").length;
   const doneTasks   = myTasks.filter(t => t.status === "done").length;
 
-  // ── Local state ────────────────────────────────────────────────────────────
-  const [leads, setLeads] = useState<SalesLead[]>([
+  const DEFAULT_LEADS: SalesLead[] = [
     { id: "l1", name: "Mike Ross",       email: "mike@pearson.com",    company: "Pearson Specter", status: "Qualified", estimated_value: 50000 },
     { id: "l2", name: "Harvey Specter",  email: "harvey@pearson.com",  company: "Pearson Specter", status: "New",       estimated_value: 120000 },
     { id: "l3", name: "Rachel Zane",     email: "rachel@pearson.com",  company: "Pearson Specter", status: "Contacted", estimated_value: 30000 },
-  ]);
-
-  const [deals] = useState<SalesDeal[]>([
+  ];
+  const DEFAULT_DEALS: SalesDeal[] = [
     { id: "d1", title: "Enterprise Software License", client: "Acme Corp",  amount: 75000,  stage: "Negotiation" },
     { id: "d2", title: "Cloud Migration Service",     client: "Globex",     amount: 150000, stage: "Proposal" },
     { id: "d3", title: "Security Audit",              client: "Stark Ind",  amount: 45000,  stage: "Won" },
-  ]);
-
-  const [commissions] = useState<SalesCommission[]>([
+  ];
+  const DEFAULT_COMMISSIONS: SalesCommission[] = [
     { id: "cm1", amount: 4500, deal_id: "d3", status: "Paid",    date: "2026-05-20" },
     { id: "cm2", amount: 7500, deal_id: "d1", status: "Pending", date: "2026-06-10" },
-  ]);
+  ];
+
+  // ── Local state — persisted to localStorage so data survives navigation ───
+  const [leads, setLeads] = useState<SalesLead[]>(() =>
+    safeParse<SalesLead[]>(localStorage.getItem("sales_leads"), DEFAULT_LEADS)
+  );
+  const [deals] = useState<SalesDeal[]>(() =>
+    safeParse<SalesDeal[]>(localStorage.getItem("sales_deals"), DEFAULT_DEALS)
+  );
+  const [commissions] = useState<SalesCommission[]>(() =>
+    safeParse<SalesCommission[]>(localStorage.getItem("sales_commissions"), DEFAULT_COMMISSIONS)
+  );
+
+  useEffect(() => {
+    localStorage.setItem("sales_leads", JSON.stringify(leads));
+  }, [leads]);
 
   const [newLead, setNewLead] = useState({ name: "", company: "", estimated_value: 0 });
 

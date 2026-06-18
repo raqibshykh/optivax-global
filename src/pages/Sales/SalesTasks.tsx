@@ -36,13 +36,10 @@ const EMPTY_FORM = {
 };
 
 export default function SalesTasks() {
-  const { user, canCreate, canEdit, canDelete } = useAuth();
+  const { user, canCreate, canEdit, canDelete, checkPermission } = useAuth();
   const { showToast } = useToast();
 
-  const isAdmin =
-    user?.role === "sales_admin" ||
-    user?.role === "super_admin" ||
-    user?.role === "management";
+  const isAdmin = checkPermission("sales", "APPROVE") || user?.role === "management";
 
   const [tasks, setTasks] = useState<SalesTask[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);

@@ -246,7 +246,7 @@ layer(base);
 
 /* ── Scrollable tab nav ───────────────────────────────────────────────── */
 @utility tab-nav {
-  @apply -mb-px flex overflow-x-auto gap-1 pb-px scrollbar-none;
+  @apply -mb-px flex overflow-x-auto gap-1 pb-px no-scrollbar;
 }
 
 @utility tab-btn-active {

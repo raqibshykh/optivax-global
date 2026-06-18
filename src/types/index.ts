@@ -370,3 +370,39 @@ export interface SalesTask {
   createdAt: string;
   createdBy: string;
 }
+
+// ── Social Media Tracking ──────────────────────────────────────────────────────
+
+export type SocialPlatform =
+  | "facebook"
+  | "instagram"
+  | "linkedin"
+  | "tiktok"
+  | "youtube"
+  | "twitter"
+  | "google_ads"
+  | "other";
+
+export interface SocialLink {
+  id: string;
+  platform: SocialPlatform;
+  label: string;
+  url: string;
+  trackingId: string;
+  status: "active" | "inactive";
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface SocialClickEvent {
+  id: string;
+  linkId: string;
+  trackingId: string;
+  platform: SocialPlatform;
+  timestamp: string;
+  visitorId: string;
+  referrer: string;
+  device: string;
+  browser: string;
+  sourceUrl: string;
+}

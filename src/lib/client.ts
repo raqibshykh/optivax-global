@@ -1,5 +1,13 @@
 // Authentication relies on HttpOnly cookie set by the server — no client-side token storage
 import { mockUsers } from "../mock/users";
+import { seedAllMockData } from "./devSeed";
+
+// Seed all mock localStorage data synchronously at module-load time.
+// This runs before any React component renders or calls useState/useEffect,
+// ensuring direct localStorage reads in panels always find data.
+if (typeof window !== "undefined" && import.meta.env?.DEV) {
+  seedAllMockData();
+}
 
 interface SaasApiResponse<T = unknown> {
   success: boolean;
@@ -21,11 +29,22 @@ const getBaseUrl = (): string => {
   return "";
 };
 
-// Build request headers, merging extra headers
-const buildHeaders = (extra: Record<string, string> = {}): Record<string, string> => ({
-  "Content-Type": "application/json",
-  ...extra,
-});
+// Build request headers, merging extra headers and injecting auth identity
+const buildHeaders = (extra: Record<string, string> = {}): Record<string, string> => {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...extra,
+  };
+  try {
+    const raw = localStorage.getItem("mock_session");
+    if (raw) {
+      const s = JSON.parse(raw) as { id?: string; user_metadata?: { role?: string } };
+      if (s?.id) headers["X-Mock-UserId"] = s.id;
+      if (s?.user_metadata?.role) headers["X-Mock-UserRole"] = s.user_metadata.role;
+    }
+  } catch {}
+  return headers;
+};
 
 // Parse error from API response
 const parseErrorMessage = (
@@ -40,6 +59,7 @@ const parseErrorMessage = (
 
 // Core request helper
 const request = async <T = unknown>(path: string, options: RequestInit = {}): Promise<T> => {
+  await _mockServerReady;
   const url = `${getBaseUrl()}${path}`;
   const res = await fetch(url, {
     ...options,
@@ -186,10 +206,16 @@ export const fetchSession = async (): Promise<MockUserSession | null> => {
   }
 };
 
-// Start the in-browser mock server in dev mode for profile endpoints
+// Start the in-browser mock server in dev mode.
+// We keep a promise so request() can await server readiness before the first call.
+let _mockServerReady: Promise<void> = Promise.resolve();
+
 try {
   if (typeof window !== "undefined" && (import.meta.env?.DEV)) {
-    // dynamic import to avoid bundling in production
-    import("../mock/server").then((m) => m.startMockServer()).catch(() => {});
+    _mockServerReady = import("../mock/server")
+      .then((m) => { m.startMockServer(); })
+      .catch(() => {});
   }
 } catch {}
+
+export { _mockServerReady };

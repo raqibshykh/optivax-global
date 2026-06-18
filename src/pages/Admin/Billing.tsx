@@ -44,8 +44,8 @@ export default function Billing() {
           amount: inv.amount,
           method: "manual",
         });
-      } catch (insertErr) {
-        console.log("Payment record may already exist.", insertErr);
+      } catch {
+        // payment record may already exist — safe to ignore
       }
 
       showToast("Invoice marked as paid", "success");

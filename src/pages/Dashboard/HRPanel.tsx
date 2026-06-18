@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { RequirePermission } from "../../components/auth/RequirePermission";
@@ -349,12 +350,12 @@ export default function HRPanel() {
                   </svg>
                 </div>
                 <RequirePermission domain="hr" action="CREATE" fallback={null}>
-                  <a
-                    href="/#/hr/users"
+                  <Link
+                    to="/hr/users"
                     className="px-3 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors whitespace-nowrap"
                   >
                     + Add Employee
-                  </a>
+                  </Link>
                 </RequirePermission>
               </div>
             </div>

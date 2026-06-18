@@ -16,13 +16,10 @@ const pctTextColor = (pct: number) =>
     : "text-red-600 dark:text-red-400";
 
 export default function SalesTargets() {
-  const { user, canCreate, canEdit } = useAuth();
+  const { user, canCreate, canEdit, checkPermission } = useAuth();
   const { showToast } = useToast();
 
-  const isAdmin =
-    user?.role === "sales_admin" ||
-    user?.role === "super_admin" ||
-    user?.role === "management";
+  const isAdmin = checkPermission("sales", "APPROVE") || user?.role === "management";
 
   const [targets, setTargets] = useState<SalesTarget[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);

@@ -14,11 +14,8 @@ const pctTextColor = (pct: number) =>
     : "text-red-600 dark:text-red-400";
 
 export default function TeamPerformance() {
-  const { user } = useAuth();
-  const isAdmin =
-    user?.role === "sales_admin" ||
-    user?.role === "super_admin" ||
-    user?.role === "management";
+  const { user, checkPermission } = useAuth();
+  const isAdmin = checkPermission("sales", "APPROVE") || user?.role === "management";
 
   const campaigns = useMemo(() => getCampaigns(), []);
   const targets   = useMemo(() => getTargets(), []);

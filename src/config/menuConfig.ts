@@ -47,6 +47,7 @@ export const MENU_CONFIG: MenuConfig = {
         { key: "automation", label: "Automation", path: "/admin/email/automation" },
       ],
     },
+    { key: "reports",         label: "Reports",        icon: "chart",        path: "/admin/reports" },
     { key: "notifications",   label: "Notifications",  icon: "bell",         path: "/admin/notifications" },
     { key: "revisions",       label: "Revisions",      icon: "task",         path: "/admin/revisions" },
     { key: "audit-logs",      label: "Audit Logs",     icon: "shield",       path: "/admin/audit-logs" },
@@ -105,6 +106,7 @@ export const MENU_CONFIG: MenuConfig = {
     { key: "dashboard",     label: "Dashboard",     icon: "grid",        path: "/production/dashboard" },
     { key: "deliverables",  label: "Deliverables",  icon: "folder",      path: "/production/deliverables" },
     { key: "projects",      label: "Projects",      icon: "task",        path: "/production/projects" },
+    { key: "tasks",         label: "Tasks",         icon: "task",        path: "/production/tasks" },
     { key: "employees",     label: "Employees",     icon: "users",       path: "/production/users" },
     { key: "reports",       label: "Reports",       icon: "chart",       path: "/production/reports" },
     { key: "notifications", label: "Notifications", icon: "bell",        path: "/production/notifications" },
@@ -124,7 +126,7 @@ export const MENU_CONFIG: MenuConfig = {
 
   // ── Marketing Admin ───────────────────────────────────────────────────
   marketing_admin: [
-    { key: "dashboard",     label: "Dashboard",     icon: "grid",        path: "/marketing/dashboard" },
+    { key: "dashboard",        label: "Dashboard",        icon: "grid",        path: "/marketing/dashboard" },
     {
       key: "email-marketing",
       label: "Email Marketing",
@@ -137,20 +139,22 @@ export const MENU_CONFIG: MenuConfig = {
         { key: "automation", label: "Automation", path: "/marketing/email/automation" },
       ],
     },
-    { key: "leads",         label: "Leads",         icon: "users",       path: "/marketing/leads" },
-    { key: "tasks",         label: "Tasks",         icon: "task",        path: "/marketing/tasks" },
-    { key: "reports",       label: "Reports",       icon: "chart",       path: "/marketing/reports" },
-    { key: "files",         label: "Files",         icon: "folder",      path: "/marketing/files" },
-    { key: "employees",     label: "Employees",     icon: "users",       path: "/marketing/users" },
-    { key: "notifications", label: "Notifications", icon: "bell",        path: "/marketing/notifications" },
-    { key: "settings",      label: "Settings",      icon: "settings",    path: "/marketing/settings" },
-    { key: "profile",       label: "Profile",       icon: "user-circle", path: "/marketing/profile" },
+    { key: "social-tracking", label: "Social Tracking",  icon: "chart",       path: "/marketing/social" },
+    { key: "leads",            label: "Leads",            icon: "users",       path: "/marketing/leads" },
+    { key: "tasks",            label: "Tasks",            icon: "task",        path: "/marketing/tasks" },
+    { key: "reports",          label: "Reports",          icon: "chart",       path: "/marketing/reports" },
+    { key: "files",            label: "Files",            icon: "folder",      path: "/marketing/files" },
+    { key: "employees",        label: "Employees",        icon: "users",       path: "/marketing/users" },
+    { key: "notifications",    label: "Notifications",    icon: "bell",        path: "/marketing/notifications" },
+    { key: "settings",         label: "Settings",         icon: "settings",    path: "/marketing/settings" },
+    { key: "profile",          label: "Profile",          icon: "user-circle", path: "/marketing/profile" },
   ],
 
   // ── Marketing Member ──────────────────────────────────────────────────
   marketing_member: [
-    { key: "dashboard",     label: "Dashboard",     icon: "grid",        path: "/marketing/dashboard" },
-    { key: "my-tasks",      label: "My Tasks",      icon: "task",        path: "/marketing/tasks" },
+    { key: "dashboard",        label: "Dashboard",        icon: "grid",        path: "/marketing/dashboard" },
+    { key: "my-tasks",         label: "My Tasks",         icon: "task",        path: "/marketing/tasks" },
+    { key: "social-tracking",  label: "Social Tracking",  icon: "chart",       path: "/marketing/social" },
     {
       key: "email-marketing",
       label: "Content",
@@ -161,9 +165,9 @@ export const MENU_CONFIG: MenuConfig = {
         { key: "audience",   label: "Audience",   path: "/marketing/email/audience" },
       ],
     },
-    { key: "files",         label: "Files",         icon: "folder",      path: "/marketing/files" },
-    { key: "notifications", label: "Notifications", icon: "bell",        path: "/marketing/notifications" },
-    { key: "profile",       label: "Profile",       icon: "user-circle", path: "/marketing/profile" },
+    { key: "files",            label: "Files",            icon: "folder",      path: "/marketing/files" },
+    { key: "notifications",    label: "Notifications",    icon: "bell",        path: "/marketing/notifications" },
+    { key: "profile",          label: "Profile",          icon: "user-circle", path: "/marketing/profile" },
   ],
 
   // ── HR Admin ──────────────────────────────────────────────────────────
@@ -180,6 +184,7 @@ export const MENU_CONFIG: MenuConfig = {
   // ── HR Member ─────────────────────────────────────────────────────────
   hr_member: [
     { key: "dashboard",     label: "Dashboard",     icon: "grid",        path: "/hr/dashboard" },
+    { key: "tasks",         label: "Tasks",         icon: "task",        path: "/hr/tasks" },
     { key: "notifications", label: "Notifications", icon: "bell",        path: "/hr/notifications" },
     { key: "profile",       label: "Profile",       icon: "user-circle", path: "/hr/profile" },
   ],

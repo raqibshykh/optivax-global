@@ -210,14 +210,15 @@ export function notifyLeaveRequestSubmitted(
   leaveType: string,
   leaveId: string
 ) {
-  const hrAdmins = getUsersByRole("hr_admin");
-  for (const hr of hrAdmins) {
+  const recipients = getUsersByRole("hr_admin", "management", "super_admin");
+  for (const r of recipients) {
+    const actionUrl = r.role === "management" ? "#/management/dashboard" : r.role === "super_admin" ? "#/super-admin/dashboard" : "#/hr/dashboard";
     notify(
-      hr.id,
+      r.id,
       "New Leave Request",
-      `${employeeName} submitted a ${leaveType} leave request.`,
+      `${employeeName} (${employeeRole}) submitted a ${leaveType} leave request.`,
       "system",
-      "#/hr/dashboard",
+      actionUrl,
       "Review Requests"
     );
   }

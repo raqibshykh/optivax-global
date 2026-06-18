@@ -62,7 +62,16 @@ const categoryBadge = (c?: TaskCategory) => {
 };
 
 export default function Tasks() {
-  const [tasks, setTasks] = useState<MockTask[]>(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<MockTask[]>(() => {
+    try {
+      const raw = localStorage.getItem("mock_tasks");
+      if (raw) {
+        const parsed = JSON.parse(raw) as MockTask[];
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_TASKS;
+  });
   const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -81,7 +90,7 @@ export default function Tasks() {
   const isMarketingRoute = location.pathname.startsWith("/marketing");
   const isMarketingAdmin = viewerRole === "marketing_admin";
   const isMarketingMember = viewerRole === "marketing_member";
-  const showBudgetFields = isMarketingRoute && (isMarketingAdmin || isDeptAdmin);
+  const showBudgetFields = isMarketingRoute && (isMarketingAdmin || isDeptAdmin || isSuper);
 
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle]   = useState("");
@@ -102,15 +111,6 @@ export default function Tasks() {
         setUsers(all);
       } catch {
         setUsers([]);
-      }
-      try {
-        const raw = localStorage.getItem("mock_tasks");
-        if (raw) {
-          const parsed = safeParse<MockTask[]>(raw, INITIAL_TASKS);
-          setTasks(parsed);
-        }
-      } catch {
-        // ignore
       }
     })();
   }, []);

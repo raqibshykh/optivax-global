@@ -65,8 +65,6 @@ export default function Employees() {
     setIsLoading(true);
     try {
       const allUsers = await UserService.getAll();
-      console.log("Current role:", viewerRole);
-      console.log("Loaded users:", allUsers);
 
       // Exclude clients from employee listings
       const nonClient = allUsers.filter((u) => u.role !== "client");
@@ -85,7 +83,6 @@ export default function Employees() {
         visible = nonClient;
       }
 
-      console.log("Filtered users:", visible);
       setEmployees(visible);
 
       const stored = localStorage.getItem("optivax_employee_extra");

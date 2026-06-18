@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
@@ -36,16 +36,15 @@ const STATUS_TO_TASK: Record<string, TaskStatus> = {
 
 // ── Component ────────────────────────────────────────────────────────────
 export default function MarketingPanel() {
-  const { user } = useAuth();
+  const { user, checkPermission } = useAuth();
   const viewerRole = user?.role || null;
-  const isAdmin   = viewerRole === "marketing_admin";
-  const isMember  = viewerRole === "marketing_member";
+  const isAdmin    = checkPermission("marketing", "CREATE");
+  const isMember   = viewerRole === "marketing_member";
 
   const [activeTab, setActiveTab] = useState(isMember ? "tasks" : "campaigns");
 
   // ── Campaigns state (persisted) ─────────────────────────────────────
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
-  const [newCampaign, setNewCampaign] = useState({ name: "", platform: "Facebook", budget: 0 });
 
   useEffect(() => {
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
@@ -86,14 +85,9 @@ export default function MarketingPanel() {
       })
     : [];
 
-  // For permission gating: member can create campaigns only if they have a
-  // campaign-category task assigned to them
   const hasCampaignTask = myTasks.some(
-    (t) =>
-      t.category === "campaign" ||
-      t.title.toLowerCase().includes("campaign")
+    (t) => t.category === "campaign" || t.title.toLowerCase().includes("campaign")
   );
-  const canCreateCampaign = isAdmin || hasCampaignTask;
 
   // Campaigns visible: admin sees all; member sees only ones they created
   const visibleCampaigns = isAdmin
@@ -111,32 +105,6 @@ export default function MarketingPanel() {
   const taskBudgetRem      = taskBudgetTotal - taskBudgetUsed;
 
   // ── Handlers ─────────────────────────────────────────────────────────
-  const handleAddCampaign = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCampaign.name) return;
-
-    // find a linked campaign task (optional)
-    const linked = myTasks.find(
-      (t) =>
-        t.category === "campaign" ||
-        t.title.toLowerCase().includes("campaign")
-    );
-
-    setCampaigns((prev) => [
-      ...prev,
-      {
-        id: `cm${Date.now()}`,
-        name: newCampaign.name,
-        platform: newCampaign.platform,
-        status: "Draft",
-        budget: linked?.budget ?? newCampaign.budget,
-        spent: 0,
-        createdBy: user?.id,
-        linkedTaskId: linked?.id,
-      },
-    ]);
-    setNewCampaign({ name: "", platform: "Facebook", budget: 0 });
-  };
 
   // Update task status from within the panel
   const updateTaskStatus = (taskId: string, newStatus: string) => {
@@ -222,15 +190,6 @@ export default function MarketingPanel() {
         )}
       </div>
 
-      {/* Campaign permission notice for members */}
-      {isMember && !canCreateCampaign && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 px-4 py-3 flex items-center gap-3">
-          <span className="text-amber-600 dark:text-amber-400 text-lg">&#9888;</span>
-          <p className="text-sm text-amber-800 dark:text-amber-300">
-            Campaign creation is locked. Your marketing admin must assign you a <strong>campaign task</strong> to unlock this feature.
-          </p>
-        </div>
-      )}
 
       {/* ── Tabs ──────────────────────────────────────────────────── */}
       <div className="mb-6 border-b border-gray-200 dark:border-gray-800">
@@ -284,19 +243,15 @@ export default function MarketingPanel() {
 
         {/* ── Campaigns Tab ─────────────────────────────────────── */}
         {activeTab === "campaigns" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="space-y-6">
             {/* Campaign list */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900 lg:col-span-2">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">
                 {isAdmin ? "All Campaigns" : "My Campaigns"}
               </h3>
               {visibleCampaigns.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-6">
-                  {isMember && canCreateCampaign
-                    ? "You haven't created any campaigns yet."
-                    : isMember
-                    ? "Campaign creation locked. Ask your admin to assign a campaign task."
-                    : "No campaigns yet."}
+                  {isMember ? "No campaigns assigned to you." : "No campaigns yet."}
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -341,83 +296,6 @@ export default function MarketingPanel() {
               )}
             </div>
 
-            {/* Create campaign — gated */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Create Campaign</h3>
-              {canCreateCampaign ? (
-                <form onSubmit={handleAddCampaign} className="space-y-4">
-                  {isMember && hasCampaignTask && (
-                    <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-3 py-2 mb-3">
-                      <p className="text-xs text-green-700 dark:text-green-400">
-                        Campaign creation unlocked via your assigned campaign task.
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Campaign Name</label>
-                    <input
-                      type="text"
-                      required
-                      className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                      value={newCampaign.name}
-                      onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })}
-                      placeholder="e.g. Q3 Launch"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Platform</label>
-                    <select
-                      className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                      value={newCampaign.platform}
-                      onChange={(e) => setNewCampaign({ ...newCampaign, platform: e.target.value })}
-                    >
-                      <option>Facebook</option>
-                      <option>Google Ads</option>
-                      <option>LinkedIn</option>
-                      <option>Twitter</option>
-                      <option>Instagram</option>
-                    </select>
-                  </div>
-                  {/* Budget: auto-filled from task if member; editable for admin */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Budget ($)
-                      {isMember && hasCampaignTask && (
-                        <span className="ml-2 text-[10px] text-gray-400">(from your campaign task)</span>
-                      )}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                      value={
-                        isMember && hasCampaignTask
-                          ? (myTasks.find((t) => t.category === "campaign" || t.title.toLowerCase().includes("campaign"))?.budget ?? newCampaign.budget)
-                          : newCampaign.budget
-                      }
-                      onChange={(e) =>
-                        !isMember && setNewCampaign({ ...newCampaign, budget: parseInt(e.target.value) || 0 })
-                      }
-                      readOnly={isMember && hasCampaignTask}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
-                  >
-                    Create Campaign
-                  </button>
-                </form>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-3">&#128274;</div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Campaign creation locked</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    You need a <strong>campaign task</strong> assigned by your marketing admin to unlock this.
-                  </p>
-                </div>
-              )}
-            </div>
           </div>
         )}
 

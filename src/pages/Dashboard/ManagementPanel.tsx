@@ -6,18 +6,22 @@ import ActivityFeed from "../../components/dashboard/ActivityFeed";
 import { safeParse } from "../../lib/storage";
 import { StoredClient, Deliverable } from "../../types";
 
-const CLIENTS_KEY  = "optivax_clients";
-const DELIVS_KEY   = "optivax_deliverables";
-const TASKS_KEY    = "mock_tasks";
-const EXTRA_KEY    = "optivax_employee_extra";
-const LEAVES_KEY   = "optivax_leave_requests";
-const ATTEND_KEY   = "optivax_attendance";
+const CLIENTS_KEY   = "optivax_clients";
+const DELIVS_KEY    = "optivax_deliverables";
+const TASKS_KEY     = "mock_tasks";
+const EXTRA_KEY     = "optivax_employee_extra";
+const LEAVES_KEY    = "optivax_leave_requests";
+const ATTEND_KEY    = "optivax_attendance";
 const CAMPAIGNS_KEY = "marketing_campaigns";
+const PROJECTS_KEY  = "mock_projects";
+const PAYMENTS_KEY  = "mock_payments";
+const SALES_TASKS_KEY = "sales_tasks";
 
-interface ExtraData { userId: string; leavesTaken: number; salary: number; salaryStatus: string; workMode: string; }
-interface MockTask  { id: string; status: string; assigneeId?: string; budget?: number; budgetUsed?: number; }
-interface LeaveReq  { status: string; }
-interface Campaign  { id: string; name: string; budget: number; spent: number; status: string; }
+interface ExtraData   { userId: string; leavesTaken: number; salary: number; salaryStatus: string; workMode: string; }
+interface MockTask    { id: string; status: string; assigneeId?: string; budget?: number; budgetUsed?: number; }
+interface LeaveReq   { status: string; }
+interface Campaign   { id: string; name: string; budget: number; spent: number; status: string; }
+interface MockProject { id: string; name: string; clientId: string; status: string; priority: string; progress: number; budget: number; spent: number; deadline: string; description?: string; }
 
 function KPI({ title, value, sub, color = "blue" }: { title: string; value: string | number; sub?: string; color?: string }) {
   const ring: Record<string, string> = {
@@ -58,15 +62,22 @@ export default function ManagementPanel() {
   const [extras, setExtras] = useState<Record<string, ExtraData>>({});
   const [leaves, setLeaves] = useState<LeaveReq[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [projects, setProjects] = useState<MockProject[]>([]);
+  const [payments, setPayments] = useState<{ amount: number }[]>([]);
 
   useEffect(() => {
     UserService.getAll().then(setAllUsers).catch(() => {});
     setClients(safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []));
     setDeliverables(safeParse<Deliverable[]>(localStorage.getItem(DELIVS_KEY), []));
-    setTasks(safeParse<MockTask[]>(localStorage.getItem(TASKS_KEY), []));
+    const generalTasks = safeParse<MockTask[]>(localStorage.getItem(TASKS_KEY), []);
+    const salesRaw = safeParse<{ id: string; status: string; assignedTo?: string; }[]>(localStorage.getItem(SALES_TASKS_KEY), []);
+    const salesAsMockTasks: MockTask[] = salesRaw.map(t => ({ id: t.id, status: t.status, assigneeId: t.assignedTo }));
+    setTasks([...generalTasks, ...salesAsMockTasks]);
     setExtras(safeParse<Record<string, ExtraData>>(localStorage.getItem(EXTRA_KEY), {}));
     setLeaves(safeParse<LeaveReq[]>(localStorage.getItem(LEAVES_KEY), []));
     setCampaigns(safeParse<Campaign[]>(localStorage.getItem(CAMPAIGNS_KEY), []));
+    setProjects(safeParse<MockProject[]>(localStorage.getItem(PROJECTS_KEY), []));
+    setPayments(safeParse<{ amount: number }[]>(localStorage.getItem(PAYMENTS_KEY), []));
   }, []);
 
   const employees = allUsers.filter((u) => u.role !== "client");
@@ -262,6 +273,68 @@ export default function ManagementPanel() {
             </SectionCard>
           </div>
 
+          {/* Projects */}
+          <SectionCard title="All Projects">
+            {projects.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No projects yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800/50">
+                    <tr>
+                      {["Project", "Client", "Status", "Priority", "Progress", "Budget"].map((h) => (
+                        <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {projects.map((proj) => {
+                      const client = clients.find((c) => c.id === proj.clientId);
+                      return (
+                        <tr key={proj.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{proj.name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                            {client?.companyName || proj.clientId}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              proj.status === "completed"    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                              : proj.status === "in-progress" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                              : proj.status === "on-hold"    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                            }`}>
+                              {proj.status?.replace(/-/g, " ")}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              proj.priority === "high"    ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                              : proj.priority === "medium" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                            }`}>
+                              {proj.priority}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                                <div className={`h-1.5 rounded-full ${proj.progress >= 100 ? "bg-green-500" : "bg-blue-500"}`} style={{ width: `${proj.progress ?? 0}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-600 dark:text-gray-400">{proj.progress ?? 0}%</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                            ${(proj.spent ?? 0).toLocaleString()} / ${(proj.budget ?? 0).toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </SectionCard>
+
           {/* Campaign & Sales */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <SectionCard title="Campaign Performance">
@@ -351,8 +424,10 @@ export default function ManagementPanel() {
                 <span className="font-semibold text-gray-900 dark:text-white">{employees.filter((u) => u.role.startsWith("sales")).length}</span>
               </div>
               <div className="flex justify-between py-2">
-                <span className="text-gray-600 dark:text-gray-400">Revenue (mock)</span>
-                <span className="font-semibold text-gray-900 dark:text-white">Rs. 12,50,000</span>
+                <span className="text-gray-600 dark:text-gray-400">Total Revenue</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  ${payments.reduce((s, p) => s + (p.amount ?? 0), 0).toLocaleString()}
+                </span>
               </div>
             </div>
           </SectionCard>
@@ -386,7 +461,7 @@ export default function ManagementPanel() {
             <div className="space-y-3 text-sm">
               <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                 <span className="text-gray-600 dark:text-gray-400">Active Projects</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{tasks.filter((t) => t.status === "in-progress").length}</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{projects.filter((p) => p.status === "in-progress").length}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                 <span className="text-gray-600 dark:text-gray-400">Total Deliverables</span>

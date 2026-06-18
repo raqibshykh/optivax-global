@@ -128,7 +128,7 @@ export default function AdminPanel() {
                     {p.name}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Due: {p.deadline}
+                    Due: {p.deadline ? new Date(p.deadline).toLocaleDateString() : "—"}
                   </p>
                 </div>
                 <span className={`px-2 py-1 text-xs rounded-full ${p.priority === 'high' ? 'bg-red-100 text-red-800' : p.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
@@ -143,44 +143,6 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {/* Implementation Plan Roadmap */}
-      <div className="mt-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Backend API Implementation Roadmap
-          </h3>
-          <span className="px-2.5 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full dark:bg-green-900/30 dark:text-green-400">
-            100% Completed
-          </span>
-        </div>
-        <p className="text-sm text-gray-500 mb-6">
-          Overview of the 10 core REST API modules fully implemented for the Optivax CRM backend.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[
-            { name: "Authentication", desc: "GET /auth/me - JWT & Roles" },
-            { name: "Tasks", desc: "CRUD /tasks - Task management & automation" },
-            { name: "Leads", desc: "CRUD /leads - Lead tracking & conversion" },
-            { name: "Projects", desc: "CRUD /projects - Project tracking" },
-            { name: "Invoices", desc: "CRUD /invoices & PDF Generation via Dompdf" },
-            { name: "Payments", desc: "CRUD /payments - Revenue tracking" },
-            { name: "Commissions", desc: "CRUD /commissions - Staff payouts" },
-            { name: "Automation Workflows", desc: "CRUD /automation/workflows - Event-driven actions" },
-            { name: "Notifications", desc: "CRUD & Real-time SSE /notifications/stream" },
-            { name: "Users", desc: "CRUD /users - Staff and Client user management" },
-          ].map((module, idx) => (
-            <div key={idx} className="flex items-start gap-3 p-3 rounded border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
-              <div className="mt-0.5 text-green-500">
-                <CheckCircleIcon className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">{idx + 1}. {module.name}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{module.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </>
   );
 }

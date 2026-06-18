@@ -51,7 +51,7 @@ const emptyForm: DeliverableFormData = {
 };
 
 export default function Deliverables() {
-  const { user } = useAuth();
+  const { user, checkPermission } = useAuth();
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [clients, setClients] = useState<StoredClient[]>([]);
   const [filter, setFilter] = useState<DeliverableStatus | "">("");
@@ -60,10 +60,10 @@ export default function Deliverables() {
   const [saving, setSaving] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
 
-  const isAdmin = user?.role === "production_admin";
-  const isMember = user?.role === "production_member";
-  const isManagement = user?.role === "management" || user?.role === "super_admin";
+  const isAdmin = checkPermission("production", "EDIT");
+  const isMember = !isAdmin && (user?.role === "production_member");
   const isClient = user?.role === "client";
+  const isManagement = !isAdmin && !isMember && !isClient;
 
   useEffect(() => {
     setDeliverables(readDeliverables());

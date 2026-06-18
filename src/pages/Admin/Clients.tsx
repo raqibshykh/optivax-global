@@ -20,6 +20,7 @@ export default function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleAdd = () => {
     setEditingClient(null);
@@ -32,13 +33,16 @@ export default function Clients() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this client?")) {
-      try {
-        await deleteClient(id);
-        showToast("Client deleted successfully", "success");
-      } catch (err: any) {
-        showToast(err.message, "error");
-      }
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
+    setConfirmDeleteId(null);
+    try {
+      await deleteClient(id);
+      showToast("Client deleted successfully", "success");
+    } catch (err: any) {
+      showToast(err.message, "error");
     }
   };
 
@@ -156,19 +160,37 @@ export default function Clients() {
                       <p className="text-sm text-gray-500 dark:text-gray-400">{client.email} - {client.company}</p>
                       <p className="text-xs text-gray-400 mt-1">Status: <span className={client.status === 'active' ? 'text-green-500' : 'text-gray-500'}>{client.status}</span></p>
                     </div>
-                    <div className="flex space-x-2">
-                      <button 
+                    <div className="flex items-center space-x-2">
+                      <button
                         onClick={() => handleEdit(client)}
                         className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded dark:hover:bg-blue-900/20"
                       >
                         Edit
                       </button>
-                      <button 
-                        onClick={() => handleDelete(client.id)}
-                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/20"
-                      >
-                        Delete
-                      </button>
+                      {confirmDeleteId === client.id ? (
+                        <>
+                          <span className="text-xs text-gray-600 dark:text-gray-400">Sure?</span>
+                          <button
+                            onClick={() => handleDelete(client.id)}
+                            className="px-3 py-1 text-sm text-white bg-red-600 hover:bg-red-700 rounded"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded dark:text-gray-300 dark:hover:bg-gray-800"
+                          >
+                            No
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleDelete(client.id)}
+                          className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/20"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

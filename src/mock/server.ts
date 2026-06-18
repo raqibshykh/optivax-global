@@ -5,15 +5,17 @@ import { mockUsers } from "./users";
 import { safeParseBody, safeParse } from "../lib/storage";
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
-const PROFILES_KEY  = "mock_profiles";
-const TASKS_KEY     = "mock_tasks";
-const NOTIFS_KEY    = "mock_notifications";
-const CLIENTS_KEY   = "optivax_clients";
-const PROJECTS_KEY  = "mock_projects";
-const INVOICES_KEY  = "mock_invoices";
-const FILES_KEY     = "mock_files";
-const REVISIONS_KEY = "mock_revisions";
-const PAYMENTS_KEY  = "mock_payments";
+const PROFILES_KEY      = "mock_profiles";
+const TASKS_KEY         = "mock_tasks";
+const NOTIFS_KEY        = "mock_notifications";
+const CLIENTS_KEY       = "optivax_clients";
+const PROJECTS_KEY      = "mock_projects";
+const INVOICES_KEY      = "mock_invoices";
+const FILES_KEY         = "mock_files";
+const REVISIONS_KEY     = "mock_revisions";
+const PAYMENTS_KEY      = "mock_payments";
+const SOCIAL_LINKS_KEY  = "social_links";
+const SOCIAL_CLICKS_KEY = "social_clicks";
 
 type Profile = {
   id: string;
@@ -277,15 +279,31 @@ export function startMockServer() {
       const mockUserId   = getHeader(init, "X-Mock-UserId")   || getHeader(init, "x-mock-userid");
       const mockUserRole = getHeader(init, "X-Mock-UserRole") || getHeader(init, "x-mock-userrole");
 
-      // ── Stripe config ─────────────────────────────────────────────────────
+      // ── Stripe config (super_admin + client only) ─────────────────────────
       if (method === "GET" && p === "/saas/v1/config/stripe") {
+        if (mockUserRole && mockUserRole !== "super_admin" && mockUserRole !== "client") {
+          return new Response(JSON.stringify({ success: false, error: "Forbidden" }), { status: 403, headers: { "Content-Type": "application/json" } });
+        }
         return ok({ publishableKey: "pk_test_mock_optivax_dev" });
       }
 
       if (method === "POST" && p === "/saas/v1/create-payment-intent") {
+        if (mockUserRole && mockUserRole !== "super_admin" && mockUserRole !== "client") {
+          return new Response(JSON.stringify({ success: false, error: "Forbidden" }), { status: 403, headers: { "Content-Type": "application/json" } });
+        }
         const body = safeParseBody<any>(init?.body, {});
         const amountCents = Math.round((body.amount || 0) * 100);
         return ok({ clientSecret: `pi_mock_${amountCents}_${Date.now()}_secret_mock` });
+      }
+
+      // ── Settings (super_admin only for write) ─────────────────────────────
+      if (method === "POST" && p === "/saas/v1/settings/stripe") {
+        if (mockUserRole !== "super_admin") {
+          return new Response(JSON.stringify({ success: false, error: "Forbidden" }), { status: 403, headers: { "Content-Type": "application/json" } });
+        }
+        const body = safeParseBody<any>(init?.body, {});
+        localStorage.setItem("optivax_stripe_settings", JSON.stringify(body));
+        return ok({});
       }
 
       // ── Profiles ──────────────────────────────────────────────────────────
@@ -519,6 +537,94 @@ export function startMockServer() {
         }
       }
 
+      // ── Organizations ─────────────────────────────────────────────────────
+      if (p.startsWith("/saas/v1/organizations")) {
+        if (method === "GET" && p.endsWith("/list")) {
+          const orgs = safeParse<unknown[]>(localStorage.getItem("mock_organizations") ?? "[]", []);
+          return ok(orgs);
+        }
+      }
+
+      // ── Subscriptions ─────────────────────────────────────────────────────
+      if (p.startsWith("/saas/v1/subscriptions")) {
+        if (method === "GET" && p.endsWith("/list")) {
+          const subs = safeParse<unknown[]>(localStorage.getItem("mock_subscriptions") ?? "[]", []);
+          return ok(subs);
+        }
+      }
+
+      // ── Email Marketing ───────────────────────────────────────────────────
+      if (p.startsWith("/saas/v1/email")) {
+        const emailStore = (key: string) => safeParse<any[]>(localStorage.getItem(key) ?? "[]", []);
+        const emailWrite = (key: string, data: any[]) => localStorage.setItem(key, JSON.stringify(data));
+
+        if (p.includes("/templates")) {
+          const KEY = "email_templates";
+          if (method === "GET")  return ok(emailStore(KEY));
+          if (method === "POST") {
+            const body = safeParseBody<any>(init?.body, {});
+            const item = { ...body, id: `et-${Date.now()}` };
+            emailWrite(KEY, [...emailStore(KEY), item]);
+            return ok(item);
+          }
+          if (method === "PUT") {
+            const body = safeParseBody<any>(init?.body, {});
+            const updated = emailStore(KEY).map((x: any) => x.id === body.id ? { ...x, ...body } : x);
+            emailWrite(KEY, updated);
+            return ok(updated.find((x: any) => x.id === body.id));
+          }
+          if (method === "DELETE") {
+            const body = safeParseBody<any>(init?.body, {});
+            emailWrite(KEY, emailStore(KEY).filter((x: any) => x.id !== body.id));
+            return ok({ success: true });
+          }
+        }
+
+        if (p.includes("/campaigns")) {
+          const KEY = "email_campaigns";
+          if (method === "GET")  return ok(emailStore(KEY));
+          if (method === "POST") {
+            const body = safeParseBody<any>(init?.body, {});
+            const item = { ...body, id: `ec-${Date.now()}` };
+            emailWrite(KEY, [...emailStore(KEY), item]);
+            return ok(item);
+          }
+          if (method === "PUT") {
+            const body = safeParseBody<any>(init?.body, {});
+            const updated = emailStore(KEY).map((x: any) => x.id === body.id ? { ...x, ...body } : x);
+            emailWrite(KEY, updated);
+            return ok(updated.find((x: any) => x.id === body.id));
+          }
+          if (method === "DELETE") {
+            const body = safeParseBody<any>(init?.body, {});
+            emailWrite(KEY, emailStore(KEY).filter((x: any) => x.id !== body.id));
+            return ok({ success: true });
+          }
+        }
+
+        if (p.includes("/automations")) {
+          const KEY = "email_automations";
+          if (method === "GET")  return ok(emailStore(KEY));
+          if (method === "POST") {
+            const body = safeParseBody<any>(init?.body, {});
+            const item = { ...body, id: `ea-${Date.now()}` };
+            emailWrite(KEY, [...emailStore(KEY), item]);
+            return ok(item);
+          }
+          if (method === "PUT") {
+            const body = safeParseBody<any>(init?.body, {});
+            const updated = emailStore(KEY).map((x: any) => x.id === body.id ? { ...x, ...body } : x);
+            emailWrite(KEY, updated);
+            return ok(updated.find((x: any) => x.id === body.id));
+          }
+          if (method === "DELETE") {
+            const body = safeParseBody<any>(init?.body, {});
+            emailWrite(KEY, emailStore(KEY).filter((x: any) => x.id !== body.id));
+            return ok({ success: true });
+          }
+        }
+      }
+
       // ── Payments ──────────────────────────────────────────────────────────
       if (p.startsWith("/saas/v1/payments")) {
         const payments = readStore<any>(PAYMENTS_KEY, () => []);
@@ -653,6 +759,63 @@ export function startMockServer() {
             return ok({});
           }
         }
+      }
+
+      // ── Social Links ──────────────────────────────────────────────────────
+      if (p.startsWith("/saas/v1/social-links")) {
+        const links = safeParse<any[]>(localStorage.getItem(SOCIAL_LINKS_KEY), []);
+
+        if (method === "GET" && p.endsWith("/list")) {
+          return ok(links);
+        }
+
+        if (method === "POST" && p.endsWith("/create")) {
+          const body = safeParseBody<any>(init?.body, {});
+          const id   = `sl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const trackingId = `trk-${Math.random().toString(36).slice(2, 10)}`;
+          const link = { id, trackingId, status: "active", createdAt: new Date().toISOString(), ...body };
+          localStorage.setItem(SOCIAL_LINKS_KEY, JSON.stringify([link, ...links]));
+          return ok(link);
+        }
+
+        if (method === "PUT" && p.endsWith("/update")) {
+          const body    = safeParseBody<any>(init?.body, {});
+          const updated = links.map((l: any) => l.id === body.id ? { ...l, ...body } : l);
+          localStorage.setItem(SOCIAL_LINKS_KEY, JSON.stringify(updated));
+          return ok(updated.find((l: any) => l.id === body.id) || null);
+        }
+
+        if (method === "DELETE" && p.endsWith("/delete")) {
+          const body = safeParseBody<any>(init?.body, {});
+          localStorage.setItem(SOCIAL_LINKS_KEY, JSON.stringify(links.filter((l: any) => l.id !== body.id)));
+          return ok({});
+        }
+
+        if (method === "POST" && p.endsWith("/track")) {
+          const body   = safeParseBody<any>(init?.body, {});
+          const clicks = safeParse<any[]>(localStorage.getItem(SOCIAL_CLICKS_KEY), []);
+          const event  = {
+            id: `clk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            timestamp: new Date().toISOString(),
+            ...body,
+          };
+          localStorage.setItem(SOCIAL_CLICKS_KEY, JSON.stringify([event, ...clicks]));
+          const link = links.find((l: any) => l.id === body.linkId || l.trackingId === body.trackingId);
+          return ok({ recorded: true, platform: link?.platform ?? "other" });
+        }
+      }
+
+      // ── Social Analytics ──────────────────────────────────────────────────
+      if (method === "GET" && p === "/saas/v1/social-analytics") {
+        const clicks = safeParse<any[]>(localStorage.getItem(SOCIAL_CLICKS_KEY), []);
+        const links  = safeParse<any[]>(localStorage.getItem(SOCIAL_LINKS_KEY), []);
+        const byPlatform: Record<string, number> = {};
+        const byLink: Record<string, number> = {};
+        for (const c of clicks) {
+          byPlatform[c.platform] = (byPlatform[c.platform] || 0) + 1;
+          byLink[c.linkId]       = (byLink[c.linkId] || 0) + 1;
+        }
+        return ok({ totalClicks: clicks.length, byPlatform, byLink, links, clicks: clicks.slice(0, 200) });
       }
 
       return originalFetch(input, init);

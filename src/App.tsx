@@ -48,6 +48,9 @@ import TeamPerformance from "./pages/Sales/TeamPerformance";
 // ── Production pages ──────────────────────────────────────────────────────
 import Deliverables from "./pages/Production/Deliverables";
 
+// ── Marketing pages ───────────────────────────────────────────────────────
+import SocialTracking from "./pages/Marketing/SocialTracking";
+
 // ── Client pages ──────────────────────────────────────────────────────────
 import MyProjects from "./pages/Client/MyProjects";
 import ClientBilling from "./pages/Client/Billing";
@@ -152,6 +155,7 @@ export default function App() {
             <Route path="/marketing/dashboard"             element={<MarketingPanel />} />
             <Route path="/marketing/leads"                 element={<MarketingPanel />} />
             <Route path="/marketing/tasks"                 element={<Tasks />} />
+            <Route path="/marketing/social"               element={<SocialTracking />} />
             <Route path="/marketing/reports"               element={<Reports />} />
             <Route path="/marketing/files"                 element={<AdminFiles />} />
             <Route path="/marketing/notifications"         element={<AdminNotifications />} />

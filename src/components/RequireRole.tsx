@@ -22,7 +22,6 @@ const RequireRole: React.FC<RequireRoleProps> = ({ allowedRoles, children, fallb
   }
 
   if (error) {
-    console.error('RequireRole error:', error);
     return <div className="text-sm text-red-500">Unable to determine permissions.</div>;
   }
 

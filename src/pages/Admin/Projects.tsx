@@ -5,11 +5,13 @@ import { useState } from "react";
 import ProjectModal from "./ProjectModal";
 import { Project } from "../../types";
 import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../context/AuthContext";
 
 export default function Projects() {
   const { projects, isLoading, addProject, updateProject, deleteProject } = useProjects();
   const { clients } = useClients();
   const { showToast } = useToast();
+  const { canCreate, canEdit, canDelete } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -33,8 +35,8 @@ export default function Projects() {
     try {
       await deleteProject(id);
       showToast("Project deleted successfully", "success");
-    } catch (err: any) {
-      showToast(err.message, "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to delete project", "error");
     }
   };
 
@@ -51,8 +53,8 @@ export default function Projects() {
         });
         showToast("Project created successfully", "success");
       }
-    } catch (err: any) {
-      showToast(err.message, "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to save project", "error");
       throw err;
     }
   };
@@ -77,12 +79,14 @@ export default function Projects() {
             Track project progress and manage deadlines.
           </p>
         </div>
-        <button 
-          onClick={handleAdd}
-          className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700"
-        >
-          Create Project
-        </button>
+        {canCreate("production") && (
+          <button
+            onClick={handleAdd}
+            className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700"
+          >
+            Create Project
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -129,34 +133,38 @@ export default function Projects() {
                 </span>
               </div>
               <div className="mt-4 flex gap-2 pt-2">
-                <button
-                  onClick={() => handleEdit(project)}
-                  className="flex-1 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors"
-                >
-                  Edit
-                </button>
-                {confirmDeleteId === project.id ? (
-                  <div className="flex-1 flex items-center justify-center gap-1">
+                {canEdit("production") && (
+                  <button
+                    onClick={() => handleEdit(project)}
+                    className="flex-1 py-1.5 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 rounded dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors"
+                  >
+                    Edit
+                  </button>
+                )}
+                {canDelete("production") && (
+                  confirmDeleteId === project.id ? (
+                    <div className="flex-1 flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => handleDelete(project.id)}
+                        className="flex-1 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="flex-1 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded dark:bg-gray-700 dark:text-gray-300 transition-colors"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
                     <button
                       onClick={() => handleDelete(project.id)}
-                      className="flex-1 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                      className="flex-1 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-600 rounded dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:text-red-400 transition-colors"
                     >
-                      Yes
+                      Delete
                     </button>
-                    <button
-                      onClick={() => setConfirmDeleteId(null)}
-                      className="flex-1 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded dark:bg-gray-700 dark:text-gray-300 transition-colors"
-                    >
-                      No
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => handleDelete(project.id)}
-                    className="flex-1 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-600 rounded dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:text-red-400 transition-colors"
-                  >
-                    Delete
-                  </button>
+                  )
                 )}
               </div>
             </div>

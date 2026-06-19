@@ -13,8 +13,8 @@ export function useEvents() {
     try {
       const data = await EventService.getAll();
       setEvents(data);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch events");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch events");
     } finally {
       setIsLoading(false);
     }
@@ -29,8 +29,8 @@ export function useEvents() {
       const newEvent = await EventService.create(eventData);
       setEvents((prev) => [...prev, newEvent]);
       return newEvent;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to add event");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to add event");
     }
   };
 
@@ -41,8 +41,8 @@ export function useEvents() {
         prev.map((e) => (e.id === id ? updatedEvent : e))
       );
       return updatedEvent;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to update event");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to update event");
     }
   };
 
@@ -50,8 +50,8 @@ export function useEvents() {
     try {
       await EventService.delete(id);
       setEvents((prev) => prev.filter((e) => e.id !== id));
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to delete event");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to delete event");
     }
   };
 

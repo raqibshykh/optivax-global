@@ -8,12 +8,14 @@ import { useAuth } from "../../context/AuthContext";
 import { getRoleHome } from "../../lib/roles";
 import type { UserRole } from "../../types";
 
+// super_admin and management are never self-assignable — those roles require
+// explicit provisioning by an existing super_admin through the admin panel.
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string }> = [
-  { value: "client", label: "Client" },
-  { value: "production_admin", label: "Production Admin" },
-  { value: "sales_admin", label: "Sales Admin" },
-  { value: "marketing_admin", label: "Marketing Admin" },
-  { value: "super_admin", label: "Super Admin" },
+  { value: "client",             label: "Client"              },
+  { value: "sales_member",       label: "Sales Team"          },
+  { value: "production_member",  label: "Production Team"     },
+  { value: "marketing_member",   label: "Marketing Team"      },
+  { value: "hr_member",          label: "HR Team"             },
 ];
 
 export default function SignUpForm() {

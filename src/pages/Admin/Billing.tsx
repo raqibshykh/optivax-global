@@ -7,12 +7,16 @@ import { Invoice } from "../../types";
 import { useToast } from "../../context/ToastContext";
 import { PaymentService } from "../../services/paymentService";
 
+type PaymentMethod = "bank-transfer" | "credit-card" | "check" | "manual";
+
 export default function Billing() {
   const { invoices, isLoading, addInvoice, updateInvoice, markAsPaid } = useInvoices();
   const { clients } = useClients();
   const { showToast } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("bank-transfer");
 
   const totalRevenue = invoices.reduce((sum, inv) => sum + inv.amount, 0);
   const paidInvoices = invoices.filter((i) => i.status === "paid").reduce((sum, inv) => sum + inv.amount, 0);
@@ -29,28 +33,29 @@ export default function Billing() {
     setIsModalOpen(true);
   };
 
-  const handleMarkAsPaid = async (id: string) => {
+  const handleMarkAsPaid = async () => {
+    if (!payingInvoiceId) return;
     try {
-      const inv = invoices.find((i) => i.id === id);
+      const inv = invoices.find((i) => i.id === payingInvoiceId);
       if (!inv) throw new Error("Invoice not found");
 
-      // 1. Mark the invoice as paid in the mock data store
-      await markAsPaid(id);
+      await markAsPaid(payingInvoiceId);
 
-      // 2. Create a payment record via the backend service
       try {
         await PaymentService.create({
           invoiceId: inv.id,
           amount: inv.amount,
-          method: "manual",
+          method: paymentMethod,
         });
       } catch {
         // payment record may already exist — safe to ignore
       }
 
       showToast("Invoice marked as paid", "success");
-    } catch (err: any) {
-      showToast(err.message, "error");
+      setPayingInvoiceId(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to mark as paid";
+      showToast(message, "error");
     }
   };
 
@@ -63,8 +68,8 @@ export default function Billing() {
         await addInvoice(invoiceData);
         showToast("Invoice created successfully", "success");
       }
-    } catch (err: any) {
-      showToast(err.message, "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to save invoice", "error");
       throw err;
     }
   };
@@ -149,8 +154,8 @@ export default function Billing() {
                           Edit
                         </button>
                         {invoice.status !== 'paid' && (
-                          <button 
-                            onClick={() => handleMarkAsPaid(invoice.id)}
+                          <button
+                            onClick={() => { setPayingInvoiceId(invoice.id); setPaymentMethod("bank-transfer"); }}
                             className="px-3 py-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-md transition duration-200 shadow-sm hover:shadow"
                           >
                             Pay
@@ -194,12 +199,49 @@ export default function Billing() {
         </div>
       </div>
 
-      <InvoiceModal 
+      <InvoiceModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         invoice={editingInvoice}
         onSave={handleSave}
       />
+
+      {/* Payment method confirmation dialog */}
+      {payingInvoiceId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setPayingInvoiceId(null)} />
+          <div className="relative z-50 w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Confirm Payment</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Payment Method</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+              >
+                <option value="bank-transfer">Bank Transfer</option>
+                <option value="credit-card">Credit Card</option>
+                <option value="check">Check</option>
+                <option value="manual">Manual / Cash</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setPayingInvoiceId(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMarkAsPaid}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
+              >
+                Confirm Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

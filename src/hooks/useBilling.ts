@@ -1,17 +1,8 @@
 import { api } from "../lib/client";
+import type { Invoice } from "../types";
 
-export interface Invoice {
-  id: string;
-  client_id: string;
-  amount: number;
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-  due_date: string; // ISO date
-  created_at: string;
-}
-
-/** Hook providing CRUD operations for invoices */
 export const useBilling = () => {
-  const fetchInvoices = async (params?: Record<string, any>) => {
+  const fetchInvoices = async (params?: Record<string, string | number | boolean>) => {
     const res = await api.get<{ invoices: Invoice[] }>('/saas/v1/invoices', { params });
     return res.invoices;
   };
@@ -37,4 +28,4 @@ export const useBilling = () => {
   };
 
   return { fetchInvoices, getInvoice, createInvoice, updateInvoice, deleteInvoice };
-}
+};

@@ -1,8 +1,11 @@
 import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import SignIn from "./pages/AuthPages/SignIn";
+import SignUp from "./pages/AuthPages/SignUp";
+import ResetPassword from "./pages/AuthPages/ResetPassword";
 import NotFound from "./pages/OtherPage/NotFound";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // ── Dashboard panels ─────────────────────────────────────────────────────
 import AdminPanel from "./pages/Dashboard/AdminPanel";
@@ -17,6 +20,8 @@ import ManagementPanel from "./pages/Dashboard/ManagementPanel";
 // ── HR pages ─────────────────────────────────────────────────────────────
 import Employees from "./pages/HR/Employees";
 import Payroll from "./pages/HR/Payroll";
+import LeaveRequests from "./pages/HR/LeaveRequests";
+import Attendance from "./pages/HR/Attendance";
 
 // ── Admin / shared pages ──────────────────────────────────────────────────
 import Clients from "./pages/Admin/Clients";
@@ -41,15 +46,21 @@ import Tasks from "./pages/Common/Tasks";
 
 // ── Sales management pages ────────────────────────────────────────────────
 import CampaignBudgets from "./pages/Sales/CampaignBudgets";
+import SalesLeads from "./pages/Sales/Leads";
 import SalesTargets from "./pages/Sales/SalesTargets";
 import SalesTasks from "./pages/Sales/SalesTasks";
 import TeamPerformance from "./pages/Sales/TeamPerformance";
+import Commissions from "./pages/Sales/Commissions";
 
 // ── Production pages ──────────────────────────────────────────────────────
 import Deliverables from "./pages/Production/Deliverables";
 
 // ── Marketing pages ───────────────────────────────────────────────────────
 import SocialTracking from "./pages/Marketing/SocialTracking";
+import MarketingLeads from "./pages/Marketing/Leads";
+
+// ── Admin feature pages ───────────────────────────────────────────────────
+import Departments from "./pages/Admin/Departments";
 
 // ── Client pages ──────────────────────────────────────────────────────────
 import MyProjects from "./pages/Client/MyProjects";
@@ -65,6 +76,7 @@ import { PublicRoute } from "./components/auth/PublicRoute";
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <Router>
       <ScrollToTop />
       <Routes>
@@ -74,9 +86,8 @@ export default function App() {
         {/* ── Public ──────────────────────────────────────────────────── */}
         <Route element={<PublicRoute />}>
           <Route path="/login"          element={<SignIn />} />
-          {/* Signup disabled — all accounts created by admins */}
-          <Route path="/signup"         element={<Navigate to="/login" replace />} />
-          <Route path="/reset-password" element={<Navigate to="/login" replace />} />
+          <Route path="/signup"         element={<SignUp />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Route>
 
         {/* ── Protected (inside AppLayout) ─────────────────────────── */}
@@ -86,7 +97,7 @@ export default function App() {
           <Route element={<ProtectedRoute allowedDomain="system" allowedRoles={["super_admin"]} />}>
             <Route path="/super-admin"             element={<Navigate to="/super-admin/dashboard" replace />} />
             <Route path="/super-admin/dashboard"   element={<SuperAdminPanel />} />
-            <Route path="/super-admin/departments" element={<SuperAdminPanel />} />
+            <Route path="/super-admin/departments" element={<Departments />} />
           </Route>
 
           {/* Super admin shares the full admin panel routes */}
@@ -102,6 +113,9 @@ export default function App() {
             <Route path="/admin/settings"              element={<Settings />} />
             <Route path="/admin/reports"               element={<Reports />} />
             <Route path="/admin/audit-logs"            element={<AuditLogs />} />
+            <Route path="/admin/leave"                element={<LeaveRequests />} />
+            <Route path="/admin/attendance"           element={<Attendance />} />
+            <Route path="/admin/commissions"          element={<Commissions />} />
             <Route path="/admin/email/campaigns"       element={<Campaigns />} />
             <Route path="/admin/email/templates"       element={<Templates />} />
             <Route path="/admin/email/audience"        element={<Audience />} />
@@ -114,13 +128,13 @@ export default function App() {
           <Route element={<ProtectedRoute allowedDomain="sales" allowedRoles={["sales_admin", "sales_member"]} />}>
             <Route path="/sales"                    element={<Navigate to="/sales/dashboard" replace />} />
             <Route path="/sales/dashboard"          element={<SalesPanel />} />
-            <Route path="/sales/leads"              element={<SalesPanel />} />
+            <Route path="/sales/leads"              element={<SalesLeads />} />
             <Route path="/sales/clients"            element={<Clients />} />
             <Route path="/sales/tasks"              element={<SalesTasks />} />
             <Route path="/sales/targets"            element={<SalesTargets />} />
             <Route path="/sales/campaigns"          element={<CampaignBudgets />} />
-            <Route path="/sales/budgets"            element={<CampaignBudgets />} />
             <Route path="/sales/team-performance"   element={<TeamPerformance />} />
+            <Route path="/sales/commissions"        element={<Commissions />} />
             <Route path="/sales/reports"            element={<Reports />} />
             <Route path="/sales/billing"            element={<AdminBilling />} />
             <Route path="/sales/files"              element={<AdminFiles />} />
@@ -153,7 +167,7 @@ export default function App() {
           <Route element={<ProtectedRoute allowedDomain="marketing" allowedRoles={["marketing_admin", "marketing_member"]} />}>
             <Route path="/marketing"                       element={<Navigate to="/marketing/dashboard" replace />} />
             <Route path="/marketing/dashboard"             element={<MarketingPanel />} />
-            <Route path="/marketing/leads"                 element={<MarketingPanel />} />
+            <Route path="/marketing/leads"                 element={<MarketingLeads />} />
             <Route path="/marketing/tasks"                 element={<Tasks />} />
             <Route path="/marketing/social"               element={<SocialTracking />} />
             <Route path="/marketing/reports"               element={<Reports />} />
@@ -178,12 +192,14 @@ export default function App() {
             <Route element={<ProtectedRoute allowedDomain="hr" allowedRoles={["hr_admin", "management"]} />}>
               <Route path="/hr/users" element={<Employees />} />
             </Route>
-            <Route path="/hr/payroll"       element={<Payroll />} />
-            <Route path="/hr/tasks"         element={<Tasks />} />
-            <Route path="/hr/departments"   element={<HRPanel />} />
-            <Route path="/hr/reports"       element={<Reports />} />
-            <Route path="/hr/notifications" element={<AdminNotifications />} />
-            <Route path="/hr/profile"       element={<Profile />} />
+            <Route path="/hr/payroll"        element={<Payroll />} />
+            <Route path="/hr/leave"          element={<LeaveRequests />} />
+            <Route path="/hr/attendance"     element={<Attendance />} />
+            <Route path="/hr/tasks"          element={<Tasks />} />
+            <Route path="/hr/settings"       element={<Settings />} />
+            <Route path="/hr/reports"        element={<Reports />} />
+            <Route path="/hr/notifications"  element={<AdminNotifications />} />
+            <Route path="/hr/profile"        element={<Profile />} />
           </Route>
 
           {/* ── MANAGEMENT ────────────────────────────────────────── */}
@@ -222,5 +238,6 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>
+    </ErrorBoundary>
   );
 }

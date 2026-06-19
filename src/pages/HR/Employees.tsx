@@ -42,24 +42,22 @@ export default function Employees() {
   const itemsPerPage = 5;
 
   const auth = useAuth();
+  const { canView, canCreate, canEdit, canDelete } = auth;
   const routerLocation = useLocation();
 
   const viewer = auth.user;
   const viewerRole = viewer?.role || null;
   const isSuper = viewerRole === "super_admin";
   const isManager = viewerRole === "management";
-  const isHRAdmin = viewerRole === "hr_admin";
-  const isDeptAdmin = viewerRole?.endsWith("_admin") && !isHRAdmin && !isSuper && !isManager;
+  const isDeptAdmin = viewerRole?.endsWith("_admin") && !isSuper && !isManager && viewerRole !== "hr_admin";
   const viewerDomain = viewerRole ? viewerRole.split("_")[0] : null;
 
-  const isGlobalViewer = isSuper || isManager || isHRAdmin;
-  const canSeeSalary = isSuper || isManager || isHRAdmin;
-
-  const canAdd = isSuper || isHRAdmin;
-
-  const canEditEmployee = (_emp: UserProfile) => isSuper || isHRAdmin;
-
-  const canDeleteEmployee = (_emp: UserProfile) => isSuper || isHRAdmin;
+  // RBAC-derived capabilities
+  const isGlobalViewer    = canView("hr");     // hr_admin, management, super_admin
+  const canSeeSalary      = canView("hr");
+  const canAdd            = canCreate("hr");   // hr_admin, super_admin
+  const canEditEmployee   = () => canEdit("hr");
+  const canDeleteEmployee = () => canDelete("hr");
 
   const fetchEmployees = async () => {
     setIsLoading(true);
@@ -102,8 +100,8 @@ export default function Employees() {
         localStorage.setItem("optivax_employee_extra", JSON.stringify(defaults));
         setExtraData(defaults);
       }
-    } catch (err: any) {
-      showToast(err.message || "Failed to fetch employees", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to fetch employees", "error");
     } finally {
       setIsLoading(false);
     }
@@ -143,8 +141,8 @@ export default function Employees() {
         await UserService.delete(id);
         showToast("Employee deleted successfully", "success");
         fetchEmployees();
-      } catch (err: any) {
-        showToast(err.message || "Failed to delete employee", "error");
+      } catch (err: unknown) {
+        showToast(err instanceof Error ? err.message : "Failed to delete employee", "error");
       }
     }
   };
@@ -192,8 +190,8 @@ export default function Employees() {
       }
       setIsModalOpen(false);
       fetchEmployees();
-    } catch (err: any) {
-      showToast(err.message || "Failed to save employee", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to save employee", "error");
     }
   };
 
@@ -266,13 +264,13 @@ export default function Employees() {
                   }`}>{extra.workMode}</span>
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  {canEditEmployee(emp) ? (
+                  {canEditEmployee() ? (
                     <button onClick={() => handleEdit(emp)} className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 mr-4">Edit Role</button>
                   ) : null}
-                  {canDeleteEmployee(emp) ? (
+                  {canDeleteEmployee() ? (
                     <button onClick={() => handleDelete(emp.id)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Delete</button>
                   ) : null}
-                  {!canEditEmployee(emp) && !canDeleteEmployee(emp) && (
+                  {!canEditEmployee() && !canDeleteEmployee() && (
                     <span className="text-xs text-gray-400 italic">View only</span>
                   )}
                 </td>

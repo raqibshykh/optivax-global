@@ -17,7 +17,6 @@ export function useInvoices() {
       let data: Invoice[] = [];
       if (user?.role === "client") {
         if (user.email) {
-          // Look up client record by email to get their clientId
           const clients = await api.get<{ id: string }[]>(
             `/saas/v1/clients/list?email=${encodeURIComponent(user.email)}`
           );
@@ -34,8 +33,8 @@ export function useInvoices() {
         data = await InvoiceService.getAll();
       }
       setInvoices(data);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch invoices");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch invoices");
     } finally {
       setIsLoading(false);
     }
@@ -50,8 +49,8 @@ export function useInvoices() {
       const newInvoice = await InvoiceService.create(invoiceData);
       setInvoices((prev) => [...prev, newInvoice]);
       return newInvoice;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to add invoice");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to add invoice");
     }
   };
 
@@ -62,8 +61,8 @@ export function useInvoices() {
         prev.map((i) => (i.id === id ? updatedInvoice : i))
       );
       return updatedInvoice;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to update invoice");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to update invoice");
     }
   };
 
@@ -71,8 +70,8 @@ export function useInvoices() {
     try {
       await InvoiceService.delete(id);
       setInvoices((prev) => prev.filter((i) => i.id !== id));
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to delete invoice");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to delete invoice");
     }
   };
 
@@ -83,8 +82,8 @@ export function useInvoices() {
         prev.map((i) => (i.id === id ? updatedInvoice : i))
       );
       return updatedInvoice;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to mark invoice as paid");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to mark invoice as paid");
     }
   };
 

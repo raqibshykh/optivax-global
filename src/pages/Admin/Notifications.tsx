@@ -5,6 +5,7 @@ import { useClients } from "../../hooks/useClients";
 import { useState, useEffect } from "react";
 import NotificationModal from "./NotificationModal";
 import { useToast } from "../../context/ToastContext";
+import type { Notification } from "../../types";
 
 export default function Notifications() {
   const { notifications, isLoading, addNotification, deleteNotification, refreshNotifications } = useNotifications();
@@ -56,12 +57,17 @@ export default function Notifications() {
     };
   }, [refreshNotifications, showToast]);
 
-  const handleSend = async (notificationData: any) => {
+  const handleSend = async (notificationData: Omit<Notification, "id">) => {
+    if (!notificationData.title?.trim() || !notificationData.message?.trim()) {
+      showToast("Title and message are required", "error");
+      throw new Error("Validation failed");
+    }
     try {
       await addNotification(notificationData);
       showToast("Notification sent successfully", "success");
-    } catch (err: any) {
-      showToast(err.message, "error");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to send notification";
+      showToast(message, "error");
       throw err;
     }
   };

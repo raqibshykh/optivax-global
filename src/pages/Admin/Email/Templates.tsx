@@ -9,7 +9,7 @@ export default function Templates() {
   const { templates, isLoading, addTemplate, deleteTemplate, updateTemplate } = useTemplates();
   const { showToast } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<any>(null);
+  const [editingTemplate, setEditingTemplate] = useState<{ id: string; name: string; subject: string; type: "welcome" | "newsletter" | "reminder" | "custom"; content: string } | null>(null);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -18,7 +18,7 @@ export default function Templates() {
     content: "<h1>Hello [Name],</h1><p>Start writing here...</p>",
   });
 
-  const handleOpenModal = (template?: any) => {
+  const handleOpenModal = (template?: { id: string; name: string; subject: string; type: "welcome" | "newsletter" | "reminder" | "custom"; content: string }) => {
     if (template) {
       setEditingTemplate(template);
       setFormData({
@@ -139,7 +139,7 @@ export default function Templates() {
                   <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Category</label>
                   <select
                     value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value as "welcome" | "newsletter" | "reminder" | "custom" })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   >
                     <option value="welcome">Welcome</option>
@@ -175,9 +175,11 @@ export default function Templates() {
               
               <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-800">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Live Preview</h4>
-                <div 
-                  className="prose dark:prose-invert max-w-none p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded shadow-sm min-h-[100px]"
-                  dangerouslySetInnerHTML={{ __html: formData.content }}
+                <iframe
+                  title="Email Preview"
+                  sandbox="allow-same-origin"
+                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;padding:12px;margin:0;font-size:14px;line-height:1.5}</style></head><body>${formData.content}</body></html>`}
+                  className="w-full min-h-[120px] bg-white border border-gray-200 dark:border-gray-700 rounded shadow-sm"
                 />
               </div>
             </form>

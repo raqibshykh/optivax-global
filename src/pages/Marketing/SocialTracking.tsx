@@ -57,8 +57,8 @@ export default function SocialTracking() {
       setForm({ ...EMPTY_FORM });
       setShowForm(false);
       setEditingId(null);
-    } catch (err: any) {
-      showToast(err?.message || "Failed to save link.", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to save link.", "error");
     } finally {
       setSaving(false);
     }

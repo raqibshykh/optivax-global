@@ -55,13 +55,21 @@ interface ChatMessage {
   toClientId?: string;
   toClientName?: string;
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const normMsg = (m: any): ChatMessage => ({
-  ...m,
-  toId: m.toId ?? m.toClientId ?? "",
-  toName: m.toName ?? m.toClientName ?? "",
-  fromRole: m.fromRole ?? "production_member",
-});
+const normMsg = (m: Record<string, unknown>): ChatMessage => {
+  const r = m as Partial<ChatMessage> & { toClientId?: string; toClientName?: string };
+  return {
+    id: r.id ?? "",
+    fromId: r.fromId ?? "",
+    fromName: r.fromName ?? "",
+    fromRole: r.fromRole ?? "production_member",
+    toId: r.toId ?? r.toClientId ?? "",
+    toName: r.toName ?? r.toClientName ?? "",
+    message: r.message ?? "",
+    sentAt: r.sentAt ?? "",
+    toClientId: r.toClientId,
+    toClientName: r.toClientName,
+  };
+};
 
 export default function ProductionPanel() {
   const { user, checkPermission } = useAuth();

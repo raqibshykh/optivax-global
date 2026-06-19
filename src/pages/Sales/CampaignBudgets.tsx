@@ -71,6 +71,10 @@ export default function CampaignBudgets() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      showToast("You must be logged in to perform this action", "error");
+      return;
+    }
     const all = getCampaigns();
     if (editing) {
       saveCampaigns(all.map(c => c.id === editing.id ? { ...c, ...form } : c));
@@ -80,7 +84,7 @@ export default function CampaignBudgets() {
         id: `cb${Date.now()}`,
         ...form,
         createdAt: new Date().toISOString(),
-        createdBy: user?.id || "u8",
+        createdBy: user.id,
       };
       saveCampaigns([next, ...all]);
       showToast("Campaign created", "success");

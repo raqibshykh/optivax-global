@@ -17,16 +17,17 @@ interface SaasApiResponse<T = unknown> {
 }
 
 // Resolve base URL from Vite environment variables.
-// In dev mode the mock server intercepts fetch by pathname, so we must
-// use relative paths (empty string base) — an absolute "http://localhost/api"
-// prefix causes mock server checks like startsWith("/saas/v1/...") to fail.
+// In DEV mode the in-browser mock server intercepts window.fetch and matches
+// routes by pathname (e.g. "/saas/v1/..."). Any absolute base URL prefix would
+// change the pathname to "/api/saas/v1/..." and break every mock handler.
+// → Always return "" in DEV so all requests use relative paths.
+// In production Vite sets import.meta.env.DEV = false and the VITE_API_URL
+// env var supplies the real API origin (e.g. "https://api.optivax.com").
 const getBaseUrl = (): string => {
+  if (import.meta.env.DEV) return "";
   const env = import.meta.env as Record<string, string | undefined>;
   const envUrl = env.VITE_API_URL ?? env.VITE_API_BASE;
-  if (envUrl) {
-    return envUrl.replace(/\/$/, "");
-  }
-  return "";
+  return envUrl ? envUrl.replace(/\/$/, "") : "";
 };
 
 // Build request headers, merging extra headers and injecting auth identity

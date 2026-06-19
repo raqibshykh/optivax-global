@@ -22,8 +22,8 @@ export function useFiles(projectId?: string) {
         data = await FileService.getAll();
       }
       setFiles(data);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch files");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch files");
     } finally {
       setIsLoading(false);
     }
@@ -41,13 +41,13 @@ export function useFiles(projectId?: string) {
         type: file.type,
         uploadedBy: user?.id || "",
         uploadDate: new Date().toISOString(),
-        url: URL.createObjectURL(file), // mock url
+        url: URL.createObjectURL(file),
         ...metadata
       });
       setFiles((prev) => [...prev, newFile]);
       return newFile;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to upload file");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to upload file");
     }
   };
 
@@ -55,8 +55,8 @@ export function useFiles(projectId?: string) {
     try {
       await FileService.delete(id);
       setFiles((prev) => prev.filter((f) => f.id !== id));
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to delete file");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to delete file");
     }
   };
 

@@ -37,7 +37,6 @@ export const useSSE = (enabled: boolean) => {
 
         es.onopen = () => {
           reconnectRef.current = 0;
-          console.debug("SSE connected", url);
         };
 
         es.addEventListener("notification", (ev: MessageEvent) => {
@@ -55,8 +54,7 @@ export const useSSE = (enabled: boolean) => {
               try {
                 localStorage.setItem("saas:lastNotificationId", String(payload.id));
               } catch {
-                // Ignore storage failures (e.g., blocked cookies/localStorage).
-                console.debug("SSE: localStorage write failed");
+                // ignore storage failures
               }
 
             }
@@ -65,8 +63,8 @@ export const useSSE = (enabled: boolean) => {
 
             const custom = new CustomEvent("saas:notification", { detail: payload });
             window.dispatchEvent(custom);
-          } catch (err) {
-            console.error("Failed to handle notification SSE", err);
+          } catch {
+            // ignore SSE parse errors
           }
         });
 
@@ -76,7 +74,7 @@ export const useSSE = (enabled: boolean) => {
           try {
             es.close();
           } catch {
-            console.debug("SSE: EventSource close failed");
+            // ignore close errors
           }
 
           const attempts = reconnectRef.current = reconnectRef.current + 1;
@@ -85,8 +83,7 @@ export const useSSE = (enabled: boolean) => {
           const timeout = base + jitter;
           setTimeout(() => connect(), timeout);
         };
-      } catch (e) {
-        console.error("SSE connection failed", e);
+      } catch {
 
         const attempts = reconnectRef.current = reconnectRef.current + 1;
         const base = Math.min(30000, 1000 * Math.pow(2, attempts));
@@ -103,7 +100,7 @@ export const useSSE = (enabled: boolean) => {
         try {
           esRef.current.close();
         } catch {
-          console.debug("SSE: close on unmount failed");
+          // ignore
         }
 
         esRef.current = null;

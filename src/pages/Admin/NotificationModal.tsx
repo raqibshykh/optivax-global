@@ -40,8 +40,8 @@ export default function NotificationModal({ isOpen, onClose, onSend }: Notificat
         title: "",
         message: "",
       });
-    } catch (err: any) {
-      setError(err.message || "Failed to send notification");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to send notification");
     } finally {
       setIsSubmitting(false);
     }

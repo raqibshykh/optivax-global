@@ -38,8 +38,8 @@ export default function MyProjects() {
       });
       showToast("Revision request sent to the team.", "success");
       setIsRevisionModalOpen(false);
-    } catch (err: any) {
-      showToast(err.message || "Failed to send revision request.", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to send revision request.", "error");
     } finally {
       setIsSubmittingRevision(false);
     }

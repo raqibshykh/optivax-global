@@ -279,6 +279,93 @@ export function startMockServer() {
       const mockUserId   = getHeader(init, "X-Mock-UserId")   || getHeader(init, "x-mock-userid");
       const mockUserRole = getHeader(init, "X-Mock-UserRole") || getHeader(init, "x-mock-userrole");
 
+      // ── Auth ─────────────────────────────────────────────────────────────
+      if (p.startsWith("/saas/v1/auth")) {
+        if (method === "POST" && p === "/saas/v1/auth/signup") {
+          const body = safeParseBody<any>(init?.body, {});
+          const email    = ((body.email as string) || "").toLowerCase().trim();
+          const password = (body.password as string) || "";
+          const meta     = (body.options?.data || {}) as Record<string, string>;
+          const fullName = meta.full_name || email;
+
+          if (!email || !password) {
+            return new Response(JSON.stringify({ success: false, error: "Email and password are required" }), {
+              status: 400, headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          // SECURITY: super_admin and management can never be self-assigned via signup
+          const PRIVILEGED_ROLES = ["super_admin", "management", "sales_admin", "marketing_admin", "production_admin", "hr_admin"];
+          const rawRole = (meta.role || "client") as string;
+          const role = PRIVILEGED_ROLES.includes(rawRole) ? "client" : rawRole;
+
+          const profiles = readProfiles();
+          if (profiles.find((x) => x.email?.toLowerCase() === email)) {
+            return new Response(JSON.stringify({ success: false, error: "An account with this email already exists" }), {
+              status: 409, headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          const id = `u${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const profile: Profile = {
+            id, email, full_name: fullName,
+            avatar_url: "", company: meta.company || "",
+            role, created_at: new Date().toISOString(),
+          };
+          writeProfiles([profile, ...profiles]);
+
+          const pwRaw = localStorage.getItem("mock_passwords");
+          const passwords: Record<string, string> = safeParse<Record<string, string>>(pwRaw, {});
+          passwords[email] = password;
+          localStorage.setItem("mock_passwords", JSON.stringify(passwords));
+
+          const session = {
+            id, email,
+            user_metadata: { role, full_name: fullName, avatar_url: "", company: meta.company || "" },
+          };
+          localStorage.setItem("mock_session", JSON.stringify(session));
+          return ok({ user: { id, email }, session });
+        }
+
+        if (method === "POST" && p === "/saas/v1/auth/login") {
+          const body  = safeParseBody<any>(init?.body, {});
+          const email = ((body.email as string) || "").toLowerCase().trim();
+          const pw    = (body.password as string) || "";
+
+          const profiles = readProfiles();
+          const profile  = profiles.find((x) => x.email?.toLowerCase() === email);
+          if (!profile) {
+            return new Response(JSON.stringify({ success: false, error: "Invalid credentials" }), {
+              status: 401, headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          const pwRaw  = localStorage.getItem("mock_passwords");
+          const stored = safeParse<Record<string, string>>(pwRaw, {})[email];
+          // Built-in mock users have no stored password — any password accepted
+          if (stored && stored !== pw) {
+            return new Response(JSON.stringify({ success: false, error: "Invalid credentials" }), {
+              status: 401, headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          const session = {
+            id: profile.id, email: profile.email,
+            user_metadata: {
+              role: profile.role, full_name: profile.full_name,
+              avatar_url: profile.avatar_url || "", company: profile.company || "",
+            },
+          };
+          localStorage.setItem("mock_session", JSON.stringify(session));
+          return ok({ user: { id: profile.id, email: profile.email }, session });
+        }
+
+        if (method === "POST" && p === "/saas/v1/auth/logout") {
+          localStorage.removeItem("mock_session");
+          return ok({});
+        }
+      }
+
       // ── Stripe config (super_admin + client only) ─────────────────────────
       if (method === "GET" && p === "/saas/v1/config/stripe") {
         if (mockUserRole && mockUserRole !== "super_admin" && mockUserRole !== "client") {
@@ -816,6 +903,109 @@ export function startMockServer() {
           byLink[c.linkId]       = (byLink[c.linkId] || 0) + 1;
         }
         return ok({ totalClicks: clicks.length, byPlatform, byLink, links, clicks: clicks.slice(0, 200) });
+      }
+
+      // ── Leads ────────────────────────────────────────────────────────────
+      if (p.startsWith("/saas/v1/leads")) {
+        const LEADS_KEY = "mock_leads";
+        const seedLeads = () => [
+          { id: "lead-1", name: "Priya Sharma",    email: "priya@techwave.io",    phone: "+92-300-1234567", company: "TechWave",       source: "website",  status: "new",        estimated_value: 15000, assignedTo: "u3", created_at: "2026-05-10T08:00:00Z", updated_at: "2026-05-10T08:00:00Z" },
+          { id: "lead-2", name: "Omar Farooq",     email: "omar@nexadigital.com", phone: "+92-321-9876543", company: "NexaDigital",    source: "referral", status: "contacted",  estimated_value: 8500,  assignedTo: "u4", created_at: "2026-05-14T10:30:00Z", updated_at: "2026-05-15T09:00:00Z" },
+          { id: "lead-3", name: "Sara Malik",      email: "sara@brightcorp.pk",   phone: "+92-333-2345678", company: "BrightCorp",     source: "linkedin", status: "qualified",  estimated_value: 22000, assignedTo: "u3", created_at: "2026-05-18T11:00:00Z", updated_at: "2026-05-20T14:00:00Z" },
+          { id: "lead-4", name: "Bilal Ahmed",     email: "bilal@globaltech.net", phone: "+92-345-3456789", company: "GlobalTech",     source: "cold-call",status: "converted", estimated_value: 30000, assignedTo: "u4", created_at: "2026-04-02T09:00:00Z", updated_at: "2026-06-01T10:00:00Z" },
+          { id: "lead-5", name: "Nadia Hussain",   email: "nadia@pixelstudio.pk", phone: "+92-311-4567890", company: "PixelStudio",    source: "website",  status: "new",        estimated_value: 5000,  assignedTo: "u3", created_at: "2026-06-01T07:30:00Z", updated_at: "2026-06-01T07:30:00Z" },
+          { id: "lead-6", name: "Raza Khan",       email: "raza@alphasolutions.pk",phone: "+92-322-5678901", company: "AlphaSolutions", source: "event",    status: "contacted",  estimated_value: 12000, assignedTo: "u4", created_at: "2026-06-05T12:00:00Z", updated_at: "2026-06-06T10:00:00Z" },
+          { id: "lead-7", name: "Fatima Zahra",    email: "fatima@cloudbase.io",  phone: "+92-315-6789012", company: "CloudBase",      source: "linkedin", status: "lost",       estimated_value: 9000,  assignedTo: "u3", created_at: "2026-05-25T09:00:00Z", updated_at: "2026-06-10T08:00:00Z" },
+          { id: "lead-8", name: "Hamza Sheikh",    email: "hamza@innotech.com",   phone: "+92-301-7890123", company: "InnoTech",       source: "referral", status: "qualified",  estimated_value: 18500, assignedTo: "u4", created_at: "2026-06-08T14:00:00Z", updated_at: "2026-06-09T11:00:00Z" },
+        ];
+        const leads = readStore<any>(LEADS_KEY, seedLeads);
+
+        if (method === "GET" && (p === "/saas/v1/leads" || p.endsWith("/list"))) {
+          const assignedTo = parsed.searchParams.get("assignedTo");
+          const status     = parsed.searchParams.get("status");
+          let out = leads;
+          // members only see their assigned leads
+          if (mockUserRole?.endsWith("_member") && !assignedTo) {
+            out = out.filter((l: any) => l.assignedTo === mockUserId);
+          } else if (assignedTo) {
+            out = out.filter((l: any) => l.assignedTo === assignedTo);
+          }
+          if (status) out = out.filter((l: any) => l.status === status);
+          return ok({ leads: out });
+        }
+
+        if (method === "GET" && p.startsWith("/saas/v1/leads/")) {
+          const id = p.split("/").pop();
+          return ok({ lead: leads.find((l: any) => l.id === id) ?? null });
+        }
+
+        if (method === "POST" && (p === "/saas/v1/leads" || p.endsWith("/create"))) {
+          const body = safeParseBody<any>(init?.body, {});
+          const lead = { id: `lead-${Date.now()}`, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), status: "new", ...body };
+          writeStore(LEADS_KEY, [lead, ...leads]);
+          return ok({ lead });
+        }
+
+        if (method === "PUT") {
+          const body    = safeParseBody<any>(init?.body, {});
+          const id      = body.id || p.split("/").pop();
+          const updated = leads.map((l: any) => l.id === id ? { ...l, ...body, updated_at: new Date().toISOString() } : l);
+          writeStore(LEADS_KEY, updated);
+          return ok({ lead: updated.find((l: any) => l.id === id) ?? null });
+        }
+
+        if (method === "DELETE") {
+          const body = safeParseBody<any>(init?.body, {});
+          const id   = body.id || p.split("/").pop();
+          writeStore(LEADS_KEY, leads.filter((l: any) => l.id !== id));
+          return ok({});
+        }
+      }
+
+      // ── Commissions ───────────────────────────────────────────────────────
+      if (p.startsWith("/saas/v1/commissions")) {
+        const COMM_KEY = "mock_commissions";
+        const commissions = safeParse<any[]>(localStorage.getItem(COMM_KEY) ?? "[]", []);
+
+        if (method === "GET" && (p === "/saas/v1/commissions" || p.endsWith("/list"))) {
+          const userId    = parsed.searchParams.get("userId");
+          const projectId = parsed.searchParams.get("projectId");
+          let out = commissions;
+          if (userId)    out = out.filter((x: any) => x.userId === userId);
+          if (projectId) out = out.filter((x: any) => x.projectId === projectId);
+          return ok({ commissions: out });
+        }
+
+        if (method === "POST" && (p === "/saas/v1/commissions" || p.endsWith("/create"))) {
+          const body = safeParseBody<any>(init?.body, {});
+          const item = {
+            id: `comm-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            status: "pending",
+            ...body,
+          };
+          localStorage.setItem(COMM_KEY, JSON.stringify([item, ...commissions]));
+          return ok({ commission: item });
+        }
+
+        if (method === "PUT") {
+          const body    = safeParseBody<any>(init?.body, {});
+          const updated = commissions.map((x: any) => (x.id === body.id ? { ...x, ...body } : x));
+          localStorage.setItem(COMM_KEY, JSON.stringify(updated));
+          return ok({ commission: updated.find((x: any) => x.id === body.id) || null });
+        }
+
+        if (method === "DELETE") {
+          const body = safeParseBody<any>(init?.body, {});
+          localStorage.setItem(COMM_KEY, JSON.stringify(commissions.filter((x: any) => x.id !== body.id)));
+          return ok({});
+        }
+
+        if (method === "GET" && p.includes("/")) {
+          const id   = p.split("/").pop();
+          const item = commissions.find((x: any) => x.id === id);
+          return ok({ commission: item || null });
+        }
       }
 
       return originalFetch(input, init);

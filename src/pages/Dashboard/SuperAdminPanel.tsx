@@ -24,7 +24,7 @@ interface MockTask        { id: string; title: string; description?: string; sta
 interface Invoice         { id: string; number: string; clientId: string; projectId?: string; description?: string; amount: number; status: string; issueDate: string; dueDate: string; paidDate?: string; }
 interface MarketingCampaign { id: string; name: string; budget: number; spent: number; status: string; platform?: string; startDate?: string; endDate?: string; impressions?: number; clicks?: number; conversions?: number; }
 interface SalesCampaign   { id: string; campaignName: string; totalBudget: number; budgetSpent: number; status: string; startDate?: string; endDate?: string; notes?: string; }
-interface SalesTarget     { id: string; memberId: string; memberName: string; monthlyTarget: number; quarterlyTarget: number; achievedAmount: number; period: string; }
+interface SalesTarget     { id: string; memberId: string; memberName: string; monthlyTarget: number; quarterlyTarget: number; annualTarget?: number; achievedAmount: number; period: string; }
 interface SalesTask       { id: string; title: string; description?: string; assignedTo: string; assignedName?: string; priority: string; dueDate: string; status: string; estimatedValue: number; notes?: string; }
 interface Deliverable     { id: string; title: string; description?: string; clientName?: string; projectName?: string; status: string; dueDate?: string; uploadedByName?: string; approvedByName?: string; uploadedAt?: string; }
 interface EmailTemplate   { id: string; name: string; subject: string; type?: string; createdAt?: string; }
@@ -293,8 +293,8 @@ export default function SuperAdminPanel() {
       if (pick(results[7]).length) setEmailTemplates(pick(results[7]));
       if (pick(results[8]).length) setEmailCampaigns(pick(results[8]));
       if (pick(results[9]).length) setEmailAutomations(pick(results[9]));
-    } catch (err) {
-      console.error("SuperAdminPanel fetch", err);
+    } catch {
+      // data load failure is handled by empty state in UI
     }
   };
 
@@ -344,7 +344,7 @@ export default function SuperAdminPanel() {
     return { categories: Object.keys(dm), series: [{ name: "Revenue ($)", data: Object.values(dm) }] };
   }, [payments]);
 
-  const chartOptions: any = {
+  const chartOptions: ApexCharts.ApexOptions = {
     chart: { type: "area", toolbar: { show: false } },
     colors: ["#3C50E0"],
     stroke: { curve: "smooth", width: 2 },
@@ -1101,7 +1101,7 @@ export default function SuperAdminPanel() {
                             <td className="px-3 py-3 text-gray-500 dark:text-gray-400">{t.period}</td>
                             <td className="px-3 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">${t.monthlyTarget.toLocaleString()}</td>
                             <td className="px-3 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">${t.quarterlyTarget.toLocaleString()}</td>
-                            <td className="px-3 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">${(t as any).annualTarget?.toLocaleString()||"—"}</td>
+                            <td className="px-3 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">${t.annualTarget?.toLocaleString()||"—"}</td>
                             <td className="px-3 py-3 font-bold text-gray-900 dark:text-white whitespace-nowrap">${t.achievedAmount.toLocaleString()}</td>
                             <td className="px-3 py-3">
                               <div className="flex items-center gap-2 min-w-[100px]">

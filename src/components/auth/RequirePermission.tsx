@@ -1,6 +1,6 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
-import { hasPermission } from "../../utils/rbac";
+import { hasPermissionScoped } from "../../utils/rbac";
 import { PermissionDomain, PermissionAction } from "../../types";
 
 interface RequirePermissionProps {
@@ -18,7 +18,7 @@ export const RequirePermission: React.FC<RequirePermissionProps> = ({
 }) => {
   const { user } = useAuth();
   
-  if (hasPermission(user, domain, action)) {
+  if (hasPermissionScoped(user, domain, action)) {
     return <>{children}</>;
   }
 

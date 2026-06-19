@@ -72,8 +72,8 @@ export default function ClientModal({ isOpen, onClose, client, onSave }: ClientM
     try {
       await onSave(formData, client ? undefined : password);
       onClose();
-    } catch (err: any) {
-      setError(err.message || "Failed to save client");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to save client");
     } finally {
       setIsSubmitting(false);
     }

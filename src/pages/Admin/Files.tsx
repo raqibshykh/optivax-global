@@ -7,7 +7,7 @@ import { useRef, useState } from "react";
 
 export default function Files() {
   const { files, isLoading, uploadFile, deleteFile } = useFiles();
-  const { user } = useAuth();
+  const { user, canCreate, canDelete } = useAuth();
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -24,8 +24,8 @@ export default function Files() {
     try {
       await uploadFile(selectedFile, { uploadedBy: user?.name });
       showToast("File uploaded successfully", "success");
-    } catch (err: any) {
-      showToast(err.message, "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to upload file", "error");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -39,8 +39,8 @@ export default function Files() {
       try {
         await deleteFile(id);
         showToast("File deleted successfully", "success");
-      } catch (err: any) {
-        showToast(err.message, "error");
+      } catch (err: unknown) {
+        showToast(err instanceof Error ? err.message : "Failed to delete file", "error");
       }
     }
   };
@@ -68,21 +68,23 @@ export default function Files() {
             Upload and manage project files and documents.
           </p>
         </div>
-        <div>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            className="hidden" 
-          />
-          <button 
-            onClick={handleUploadClick}
-            disabled={isUploading}
-            className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {isUploading ? "Uploading..." : "Upload File"}
-          </button>
-        </div>
+        {canCreate("files") && (
+          <div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <button
+              onClick={handleUploadClick}
+              disabled={isUploading}
+              className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isUploading ? "Uploading..." : "Upload File"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -114,23 +116,25 @@ export default function Files() {
                     </p>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <a 
-                      href={file.url || '#'} 
+                    <a
+                      href={file.url || '#'}
                       download={file.name}
-                      target="_blank" 
+                      target="_blank"
                       rel="noreferrer"
                       className="p-2 text-gray-400 hover:text-blue-600 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
                     >
                       <DownloadIcon className="w-4 h-4" />
                     </a>
-                    <button 
-                      onClick={() => handleDelete(file.id)}
-                      className="p-2 text-gray-400 hover:text-red-600 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                    {canDelete("files") && (
+                      <button
+                        onClick={() => handleDelete(file.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))

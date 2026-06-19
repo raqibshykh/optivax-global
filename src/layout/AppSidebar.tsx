@@ -12,7 +12,7 @@ import {
   FileIcon,
   FolderIcon,
   MailIcon,
-  EnvelopeIcon,
+  BellIcon,
   UserCircleIcon,
   BoltIcon,
   LockIcon,
@@ -35,7 +35,7 @@ const resolveIcon = (icon: MenuItem["icon"]): React.ReactNode => {
     case "folder":      return <FolderIcon />;
     case "mail":        return <MailIcon />;
     case "user-circle": return <UserCircleIcon />;
-    case "bell":        return <EnvelopeIcon />;
+    case "bell":        return <BellIcon />;
     case "settings":    return <BoltIcon />;
     case "shield":      return <LockIcon />;
     case "chart":       return <PieChartIcon />;
@@ -109,14 +109,20 @@ const AppSidebar: React.FC = () => {
       {/* Logo */}
       <div className={`py-8 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
         <Link to="/">
-          {showLabel ? (
-            <>
-              {logoUrl && <img className="dark:hidden" src={logoUrl} alt="Logo" width={150} height={40} />}
-              {logoUrl && <img className="hidden dark:block" src={logoUrl} alt="Logo" width={150} height={40} />}
-            </>
-          ) : (
-            logoUrl ? <img src={logoUrl} alt="Logo" width={32} height={32} /> : null
-          )}
+          <img    
+              width={200}
+              height={40}
+              className="dark:hidden"
+              src={`${import.meta.env.BASE_URL}images/logo/logo-icon-dark.png`}
+              alt="Logo"
+            />
+            <img
+              width={200}
+              height={40}
+              className="hidden dark:block"
+              src={`${import.meta.env.BASE_URL}images/logo/logo-icon-light.png`}
+              alt="Logo"
+            />
         </Link>
       </div>
 

@@ -20,9 +20,9 @@ const toProfile = (u: typeof mockUsers[number]): UserProfile => ({
   email: u.email,
   full_name: u.name,
   avatar_url: u.avatar || "",
-  company: (u as any).company || "",
+  company: u.company || "",
   role: u.role,
-  departmentId: (u as any).departmentId,
+  departmentId: u.departmentId,
   created_at: (u.joinDate as string) || new Date().toISOString(),
 });
 

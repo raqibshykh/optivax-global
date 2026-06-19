@@ -60,7 +60,7 @@ export default function InvoiceModal({ isOpen, onClose, invoice, onSave }: Invoi
     return items.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
   };
 
-  const handleItemChange = (index: number, field: keyof InvoiceItem, value: any) => {
+  const handleItemChange = (index: number, field: keyof InvoiceItem, value: string | number) => {
     setFormData((prev) => {
       const newItems = [...prev.items];
       newItems[index] = { ...newItems[index], [field]: value };
@@ -96,8 +96,8 @@ export default function InvoiceModal({ isOpen, onClose, invoice, onSave }: Invoi
       };
       await onSave(payload);
       onClose();
-    } catch (err: any) {
-      setError(err.message || "Failed to save invoice");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to save invoice");
     } finally {
       setIsSubmitting(false);
     }

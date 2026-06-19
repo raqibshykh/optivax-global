@@ -1,6 +1,7 @@
 import { useState } from "react";
 import PageMeta from "../../../components/common/PageMeta";
 import { useCampaigns, useTemplates } from "../../../hooks/useEmailMarketing";
+import type { EmailCampaign } from "../../../types";
 import { PlusIcon, EyeIcon, TrashBinIcon } from "../../../icons";
 import { useToast } from "../../../context/ToastContext";
 import Badge from "../../../components/ui/badge/Badge";
@@ -167,7 +168,7 @@ export default function Campaigns() {
                   <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Status</label>
                   <select
                     value={newCampaign.status}
-                    onChange={(e) => setNewCampaign({ ...newCampaign, status: e.target.value as any })}
+                    onChange={(e) => setNewCampaign({ ...newCampaign, status: e.target.value as EmailCampaign["status"] })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   >
                     <option value="draft">Draft</option>

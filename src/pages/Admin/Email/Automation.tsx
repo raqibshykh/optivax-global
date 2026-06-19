@@ -2,6 +2,7 @@ import { useState } from "react";
 import PageMeta from "../../../components/common/PageMeta";
 import { useAutomations, useTemplates } from "../../../hooks/useEmailMarketing";
 import { useToast } from "../../../context/ToastContext";
+import type { EmailAutomation } from "../../../types";
 import Badge from "../../../components/ui/badge/Badge";
 
 export default function Automation() {
@@ -16,7 +17,7 @@ export default function Automation() {
     delayHours: 0,
   });
 
-  const handleEdit = (auto: any) => {
+  const handleEdit = (auto: EmailAutomation) => {
     setEditingId(auto.id);
     setEditForm({
       templateId: auto.templateId,

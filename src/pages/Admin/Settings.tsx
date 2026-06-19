@@ -29,8 +29,8 @@ export default function Settings() {
         webhookSecret,
       });
       showToast("Stripe settings saved.", "success");
-    } catch (e: any) {
-      showToast(e?.message || "Failed to save Stripe settings.", "error");
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "Failed to save Stripe settings.", "error");
     }
   };
 
@@ -141,6 +141,19 @@ export default function Settings() {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Restricted to Super Admin</p>
             </div>
             <div className="p-6 space-y-4">
+              {/* SECURITY NOTICE — visible in dev/mock mode only */}
+              {import.meta.env.DEV && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-4 py-3">
+                  <span className="text-amber-600 dark:text-amber-400 text-lg leading-none">⚠</span>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Development mode — mock storage only</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                      In production, the Stripe <strong>secret key</strong> must <strong>never</strong> be sent to or stored by the browser.
+                      Remove this field and store it exclusively in your server-side environment variables (<code>STRIPE_SECRET_KEY</code>).
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center space-x-3">
                 <input type="checkbox" id="stripe-enabled" checked={stripeEnabled} onChange={(e) => setStripeEnabled(e.target.checked)} className="w-4 h-4 text-brand-600 border-gray-300 rounded" />
                 <label htmlFor="stripe-enabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Stripe Payment</label>
@@ -150,7 +163,12 @@ export default function Settings() {
                 <input type="text" value={publishableKey} onChange={(e) => setPublishableKey(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-800 dark:text-white" placeholder="pk_live_..." />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Stripe Secret Key</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Stripe Secret Key
+                  <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">
+                    Dev/mock only
+                  </span>
+                </label>
                 <div className="relative">
                   <input type={secretVisible ? "text" : "password"} value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full pr-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent dark:border-gray-600 dark:bg-gray-800 dark:text-white" placeholder="sk_live_..." />
                   <button type="button" className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700" onClick={() => setSecretVisible((v) => !v)}>

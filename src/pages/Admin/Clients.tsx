@@ -12,7 +12,7 @@ import { notifyClientCreated } from "../../services/notificationHelpers";
 export default function Clients() {
   const { clients, isLoading, addClient, updateClient, deleteClient } = useClients();
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { user, canCreate, canEdit, canDelete } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   
@@ -41,8 +41,8 @@ export default function Clients() {
     try {
       await deleteClient(id);
       showToast("Client deleted successfully", "success");
-    } catch (err: any) {
-      showToast(err.message, "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to delete client", "error");
     }
   };
 
@@ -52,7 +52,6 @@ export default function Clients() {
         await updateClient(editingClient.id, clientData);
         showToast("Client updated successfully", "success");
       } else {
-        // Create login profile first (mock server matches email → uses same id for client record)
         const newProfile = await UserService.create({
           full_name: clientData.name,
           email: clientData.email,
@@ -72,9 +71,9 @@ export default function Clients() {
         }
         showToast("Client created successfully", "success");
       }
-    } catch (err: any) {
-      showToast(err.message, "error");
-      throw err; // So the modal doesn't close on error
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to save client", "error");
+      throw err;
     }
   };
 
@@ -111,12 +110,14 @@ export default function Clients() {
             Manage client accounts and information.
           </p>
         </div>
-        <button 
-          onClick={handleAdd}
-          className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700"
-        >
-          Add New Client
-        </button>
+        {canCreate("clients") && (
+          <button
+            onClick={handleAdd}
+            className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700"
+          >
+            Add New Client
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -161,35 +162,39 @@ export default function Clients() {
                       <p className="text-xs text-gray-400 mt-1">Status: <span className={client.status === 'active' ? 'text-green-500' : 'text-gray-500'}>{client.status}</span></p>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleEdit(client)}
-                        className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded dark:hover:bg-blue-900/20"
-                      >
-                        Edit
-                      </button>
-                      {confirmDeleteId === client.id ? (
-                        <>
-                          <span className="text-xs text-gray-600 dark:text-gray-400">Sure?</span>
+                      {canEdit("clients") && (
+                        <button
+                          onClick={() => handleEdit(client)}
+                          className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded dark:hover:bg-blue-900/20"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {canDelete("clients") && (
+                        confirmDeleteId === client.id ? (
+                          <>
+                            <span className="text-xs text-gray-600 dark:text-gray-400">Sure?</span>
+                            <button
+                              onClick={() => handleDelete(client.id)}
+                              className="px-3 py-1 text-sm text-white bg-red-600 hover:bg-red-700 rounded"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded dark:text-gray-300 dark:hover:bg-gray-800"
+                            >
+                              No
+                            </button>
+                          </>
+                        ) : (
                           <button
                             onClick={() => handleDelete(client.id)}
-                            className="px-3 py-1 text-sm text-white bg-red-600 hover:bg-red-700 rounded"
+                            className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/20"
                           >
-                            Yes
+                            Delete
                           </button>
-                          <button
-                            onClick={() => setConfirmDeleteId(null)}
-                            className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded dark:text-gray-300 dark:hover:bg-gray-800"
-                          >
-                            No
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => handleDelete(client.id)}
-                          className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/20"
-                        >
-                          Delete
-                        </button>
+                        )
                       )}
                     </div>
                   </div>

@@ -2,12 +2,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/client';
 
-/**
- * Hook that loads the current authenticated user's role.
- * It calls the `/saas/v1/auth/me` endpoint and reads the current
- * authenticated user's role from the returned user payload.
- * Returns `{ role, loading, error }`.
- */
 export const useUserRole = () => {
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -34,8 +28,8 @@ export const useUserRole = () => {
           null;
 
         setRole(fetchedRole);
-      } catch (e: any) {
-        setError(e?.message ?? 'Failed to load role');
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to load role');
       } finally {
         setLoading(false);
       }

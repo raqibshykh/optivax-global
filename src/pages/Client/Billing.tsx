@@ -18,6 +18,16 @@ interface PaymentRecord {
   transactionId: string;
 }
 
+interface RawPayment {
+  id: string;
+  invoiceId: string;
+  amount: number | string;
+  method: string;
+  date?: string;
+  created_at?: string;
+  transactionId?: string;
+}
+
 export default function Billing() {
   const { invoices, isLoading: isLoadingInvoices, markAsPaid } = useInvoices();
   const { showToast } = useToast();
@@ -46,28 +56,28 @@ export default function Billing() {
   const fetchPayments = useCallback(async () => {
     try {
       setIsLoadingPayments(true);
-      const allData = await api.get<any[]>("/saas/v1/payments/list");
+      const allData = await api.get<RawPayment[]>("/saas/v1/payments/list");
       const myInvoiceIds = new Set(invoices.map((i) => i.id));
-      const data = (allData || []).filter((p: any) => myInvoiceIds.has(p.invoiceId));
+      const data = (allData || []).filter((p) => myInvoiceIds.has(p.invoiceId));
 
-      const formatted: PaymentRecord[] = data.map((p: any) => {
+      const formatted: PaymentRecord[] = data.map((p) => {
         const inv = invoices.find((i) => i.id === p.invoiceId);
         return {
           id: p.id,
           invoiceNumber: inv ? inv.number : "N/A",
           amount: Number(p.amount),
-          date: new Date(p.date || p.created_at).toLocaleDateString("en-US", {
+          date: new Date(p.date ?? p.created_at ?? "").toLocaleDateString("en-US", {
             year: "numeric",
             month: "short",
             day: "numeric",
           }),
           method: p.method === "credit-card" ? "Credit Card" : p.method === "bank-transfer" ? "Bank Transfer" : "Other",
-          transactionId: p.transactionId,
+          transactionId: p.transactionId ?? "",
         };
       });
       setPaymentHistory(formatted);
-    } catch (err: any) {
-      console.error("Error fetching payments:", err);
+    } catch {
+      // payment history is non-critical — silently fail
     } finally {
       setIsLoadingPayments(false);
     }
@@ -115,8 +125,8 @@ export default function Billing() {
       setIsModalOpen(false);
       setSelectedInvoice(null);
       setPaymentAmount("");
-    } catch (err: any) {
-      showToast(err.message || "Failed to record payment", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to record payment", "error");
     } finally {
       setIsProcessing(false);
       setProcessingStep("");
@@ -381,6 +391,19 @@ export default function Billing() {
   );
 }
 
+interface StripeCheckoutFormProps {
+  selectedInvoice: Invoice | null;
+  paymentAmount: string;
+  isProcessing: boolean;
+  setIsProcessing: (v: boolean) => void;
+  processingStep: string;
+  setProcessingStep: (v: string) => void;
+  onSuccess: (txId: string) => void;
+  onCancel: () => void;
+  cardName: string;
+  setCardName: (v: string) => void;
+}
+
 const StripeCheckoutForm = ({
   selectedInvoice,
   paymentAmount,
@@ -392,7 +415,7 @@ const StripeCheckoutForm = ({
   onCancel,
   cardName,
   setCardName
-}: any) => {
+}: StripeCheckoutFormProps) => {
   const stripe = useStripe();
   const elements = useElements();
   const { showToast } = useToast();
@@ -434,8 +457,8 @@ const StripeCheckoutForm = ({
       
       // 3. Callback success
       onSuccess(paymentResult.paymentIntent.id);
-    } catch (err: any) {
-      showToast(err.message || "Payment failed", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Payment failed", "error");
       setIsProcessing(false);
       setProcessingStep("");
     }

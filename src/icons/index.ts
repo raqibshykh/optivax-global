@@ -11,6 +11,7 @@ import { ReactComponent as ArrowDownIcon } from "./arrow-down.svg?react";
 import { ReactComponent as ArrowRightIcon } from "./arrow-right.svg?react";
 import { ReactComponent as ArrowUpIcon } from "./arrow-up.svg?react";
 import { ReactComponent as AudioIcon } from "./audio.svg?react";
+import { ReactComponent as BellIcon } from "./bell.svg?react";
 import { ReactComponent as BoltIcon } from "./bolt.svg?react";
 import { ReactComponent as BoxCubeIcon } from "./box-cube.svg?react";
 import { ReactComponent as BoxIconLine } from "./box-line.svg?react";
@@ -70,6 +71,7 @@ export {
   ArrowRightIcon,
   ArrowUpIcon,
   AudioIcon,
+  BellIcon,
   BoltIcon,
   BoxCubeIcon,
   BoxIconLine,

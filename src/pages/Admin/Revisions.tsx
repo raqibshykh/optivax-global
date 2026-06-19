@@ -44,8 +44,8 @@ export default function AdminRevisions() {
       ]);
       setRevisions(revData || []);
       setProjects(projData || []);
-    } catch (err: any) {
-      showToast(err.message || "Failed to load revisions.", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to load revisions.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -73,8 +73,8 @@ export default function AdminRevisions() {
         prev.map((r) => (r.id === revisionId ? { ...r, status: newStatus } : r))
       );
       showToast("Revision status updated.", "success");
-    } catch (err: any) {
-      showToast(err.message || "Failed to update status.", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to update status.", "error");
     } finally {
       setUpdatingId(null);
     }

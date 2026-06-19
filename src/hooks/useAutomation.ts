@@ -6,10 +6,9 @@ export interface AutomationWorkflow {
   trigger_event: string;
   enabled: boolean;
   callback_class: string;
-  config?: any;
+  config?: Record<string, string | number | boolean>;
 }
 
-/** Hook to fetch, enable/disable, and create automation workflows */
 export const useAutomation = () => {
   const fetchWorkflows = async () => {
     const resp = await api.get<{ workflows: AutomationWorkflow[] }>('/saas/v1/automation/workflows');

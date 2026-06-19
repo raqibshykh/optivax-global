@@ -22,13 +22,21 @@ interface ChatMessage {
   toClientId?: string;
   toClientName?: string;
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const normChatMsg = (m: any): ChatMessage => ({
-  ...m,
-  toId: m.toId ?? m.toClientId ?? "",
-  toName: m.toName ?? m.toClientName ?? "",
-  fromRole: m.fromRole ?? "production_member",
-});
+const normChatMsg = (m: Record<string, unknown>): ChatMessage => {
+  const r = m as Partial<ChatMessage> & { toClientId?: string; toClientName?: string };
+  return {
+    id: r.id ?? "",
+    fromId: r.fromId ?? "",
+    fromName: r.fromName ?? "",
+    fromRole: r.fromRole ?? "production_member",
+    toId: r.toId ?? r.toClientId ?? "",
+    toName: r.toName ?? r.toClientName ?? "",
+    message: r.message ?? "",
+    sentAt: r.sentAt ?? "",
+    toClientId: r.toClientId,
+    toClientName: r.toClientName,
+  };
+};
 
 export interface LeaveRequest {
   id: string;
@@ -221,8 +229,8 @@ export default function Profile() {
         city: profile.city,
       });
       showToast("Profile updated successfully", "success");
-    } catch (err: any) {
-      showToast(err.message || "Failed to update profile", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to update profile", "error");
     } finally {
       setIsSaving(false);
     }

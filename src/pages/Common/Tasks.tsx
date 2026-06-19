@@ -77,10 +77,10 @@ export default function Tasks() {
   const navigate = useNavigate();
   const location = useLocation();
   const viewerRole = user?.role || null;
-  const isMember = viewerRole?.endsWith("_member");
-  const isHRAdmin = viewerRole === "hr_admin" || viewerRole?.startsWith("hr");
-  const isManager = viewerRole === "management";
-  const isSuper = viewerRole === "super_admin";
+  const isMember    = viewerRole?.endsWith("_member");
+  const isHRAdmin   = viewerRole === "hr_admin";   // HR admin = view own tasks only (cannot assign)
+  const isManager   = viewerRole === "management";
+  const isSuper     = viewerRole === "super_admin";
   const isDeptAdmin = viewerRole?.endsWith("_admin") && !isHRAdmin && !isSuper && !isManager;
   const viewerDept = viewerRole ? viewerRole.replace("_admin", "").replace("_member", "") : null;
   // HR admin cannot assign tasks — only super, manager, and dept admins (non-HR) can

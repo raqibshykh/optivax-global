@@ -2,11 +2,10 @@ import { api } from '../lib/client';
 import { useAuth } from '../context/AuthContext';
 import type { Lead } from '../types';
 
-/** Hook providing CRUD operations for leads */
 export const useLeads = () => {
   const { user } = useAuth();
 
-  const fetchLeads = async (params?: Record<string, any>) => {
+  const fetchLeads = async (params?: Record<string, string | number | boolean>) => {
     const finalParams = { ...(params || {}) };
     if (user?.role?.endsWith("_member") && !finalParams.assignedTo) {
       finalParams.assignedTo = user.id;

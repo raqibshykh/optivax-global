@@ -14,7 +14,7 @@ export function useCampaigns() {
       const data = await EmailService.getCampaigns();
       setCampaigns(data);
     } catch (error) {
-      console.error(error);
+      void error;
       showToast("Failed to fetch campaigns", "error");
     } finally {
       setIsLoading(false);
@@ -57,7 +57,7 @@ export function useTemplates() {
       const data = await EmailService.getTemplates();
       setTemplates(data);
     } catch (error) {
-      console.error(error);
+      void error;
       showToast("Failed to fetch templates", "error");
     } finally {
       setIsLoading(false);
@@ -100,7 +100,7 @@ export function useAutomations() {
       const data = await EmailService.getAutomations();
       setAutomations(data);
     } catch (error) {
-      console.error(error);
+      void error;
       showToast("Failed to fetch automations", "error");
     } finally {
       setIsLoading(false);

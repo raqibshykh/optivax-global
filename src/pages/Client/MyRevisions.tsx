@@ -34,8 +34,8 @@ export default function MyRevisions() {
     try {
       const data = await api.get<Revision[]>(`/saas/v1/revisions/list?clientId=${encodeURIComponent(user.id)}`);
       setRevisions(data || []);
-    } catch (err: any) {
-      showToast(err.message || "Failed to load revision requests.", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to load revision requests.", "error");
     } finally {
       setIsLoading(false);
     }

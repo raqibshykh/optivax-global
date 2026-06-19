@@ -89,6 +89,10 @@ export default function SalesTasks() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      showToast("You must be logged in to perform this action", "error");
+      return;
+    }
     const all = getSalesTasks();
     if (editing) {
       saveSalesTasks(all.map(t => t.id === editing.id ? { ...t, ...form } : t));
@@ -98,7 +102,7 @@ export default function SalesTasks() {
         id: `stk${Date.now()}`,
         ...form,
         createdAt: new Date().toISOString(),
-        createdBy: user?.id || "u8",
+        createdBy: user.id,
       };
       saveSalesTasks([next, ...all]);
       showToast("Task created and assigned", "success");

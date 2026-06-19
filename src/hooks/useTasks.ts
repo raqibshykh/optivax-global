@@ -1,40 +1,33 @@
 import { api } from '../lib/client';
+import type { Task } from '../types';
 
-export interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  status: 'pending' | 'in_progress' | 'review' | 'completed';
-  assigneeId?: string;
-  dueDate?: string;
-}
+export type { Task };
 
-/**
- * Hook providing CRUD operations for tasks.
- * Returns helper functions; components can call them directly.
- */
 export const useTasks = () => {
-  const fetchTasks = async (params?: Record<string, any>) => {
-    const response = await api.get<{ tasks: Task[] }>('/saas/v1/tasks', { params });
-    return response.tasks;
+  const fetchTasks = async (params?: Record<string, string | number | boolean>): Promise<Task[]> => {
+    return api.get<Task[]>('/saas/v1/tasks', { params });
   };
 
-  const getTask = async (id: string) => {
-    const response = await api.get<{ task: Task }>(`/saas/v1/tasks/${id}`);
-    return response.task;
+  const getTask = async (id: string): Promise<Task | null> => {
+    const tasks = await api.get<Task[]>(`/saas/v1/tasks?id=${encodeURIComponent(id)}`);
+    return tasks?.[0] ?? null;
   };
 
-  const createTask = async (data: Partial<Task>) => {
-    const response = await api.post<{ task: Task }>('/saas/v1/tasks', data);
-    return response.task;
+  const createTask = async (data: Omit<Task, 'id' | 'createdAt'>): Promise<Task> => {
+    return api.post<Task>('/saas/v1/tasks', {
+      ...data,
+      createdAt: new Date().toISOString(),
+    });
   };
 
-  const updateTask = async (id: string, data: Partial<Task>) => {
-    const response = await api.put<{ task: Task }>(`/saas/v1/tasks/${id}`, data);
-    return response.task;
+  const updateTask = async (id: string, data: Partial<Omit<Task, 'id' | 'createdAt'>>): Promise<Task> => {
+    return api.put<Task>(`/saas/v1/tasks/${id}`, {
+      ...data,
+      updatedAt: new Date().toISOString(),
+    });
   };
 
-  const deleteTask = async (id: string) => {
+  const deleteTask = async (id: string): Promise<boolean> => {
     await api.delete(`/saas/v1/tasks/${id}`);
     return true;
   };

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Project } from "../types";
 import { ProjectService } from "../services/projectService";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../lib/client"; // 👈 API client import kiya
+import { api } from "../lib/client";
 
 export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -17,7 +17,6 @@ export function useProjects() {
       let data: Project[] = [];
       if (user?.role === "client") {
         if (user.email) {
-          // 👈 Client table se sahi clientId lookup karne ke liye email query chalayi
           const clients = await api.get<{ id: string }[]>(
             `/saas/v1/clients/list?email=${encodeURIComponent(user.email)}`
           );
@@ -31,7 +30,6 @@ export function useProjects() {
           data = await ProjectService.getByClientId(user.id);
         }
       } else {
-        // RLS for members
         if (user?.role.endsWith("_member")) {
           data = await ProjectService.getAll(user.id);
         } else {
@@ -39,8 +37,8 @@ export function useProjects() {
         }
       }
       setProjects(data);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch projects");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch projects");
     } finally {
       setIsLoading(false);
     }
@@ -55,8 +53,8 @@ export function useProjects() {
       const newProject = await ProjectService.create(projectData);
       setProjects((prev) => [...prev, newProject]);
       return newProject;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to add project");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to add project");
     }
   };
 
@@ -67,8 +65,8 @@ export function useProjects() {
         prev.map((p) => (p.id === id ? updatedProject : p))
       );
       return updatedProject;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to update project");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to update project");
     }
   };
 
@@ -76,8 +74,8 @@ export function useProjects() {
     try {
       await ProjectService.delete(id);
       setProjects((prev) => prev.filter((p) => p.id !== id));
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to delete project");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to delete project");
     }
   };
 
@@ -88,8 +86,8 @@ export function useProjects() {
         prev.map((p) => (p.id === id ? updatedProject : p))
       );
       return updatedProject;
-    } catch (err: any) {
-      throw new Error(err.message || "Failed to update status");
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : "Failed to update status");
     }
   };
 

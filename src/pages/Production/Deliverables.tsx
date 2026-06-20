@@ -10,6 +10,7 @@ import {
 
 export const DELIVERABLES_KEY = "optivax_deliverables";
 export const CLIENTS_KEY = "optivax_clients";
+const PROJECTS_KEY = "mock_projects";
 
 const STATUS_ORDER: DeliverableStatus[] = ["Pending", "In Progress", "Review", "Approved", "Delivered"];
 
@@ -35,11 +36,19 @@ const writeDeliverables = (items: Deliverable[]) => {
 const readClients = (): StoredClient[] =>
   safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []);
 
+interface SimpleProject {
+  id: string;
+  name: string;
+  clientId: string;
+  status?: string;
+}
+
 interface DeliverableFormData {
   title: string;
   description: string;
   clientId: string;
   clientName: string;
+  projectId: string;
   projectName: string;
   dueDate: string;
   notes: string;
@@ -47,13 +56,14 @@ interface DeliverableFormData {
 
 const emptyForm: DeliverableFormData = {
   title: "", description: "", clientId: "", clientName: "",
-  projectName: "", dueDate: "", notes: "",
+  projectId: "", projectName: "", dueDate: "", notes: "",
 };
 
 export default function Deliverables() {
   const { user, checkPermission } = useAuth();
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [clients, setClients] = useState<StoredClient[]>([]);
+  const [allProjects, setAllProjects] = useState<SimpleProject[]>([]);
   const [filter, setFilter] = useState<DeliverableStatus | "">("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<DeliverableFormData>(emptyForm);
@@ -68,6 +78,8 @@ export default function Deliverables() {
   useEffect(() => {
     setDeliverables(readDeliverables());
     setClients(readClients());
+    const rawProjects = safeParse<SimpleProject[]>(localStorage.getItem(PROJECTS_KEY) ?? "[]", []);
+    setAllProjects(rawProjects);
   }, []);
 
   const visibleDeliverables = deliverables.filter((d) => {
@@ -84,6 +96,7 @@ export default function Deliverables() {
       id: `del-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       clientId: form.clientId,
       clientName: form.clientName,
+      projectId: form.projectId || undefined,
       projectName: form.projectName || undefined,
       title: form.title,
       description: form.description,
@@ -200,7 +213,7 @@ export default function Deliverables() {
             const statusIdx = STATUS_ORDER.indexOf(d.status);
             const canAdvance = isAdmin && statusIdx < STATUS_ORDER.length - 1;
             const canRevert = isAdmin && statusIdx > 0;
-            const memberCanAdvance = isMember && d.uploadedBy === user?.id && d.status === "Pending";
+            const memberCanAdvance = isMember && d.uploadedBy === user?.id && (d.status === "Pending" || d.status === "In Progress");
 
             return (
               <div key={d.id} className="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-5 shadow-sm">
@@ -289,7 +302,7 @@ export default function Deliverables() {
                   value={form.clientId}
                   onChange={(e) => {
                     const c = clients.find((c) => c.id === e.target.value);
-                    setForm({ ...form, clientId: e.target.value, clientName: c ? `${c.contactName} (${c.companyName})` : "" });
+                    setForm({ ...form, clientId: e.target.value, clientName: c ? `${c.contactName} (${c.companyName})` : "", projectId: "", projectName: "" });
                   }}
                   className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
@@ -305,12 +318,29 @@ export default function Deliverables() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project (optional)</label>
-                  <input
-                    value={form.projectName}
-                    onChange={(e) => setForm({ ...form, projectName: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    placeholder="Project name"
-                  />
+                  {(() => {
+                    const clientProjects = allProjects.filter((p) => p.clientId === form.clientId);
+                    if (!form.clientId) {
+                      return <p className="text-xs text-gray-400 italic py-2">Select a client first to see their projects.</p>;
+                    }
+                    return clientProjects.length === 0 ? (
+                      <p className="text-xs text-amber-600 py-2">No projects found for this client.</p>
+                    ) : (
+                      <select
+                        value={form.projectId}
+                        onChange={(e) => {
+                          const p = clientProjects.find((p) => p.id === e.target.value);
+                          setForm({ ...form, projectId: e.target.value, projectName: p?.name ?? "" });
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      >
+                        <option value="">No project</option>
+                        {clientProjects.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date *</label>

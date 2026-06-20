@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { getCampaigns, saveCampaigns, SALES_MEMBERS } from "../../mock/salesData";
 import { CampaignBudget } from "../../types";
+import { canManageBudget } from "../../utils/rbac";
 
 const STATUS_COLORS: Record<string, string> = {
   active:    "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
@@ -25,10 +26,11 @@ const EMPTY_FORM = {
 };
 
 export default function CampaignBudgets() {
-  const { user, canCreate, canEdit, canDelete, checkPermission } = useAuth();
+  const { user, canCreate, canEdit, canDelete } = useAuth();
   const { showToast } = useToast();
 
-  const isAdmin = checkPermission("sales", "APPROVE") || user?.role === "management";
+  // Only super_admin, management, and sales_admin can manage budgets
+  const isAdmin = canManageBudget(user ?? null);
 
   const [campaigns, setCampaigns] = useState<CampaignBudget[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);

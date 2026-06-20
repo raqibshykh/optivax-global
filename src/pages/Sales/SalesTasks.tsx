@@ -93,18 +93,80 @@ export default function SalesTasks() {
       showToast("You must be logged in to perform this action", "error");
       return;
     }
+
+    const writeNotification = (toUserId: string, title: string, message: string) => {
+      try {
+        const raw = localStorage.getItem("mock_notifications");
+        const existing = raw ? (JSON.parse(raw) as object[]) : [];
+        existing.push({
+          id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          userId: toUserId,
+          title,
+          message,
+          type: "info",
+          read: false,
+          createdAt: new Date().toISOString(),
+        });
+        localStorage.setItem("mock_notifications", JSON.stringify(existing));
+      } catch {}
+    };
+
+    const writeRevision = (taskId: string, taskTitle: string, oldAssigneeName: string, newAssigneeName: string) => {
+      try {
+        const raw = localStorage.getItem("mock_revisions");
+        const existing = raw ? (JSON.parse(raw) as object[]) : [];
+        existing.push({
+          id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          entityType: "sales_task",
+          entityId: taskId,
+          action: "reassigned",
+          field: "assignedTo",
+          oldValue: oldAssigneeName,
+          newValue: newAssigneeName,
+          changedBy: user.id,
+          changedByName: user.name || user.email,
+          note: `Sales task "${taskTitle}" reassigned from ${oldAssigneeName} to ${newAssigneeName}`,
+          createdAt: new Date().toISOString(),
+        });
+        localStorage.setItem("mock_revisions", JSON.stringify(existing));
+      } catch {}
+    };
+
     const all = getSalesTasks();
     if (editing) {
+      const isReassignment = editing.assignedTo !== form.assignedTo;
       saveSalesTasks(all.map(t => t.id === editing.id ? { ...t, ...form } : t));
-      showToast("Task updated", "success");
+
+      if (isReassignment) {
+        writeNotification(
+          editing.assignedTo,
+          "Task Reassigned",
+          `You have been unassigned from: "${form.title}". It has been reassigned to ${form.assignedName}.`
+        );
+        writeNotification(
+          form.assignedTo,
+          "New Task Assigned",
+          `You have been assigned to sales task: "${form.title}".`
+        );
+        writeRevision(editing.id, form.title, editing.assignedName, form.assignedName);
+        showToast(`Task reassigned to ${form.assignedName}. Both parties notified.`, "success");
+      } else {
+        showToast("Task updated", "success");
+      }
     } else {
+      const taskId = `stk${Date.now()}`;
       const next: SalesTask = {
-        id: `stk${Date.now()}`,
+        id: taskId,
         ...form,
         createdAt: new Date().toISOString(),
         createdBy: user.id,
       };
       saveSalesTasks([next, ...all]);
+      writeNotification(
+        form.assignedTo,
+        "New Task Assigned",
+        `You have been assigned to sales task: "${form.title}".`
+      );
       showToast("Task created and assigned", "success");
     }
     setIsModalOpen(false);
@@ -304,7 +366,14 @@ export default function SalesTasks() {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white resize-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assign To *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Assign To *
+                  {editing && editing.assignedTo !== form.assignedTo && (
+                    <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                      Reassignment — both parties will be notified
+                    </span>
+                  )}
+                </label>
                 <select required value={form.assignedTo}
                   onChange={e => handleAssigneeChange(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white">

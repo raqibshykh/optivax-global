@@ -1,47 +1,32 @@
 import { api } from "../lib/client";
 
-export interface Payment {
+export interface StripePaymentRecord {
   id: string;
   invoiceId: string;
   amount: number;
+  currency: string;
   date: string;
-  created_at: string;
+  paidAt: string;
+  paidByUserId?: string;
   method: string;
   transactionId: string;
-  notes?: string;
-}
-
-export interface CreatePaymentPayload {
-  invoiceId: string;
-  amount: number;
-  method: string;
-  notes?: string;
-  transactionId?: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
+  created_at: string;
 }
 
 const BASE = "/saas/v1/payments";
 
 export class PaymentService {
-  static async getAll(): Promise<Payment[]> {
-    const data = await api.get<Payment[]>(`${BASE}/list`);
-    return data || [];
+  static async getAll(): Promise<StripePaymentRecord[]> {
+    const data = await api.get<StripePaymentRecord[]>(`${BASE}/list`);
+    return (data || []).filter((p) => p.stripePaymentIntentId);
   }
 
-  static async getByInvoiceId(invoiceId: string): Promise<Payment[]> {
-    const data = await api.get<Payment[]>(
+  static async getByInvoiceId(invoiceId: string): Promise<StripePaymentRecord[]> {
+    const data = await api.get<StripePaymentRecord[]>(
       `${BASE}/list?invoiceId=${encodeURIComponent(invoiceId)}`
     );
-    return data || [];
-  }
-
-  /**
-   * Creates a payment. The backend will:
-   * 1. Insert the payment record.
-   * 2. Sum all payments for the invoice → update paid_amount & remaining_balance.
-   * 3. Set invoice status to 'paid' or 'partial'.
-   * 4. Update the associated project's spent amount.
-   */
-  static async create(payload: CreatePaymentPayload): Promise<Payment> {
-    return api.post<Payment>(`${BASE}/create`, payload);
+    return (data || []).filter((p) => p.stripePaymentIntentId);
   }
 }

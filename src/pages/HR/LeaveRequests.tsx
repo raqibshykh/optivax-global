@@ -14,6 +14,7 @@ interface LeaveRequest {
   userId: string;
   userName: string;
   userRole: string;
+  departmentId?: string;
   type: LeaveType;
   startDate: string;
   endDate: string;
@@ -24,6 +25,21 @@ interface LeaveRequest {
   reviewNote?: string;
   createdAt: string;
 }
+
+const SEED_REQUESTS: LeaveRequest[] = [
+  { id: "lv-seed-1",  userId: "u13", userName: "Liam Park",       userRole: "production_member", departmentId: "dept-production", type: "annual",  startDate: "2026-06-02", endDate: "2026-06-04", days: 3,  reason: "Family vacation",        status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-05-28T09:00:00Z" },
+  { id: "lv-seed-2",  userId: "u24", userName: "Edgar Wright",     userRole: "production_member", departmentId: "dept-production", type: "sick",    startDate: "2026-06-09", endDate: "2026-06-10", days: 2,  reason: "Fever and rest",         status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-06-09T08:00:00Z" },
+  { id: "lv-seed-3",  userId: "u14", userName: "Noah Davis",       userRole: "marketing_member",  departmentId: "dept-marketing",  type: "casual",  startDate: "2026-06-12", endDate: "2026-06-12", days: 1,  reason: "Personal errand",        status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-06-11T10:00:00Z" },
+  { id: "lv-seed-4",  userId: "u20", userName: "Alice Martins",    userRole: "marketing_member",  departmentId: "dept-marketing",  type: "annual",  startDate: "2026-06-19", endDate: "2026-06-21", days: 3,  reason: "Holiday travel",         status: "pending",  createdAt: "2026-06-15T11:00:00Z" },
+  { id: "lv-seed-5",  userId: "u21", userName: "Ben Thompson",     userRole: "marketing_member",  departmentId: "dept-marketing",  type: "sick",    startDate: "2026-06-16", endDate: "2026-06-17", days: 2,  reason: "Doctor visit",           status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-06-16T07:30:00Z" },
+  { id: "lv-seed-6",  userId: "u12", userName: "Emma Wilson",      userRole: "sales_member",      departmentId: "dept-sales",      type: "annual",  startDate: "2026-06-23", endDate: "2026-06-27", days: 5,  reason: "Annual summer leave",    status: "pending",  createdAt: "2026-06-14T09:00:00Z" },
+  { id: "lv-seed-7",  userId: "u22", userName: "Chris Nolan",      userRole: "sales_member",      departmentId: "dept-sales",      type: "casual",  startDate: "2026-06-18", endDate: "2026-06-18", days: 1,  reason: "Personal appointment",   status: "rejected", reviewedBy: "Ava Johnson", reviewNote: "Team availability conflict", createdAt: "2026-06-13T14:00:00Z" },
+  { id: "lv-seed-8",  userId: "u23", userName: "Diana Prince",     userRole: "sales_member",      departmentId: "dept-sales",      type: "sick",    startDate: "2026-06-10", endDate: "2026-06-11", days: 2,  reason: "Medical issue",          status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-06-10T08:00:00Z" },
+  { id: "lv-seed-9",  userId: "u15", userName: "Ethan Lee",        userRole: "hr_member",         departmentId: "dept-hr",         type: "annual",  startDate: "2026-06-25", endDate: "2026-06-26", days: 2,  reason: "Short vacation",         status: "pending",  createdAt: "2026-06-17T09:00:00Z" },
+  { id: "lv-seed-10", userId: "u25", userName: "Fiona Gallagher",  userRole: "hr_member",         departmentId: "dept-hr",         type: "maternity", startDate: "2026-07-01", endDate: "2026-09-28", days: 90, reason: "Maternity leave",        status: "approved", reviewedBy: "Super Admin",  createdAt: "2026-06-10T10:00:00Z" },
+  { id: "lv-seed-11", userId: "u9",  userName: "David Chen",       userRole: "production_admin",  departmentId: "dept-production", type: "annual",  startDate: "2026-07-07", endDate: "2026-07-09", days: 3,  reason: "Family time",            status: "pending",  createdAt: "2026-06-18T08:00:00Z" },
+  { id: "lv-seed-12", userId: "u10", userName: "Olivia Brown",     userRole: "marketing_admin",   departmentId: "dept-marketing",  type: "casual",  startDate: "2026-06-20", endDate: "2026-06-20", days: 1,  reason: "Medical checkup",        status: "pending",  createdAt: "2026-06-19T07:00:00Z" },
+];
 
 // ── Leave policy ──────────────────────────────────────────────────────────────
 const LEAVE_LIMITS: Record<LeaveType, number> = {
@@ -53,7 +69,28 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 function loadLeaves(): LeaveRequest[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]"); } catch { return []; }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_REQUESTS));
+      return SEED_REQUESTS;
+    }
+    const parsed = JSON.parse(raw) as LeaveRequest[];
+    // If only has user's own entries (no seeds), merge seeds in
+    if (parsed.length === 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_REQUESTS));
+      return SEED_REQUESTS;
+    }
+    // Ensure seed records exist (idempotent)
+    const ids = new Set(parsed.map((r) => r.id));
+    const missing = SEED_REQUESTS.filter((r) => !ids.has(r.id));
+    if (missing.length > 0) {
+      const merged = [...parsed, ...missing];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      return merged;
+    }
+    return parsed;
+  } catch { return SEED_REQUESTS; }
 }
 function saveLeaves(data: LeaveRequest[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -73,6 +110,10 @@ export default function LeaveRequests() {
   const canViewAll        = canView("hr");    // hr_admin, management, super_admin
   const canApproveLeave   = canApprove("hr"); // hr_admin, super_admin only
   const isStaffMember     = user?.role !== "client" && user?.role !== "super_admin";
+  // Dept admins (non-HR) can see their own department's requests
+  const isDeptAdmin       = user?.role?.endsWith("_admin") && !canViewAll;
+  const viewerDeptId      = user ? ((user as any).departmentId as string | undefined) : undefined;
+  const viewerDeptPrefix  = user?.role ? user.role.replace("_admin", "").replace("_member", "") : null;
 
   const [leaves, setLeaves]           = useState<LeaveRequest[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -84,7 +125,16 @@ export default function LeaveRequests() {
 
   useEffect(() => { setLeaves(loadLeaves()); }, []);
 
-  const myLeaves = canViewAll ? leaves : leaves.filter((l) => l.userId === user?.id);
+  const myLeaves = canViewAll
+    ? leaves
+    : isDeptAdmin
+      ? leaves.filter((l) => {
+          // Show own requests + all requests from their department
+          if (l.userId === user?.id) return true;
+          if (l.departmentId) return l.departmentId === viewerDeptId || l.userRole.startsWith(viewerDeptPrefix ?? "___");
+          return l.userRole.startsWith(viewerDeptPrefix ?? "___");
+        })
+      : leaves.filter((l) => l.userId === user?.id);
   const filtered = myLeaves.filter((l) => {
     const matchStatus = filterStatus === "all" || l.status === filterStatus;
     const matchType   = filterType   === "all" || l.type   === filterType;
@@ -116,8 +166,14 @@ export default function LeaveRequests() {
     }
     const req: LeaveRequest = {
       id: `lv-${Date.now()}`,
-      userId: user.id, userName: user.name, userRole: user.role,
-      ...form, days, status: "pending", createdAt: new Date().toISOString(),
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      departmentId: (user as any).departmentId as string | undefined,
+      ...form,
+      days,
+      status: "pending",
+      createdAt: new Date().toISOString(),
     };
     const updated = [req, ...leaves];
     saveLeaves(updated);

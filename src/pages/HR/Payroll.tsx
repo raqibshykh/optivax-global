@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "../../context/ToastContext";
 import { safeParse } from "../../lib/storage";
 import { useAuth } from "../../context/AuthContext";
+import { AuditLogService } from "../../services/auditLogService";
 
 const EXTRA_KEY        = "optivax_employee_extra";
 const LEAVE_FREE_DAYS  = 10; // first 10 leaves/year are fully paid
@@ -35,6 +36,21 @@ const EMPTY_EDIT: Omit<EmployeeExtraData, "userId"> = {
   salaryStatus: "Unpaid", workMode: "Onsite",
 };
 
+const LEAVE_KEY = "optivax_leave_requests";
+
+interface LeaveRecord { employeeId?: string; status: string; days?: number; }
+
+function countApprovedLeaves(employeeId: string): number {
+  try {
+    const raw = localStorage.getItem(LEAVE_KEY);
+    if (!raw) return 0;
+    const leaves = JSON.parse(raw) as LeaveRecord[];
+    return leaves
+      .filter(l => l.employeeId === employeeId && l.status === "Approved")
+      .reduce((sum, l) => sum + (l.days ?? 1), 0);
+  } catch { return 0; }
+}
+
 export default function Payroll() {
   const [employees, setEmployees]   = useState<UserProfile[]>([]);
   const [extraData, setExtraData]   = useState<Record<string, EmployeeExtraData>>({});
@@ -44,7 +60,7 @@ export default function Payroll() {
   const [editingId, setEditingId]   = useState<string | null>(null);
   const [editFields, setEditFields] = useState<Omit<EmployeeExtraData, "userId">>({ ...EMPTY_EDIT });
   const { showToast }               = useToast();
-  const { canEdit, canExport }      = useAuth();
+  const { user, canEdit, canExport } = useAuth();
 
   useEffect(() => {
     (async () => {
@@ -56,11 +72,22 @@ export default function Payroll() {
 
         const stored = localStorage.getItem(EXTRA_KEY);
         if (stored) {
-          setExtraData(safeParse<Record<string, EmployeeExtraData>>(stored, {}));
+          const parsed = safeParse<Record<string, EmployeeExtraData>>(stored, {});
+          // Auto-sync leavesTaken from approved leave requests for any employee without a manual override
+          const synced = { ...parsed };
+          staff.forEach((emp) => {
+            if (!synced[emp.id]) {
+              const autoLeaves = countApprovedLeaves(emp.id);
+              synced[emp.id] = { userId: emp.id, leavesTaken: autoLeaves, salary: 45000, bonus: 0, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
+            }
+          });
+          localStorage.setItem(EXTRA_KEY, JSON.stringify(synced));
+          setExtraData(synced);
         } else {
           const defaults: Record<string, EmployeeExtraData> = {};
           staff.forEach((emp) => {
-            defaults[emp.id] = { userId: emp.id, leavesTaken: 2, salary: 45000, bonus: 0, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
+            const autoLeaves = countApprovedLeaves(emp.id);
+            defaults[emp.id] = { userId: emp.id, leavesTaken: autoLeaves || 2, salary: 45000, bonus: 0, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
           });
           localStorage.setItem(EXTRA_KEY, JSON.stringify(defaults));
           setExtraData(defaults);
@@ -78,16 +105,36 @@ export default function Payroll() {
 
   const handleEdit = (empId: string) => {
     const d = getExtra(empId);
+    const autoLeaves = countApprovedLeaves(empId);
     setEditingId(empId);
-    setEditFields({ leavesTaken: d.leavesTaken, salary: d.salary, bonus: d.bonus ?? 0, extraDeduction: d.extraDeduction ?? 0, salaryStatus: d.salaryStatus, workMode: d.workMode });
+    setEditFields({ leavesTaken: d.leavesTaken, salary: d.salary, bonus: d.bonus ?? 0, extraDeduction: d.extraDeduction ?? 0, salaryStatus: d.salaryStatus, workMode: d.workMode, _autoLeaves: autoLeaves } as any);
+  };
+
+  const syncLeavesFromRecords = (empId: string) => {
+    const autoLeaves = countApprovedLeaves(empId);
+    setEditFields((f) => ({ ...f, leavesTaken: autoLeaves }));
+    showToast(`Synced: ${autoLeaves} approved leave day(s) from HR records`, "info");
   };
 
   const handleSave = (empId: string) => {
+    const emp = employees.find(e => e.id === empId);
     const updated = { ...extraData, [empId]: { userId: empId, ...editFields } };
     setExtraData(updated);
     localStorage.setItem(EXTRA_KEY, JSON.stringify(updated));
     setEditingId(null);
     showToast("Payroll updated", "success");
+    if (user && emp) {
+      AuditLogService.add({
+        action: "PAYROLL_UPDATED",
+        entityType: "payroll",
+        entityId: emp.id,
+        entityName: emp.full_name || emp.email,
+        performedBy: user.id,
+        performedByName: user.name,
+        performedByRole: user.role,
+        description: `Updated payroll for ${emp.full_name || emp.email}: salary Rs.${editFields.salary.toLocaleString()}, bonus Rs.${editFields.bonus}, status ${editFields.salaryStatus}`,
+      });
+    }
   };
 
   const handleMarkAllPaid = () => {
@@ -217,13 +264,23 @@ export default function Payroll() {
                       {/* Leaves Taken */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         {isEditing ? (
-                          <input type="number" min="0" max="24" value={editFields.leavesTaken}
-                            onChange={(e) => setEditFields((f) => ({ ...f, leavesTaken: Math.min(24, parseInt(e.target.value) || 0) }))}
-                            className="w-16 px-2 py-1 border rounded dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                          <div className="flex items-center gap-1.5">
+                            <input type="number" min="0" max="24" value={editFields.leavesTaken}
+                              onChange={(e) => setEditFields((f) => ({ ...f, leavesTaken: Math.min(24, parseInt(e.target.value) || 0) }))}
+                              className="w-16 px-2 py-1 border rounded dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                            <button type="button" onClick={() => syncLeavesFromRecords(emp.id)}
+                              title="Auto-fill from approved leave requests"
+                              className="text-xs text-brand-600 dark:text-brand-400 hover:underline whitespace-nowrap">
+                              ↺ Sync
+                            </button>
+                          </div>
                         ) : (
-                          <span className={`font-medium ${d.leavesTaken > LEAVE_FREE_DAYS ? "text-orange-600 dark:text-orange-400" : "text-gray-900 dark:text-white"}`}>
-                            {d.leavesTaken} / 24
-                          </span>
+                          <div>
+                            <span className={`font-medium ${d.leavesTaken > LEAVE_FREE_DAYS ? "text-orange-600 dark:text-orange-400" : "text-gray-900 dark:text-white"}`}>
+                              {d.leavesTaken} / 24
+                            </span>
+                            {(() => { const auto = countApprovedLeaves(emp.id); return auto !== d.leavesTaken ? <p className="text-[10px] text-amber-500">{auto} in HR records</p> : null; })()}
+                          </div>
                         )}
                       </td>
 

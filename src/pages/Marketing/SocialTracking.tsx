@@ -32,7 +32,8 @@ const EMPTY_FORM = { platform: "facebook" as SocialPlatform, label: "", url: "" 
 export default function SocialTracking() {
   const { user, checkPermission } = useAuth();
   const { showToast } = useToast();
-  const { links, analytics, isLoading, createLink, updateLink, deleteLink, trackClick } = useSocialTracking();
+  const { links, analytics, accountMetrics, isLoading, createLink, updateLink, deleteLink, trackClick, syncMetrics } = useSocialTracking();
+  const [syncingId, setSyncingId] = useState<string | null>(null);
 
   const canManage = checkPermission("marketing", "CREATE");
 
@@ -87,6 +88,18 @@ export default function SocialTracking() {
   const topPlatforms = Object.entries(analytics.byPlatform)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8);
+
+  const handleSync = async (linkId: string) => {
+    setSyncingId(linkId);
+    try {
+      await syncMetrics(linkId);
+      showToast("Metrics synced.", "success");
+    } catch {
+      showToast("Sync failed.", "error");
+    } finally {
+      setSyncingId(null);
+    }
+  };
 
   return (
     <>
@@ -269,6 +282,59 @@ export default function SocialTracking() {
               <h4 className="mt-2 text-2xl font-bold text-green-600">{links.filter((l) => l.status === "active").length}</h4>
             </div>
           </div>
+
+          {/* Account Metrics per Link */}
+          {accountMetrics.length > 0 && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+              <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Account Metrics</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Followers</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Engagement</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reach</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Sync</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {accountMetrics.map((m) => {
+                      const link = links.find((l) => l.id === m.linkId);
+                      return (
+                        <tr key={m.linkId}>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                            {link?.label ?? m.linkId}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${PLATFORM_COLORS[m.platform] ?? PLATFORM_COLORS.other}`}>
+                              {PLATFORM_LABEL[m.platform as typeof PLATFORMS[number]] ?? m.platform}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                            {m.followers > 0 ? m.followers.toLocaleString() : "N/A"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{m.engagement}%</td>
+                          <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{m.reach.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+                            {new Date(m.lastSync).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <button onClick={() => handleSync(m.linkId)} disabled={syncingId === m.linkId}
+                              className="text-xs px-2 py-1 rounded bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 text-brand-600 disabled:opacity-50">
+                              {syncingId === m.linkId ? "Syncing…" : "Sync"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* By Platform */}
           <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">

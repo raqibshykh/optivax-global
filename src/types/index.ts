@@ -11,7 +11,7 @@ export type UserRole =
 export type PermissionDomain =
   | "sales" | "production" | "marketing" | "hr"
   | "clients" | "system" | "billing" | "reports"
-  | "files" | "notifications";
+  | "files" | "notifications" | "revisions";
 
 export type PermissionAction =
   | "VIEW" | "CREATE" | "EDIT" | "DELETE"
@@ -25,6 +25,7 @@ export interface User {
   password: string;
   name: string;
   role: UserRole;
+  designation?: string;
   avatar?: string;
   phone?: string;
   address?: string;
@@ -36,6 +37,18 @@ export interface User {
   lastLogin?: string;
   departmentId?: string;
 }
+
+export const DESIGNATIONS_BY_ROLE: Partial<Record<UserRole, string[]>> = {
+  production_admin:  ["Production Manager", "Tech Lead", "Senior Developer"],
+  production_member: ["Frontend Developer", "Backend Developer", "Designer", "SEO Specialist", "QA Engineer", "Full Stack Developer"],
+  marketing_admin:   ["Marketing Manager", "Digital Marketing Lead"],
+  marketing_member:  ["Social Media Manager", "Content Writer", "PPC Specialist", "SEO Analyst", "Graphic Designer"],
+  sales_admin:       ["Sales Manager", "Business Development Manager"],
+  sales_member:      ["Sales Executive", "Account Executive", "Business Development Executive"],
+  hr_admin:          ["HR Manager", "HR Lead"],
+  hr_member:         ["Recruiter", "HR Executive", "Payroll Specialist"],
+  management:        ["Director", "VP", "C-Level Executive"],
+};
 
 export interface Department {
   id: string;
@@ -161,13 +174,21 @@ export interface Payment {
   id: string;
   invoiceId: string;
   amount: number;
-  date: string;
-  method: "credit-card" | "bank-transfer" | "check";
+  currency: string;              // "usd"
+  date: string;                  // YYYY-MM-DD
+  paidAt: string;                // ISO timestamp
+  paidByUserId?: string;         // client user ID
+  method: "credit-card" | "bank-transfer" | "check" | "cash";
   transactionId: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
   notes?: string;
+  checkImageUrl?: string;
 }
 
 // ── Supporting types ───────────────────────────────────────────────────────
+
+export type FileVisibility = "private" | "department" | "specific" | "project-team" | "client";
 
 export interface FileRecord {
   id: string;
@@ -175,10 +196,14 @@ export interface FileRecord {
   size: number;
   type: string;
   uploadedBy: string;
+  uploadedById?: string;
+  uploaderDept?: string;
   uploadDate: string;
   projectId?: string;
   clientId?: string;
   url?: string;
+  visibility?: FileVisibility;
+  visibleTo?: string[];
 }
 
 export interface Notification {

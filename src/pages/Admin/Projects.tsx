@@ -3,6 +3,7 @@ import { useProjects } from "../../hooks/useProjects";
 import { useClients } from "../../hooks/useClients";
 import { useState } from "react";
 import ProjectModal from "./ProjectModal";
+import ProjectTaskAssignmentModal from "../../components/common/ProjectTaskAssignmentModal";
 import { Project } from "../../types";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
@@ -15,6 +16,7 @@ export default function Projects() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [assignModalProjectId, setAssignModalProjectId] = useState<string | null>(null);
 
   const handleAdd = () => {
     setEditingProject(null);
@@ -133,6 +135,12 @@ export default function Projects() {
                 </span>
               </div>
               <div className="mt-4 flex gap-2 pt-2">
+                <button
+                  onClick={() => setAssignModalProjectId(project.id)}
+                  className="flex-1 py-1.5 text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-300 transition-colors"
+                >
+                  Assign
+                </button>
                 {canEdit("production") && (
                   <button
                     onClick={() => handleEdit(project)}
@@ -172,11 +180,18 @@ export default function Projects() {
         )}
       </div>
 
-      <ProjectModal 
+      <ProjectModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         project={editingProject}
         onSave={handleSave}
+      />
+
+      <ProjectTaskAssignmentModal
+        isOpen={assignModalProjectId !== null}
+        onClose={() => setAssignModalProjectId(null)}
+        preSelectedProjectId={assignModalProjectId ?? undefined}
+        onAssigned={() => showToast("Assignment saved successfully", "success")}
       />
     </>
   );

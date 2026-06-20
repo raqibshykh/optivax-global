@@ -11,7 +11,7 @@ const DELIVS_KEY    = "optivax_deliverables";
 const TASKS_KEY     = "mock_tasks";
 const EXTRA_KEY     = "optivax_employee_extra";
 const LEAVES_KEY    = "optivax_leave_requests";
-const ATTEND_KEY    = "optivax_attendance";
+const ATTEND_KEY    = "mock_attendance";
 const CAMPAIGNS_KEY = "marketing_campaigns";
 const PROJECTS_KEY  = "mock_projects";
 const PAYMENTS_KEY  = "mock_payments";
@@ -102,9 +102,9 @@ export default function ManagementPanel() {
 
   // Attendance (today)
   const todayStr = new Date().toISOString().split("T")[0];
-  const todayAttend = safeParse<Record<string, Record<string, string>>>(localStorage.getItem(ATTEND_KEY), {})[todayStr] ?? {};
-  const presentToday = Object.values(todayAttend).filter((s) => s === "Present").length;
-  const absentToday  = Object.values(todayAttend).filter((s) => s === "Absent").length;
+  const todayAttend = safeParse<{ userId: string; date: string; status: string }[]>(localStorage.getItem(ATTEND_KEY), []).filter((r) => r.date === todayStr);
+  const presentToday = todayAttend.filter((r) => r.status === "present" || r.status === "remote").length;
+  const absentToday  = todayAttend.filter((r) => r.status === "absent").length;
 
   // Payroll
   const totalPayroll = Object.values(extras).reduce((s, e) => s + (e.salary ?? 0), 0);
@@ -112,6 +112,7 @@ export default function ManagementPanel() {
   // Leave summary
   const pendingLeaves  = leaves.filter((l) => l.status === "Pending").length;
   const approvedLeaves = leaves.filter((l) => l.status === "Approved").length;
+  const rejectedLeaves = leaves.filter((l) => l.status === "Rejected").length;
 
   // Campaign performance
   const activeCampaigns = campaigns.filter((c) => c.status === "Active").length;
@@ -184,7 +185,7 @@ export default function ManagementPanel() {
 
             {/* Leave & Attendance */}
             <SectionCard title="HR Summary">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="text-center p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
                   <div className="text-2xl font-bold text-green-700 dark:text-green-300">{presentToday}</div>
                   <div className="text-xs text-gray-500 mt-1">Present Today</div>
@@ -200,6 +201,10 @@ export default function ManagementPanel() {
                 <div className="text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20">
                   <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{approvedLeaves}</div>
                   <div className="text-xs text-gray-500 mt-1">Approved Leaves</div>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                  <div className="text-2xl font-bold text-gray-600 dark:text-gray-300">{rejectedLeaves}</div>
+                  <div className="text-xs text-gray-500 mt-1">Rejected Leaves</div>
                 </div>
               </div>
               <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
@@ -494,6 +499,14 @@ export default function ManagementPanel() {
               <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                 <span className="text-gray-600 dark:text-gray-400">Pending Leave Requests</span>
                 <span className="font-semibold text-yellow-600">{pendingLeaves}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Approved Leaves</span>
+                <span className="font-semibold text-blue-600">{approvedLeaves}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Rejected Leaves</span>
+                <span className="font-semibold text-gray-500">{rejectedLeaves}</span>
               </div>
               <div className="flex justify-between py-2">
                 <span className="text-gray-600 dark:text-gray-400">Monthly Payroll</span>

@@ -38,7 +38,15 @@ export class InvoiceService {
     return this.update(id, { status });
   }
 
-  static async markPaid(id: string): Promise<Invoice> {
-    return api.post<Invoice>(`${BASE}/mark-paid`, { id });
+  static async stripeConfirm(payload: {
+    invoiceId: string;
+    stripePaymentIntentId: string;
+    stripeChargeId: string;
+    amount: number;
+    currency: string;
+    paidByUserId: string;
+    cardholderName?: string;
+  }): Promise<{ invoice: Invoice; payment: unknown }> {
+    return api.post(`${BASE}/stripe-confirm`, payload);
   }
 }

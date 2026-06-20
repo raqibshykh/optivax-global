@@ -10,11 +10,21 @@ interface SocialAnalytics {
   clicks: SocialClickEvent[];
 }
 
+export interface AccountMetric {
+  linkId: string;
+  platform: string;
+  followers: number;
+  engagement: number;
+  reach: number;
+  lastSync: string;
+}
+
 export function useSocialTracking() {
   const [links, setLinks] = useState<SocialLink[]>([]);
   const [analytics, setAnalytics] = useState<SocialAnalytics>({
     totalClicks: 0, byPlatform: {}, byLink: {}, links: [], clicks: [],
   });
+  const [accountMetrics, setAccountMetrics] = useState<AccountMetric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadLinks = useCallback(async () => {
@@ -33,11 +43,18 @@ export function useSocialTracking() {
     } catch {}
   }, []);
 
+  const loadAccountMetrics = useCallback(async () => {
+    try {
+      const data = await api.get<AccountMetric[]>("/saas/v1/social-analytics/account-metrics");
+      setAccountMetrics(Array.isArray(data) ? data : []);
+    } catch {}
+  }, []);
+
   const load = useCallback(async () => {
     setIsLoading(true);
-    await Promise.all([loadLinks(), loadAnalytics()]);
+    await Promise.all([loadLinks(), loadAnalytics(), loadAccountMetrics()]);
     setIsLoading(false);
-  }, [loadLinks, loadAnalytics]);
+  }, [loadLinks, loadAnalytics, loadAccountMetrics]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -62,10 +79,7 @@ export function useSocialTracking() {
   const trackClick = useCallback(async (linkId: string, trackingId: string, platform: SocialPlatform) => {
     const visitorId = `v-${Math.random().toString(36).slice(2, 10)}`;
     await api.post("/saas/v1/social-links/track", {
-      linkId,
-      trackingId,
-      platform,
-      visitorId,
+      linkId, trackingId, platform, visitorId,
       referrer: document.referrer || "direct",
       device: /Mobi|Android/i.test(navigator.userAgent) ? "mobile" : "desktop",
       browser: navigator.userAgent.split(" ").pop()?.split("/")[0] ?? "unknown",
@@ -74,5 +88,10 @@ export function useSocialTracking() {
     await loadAnalytics();
   }, [loadAnalytics]);
 
-  return { links, analytics, isLoading, createLink, updateLink, deleteLink, trackClick, reload: load };
+  const syncMetrics = useCallback(async (linkId: string) => {
+    await api.post("/saas/v1/social-analytics/account-metrics", { linkId });
+    await loadAccountMetrics();
+  }, [loadAccountMetrics]);
+
+  return { links, analytics, accountMetrics, isLoading, createLink, updateLink, deleteLink, trackClick, syncMetrics, reload: load };
 }

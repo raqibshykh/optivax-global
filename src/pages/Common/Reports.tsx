@@ -21,6 +21,19 @@ const CATEGORIES = ["All", "Finance", "Sales", "Production", "Marketing", "HR", 
 const statusColor = (s: string) =>
   s === "ready" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700";
 
+function downloadReportCSV(report: { id: string; name: string; category: string; date: string; status: string; downloads: number }) {
+  const headers = ["Report Name", "Category", "Date", "Status", "Downloads"];
+  const row = [report.name, report.category, report.date, report.status, String(report.downloads)];
+  const csv = [headers.join(","), row.join(",")].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${report.name.replace(/\s+/g, "-").toLowerCase()}-${report.date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function Reports() {
   const { canExport } = useAuth();
   const [filter, setFilter] = useState("All");
@@ -137,11 +150,14 @@ export default function Reports() {
                     <td className="px-4 py-3 text-sm text-gray-500">{r.downloads}</td>
                     <td className="px-4 py-3">
                       {r.status === "ready" && canExport("reports") ? (
-                        <button className="text-xs text-brand-600 hover:text-brand-800 dark:text-brand-400 font-medium">
+                        <button
+                          onClick={() => downloadReportCSV(r)}
+                          className="text-xs text-brand-600 hover:text-brand-800 dark:text-brand-400 font-medium"
+                        >
                           ↓ Export
                         </button>
                       ) : r.status === "ready" ? (
-                        <button className="text-xs text-gray-400 cursor-not-allowed">↓ Export</button>
+                        <button className="text-xs text-gray-400 cursor-not-allowed" title="You don't have export permission">↓ Export</button>
                       ) : (
                         <span className="text-xs text-gray-400 italic">Processing…</span>
                       )}

@@ -16,6 +16,7 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     reports: ALL_ACTIONS,
     files: ALL_ACTIONS,
     notifications: ALL_ACTIONS,
+    revisions: ALL_ACTIONS,
   },
   management: {
     sales: ["VIEW", "EXPORT"],
@@ -23,15 +24,16 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     marketing: ["VIEW", "EXPORT"],
     hr: ["VIEW", "EXPORT"],
     clients: ["VIEW", "EXPORT"],
-    billing: ["VIEW", "EXPORT"],
+    billing: ["VIEW", "CREATE", "EDIT", "EXPORT", "APPROVE", "ASSIGN"],
     reports: ["VIEW", "EXPORT"],
-    files: ["VIEW", "EXPORT"],
+    files: ["VIEW", "CREATE", "EDIT", "DELETE", "EXPORT"],
     notifications: ["VIEW", "EXPORT"],
+    revisions: ["VIEW", "EDIT"],
   },
   sales_admin: {
     sales: ALL_ACTIONS,
     clients: ALL_ACTIONS,
-    billing: ["VIEW", "CREATE"],
+    billing: ["VIEW", "CREATE", "EDIT", "APPROVE", "ASSIGN"],
     reports: ["VIEW", "EXPORT"],
     files: ["VIEW", "CREATE", "EDIT", "DELETE"],
     notifications: ["VIEW", "CREATE"],
@@ -48,11 +50,13 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     files: ALL_ACTIONS,
     reports: ["VIEW", "EXPORT"],
     notifications: ["VIEW", "CREATE"],
+    revisions: ["VIEW", "CREATE", "EDIT", "DELETE"],
   },
   production_member: {
     production: ["VIEW", "EDIT"],
     files: ["VIEW", "CREATE"],
     notifications: ["VIEW"],
+    revisions: ["VIEW"],
   },
   marketing_admin: {
     marketing: ALL_ACTIONS,
@@ -112,16 +116,28 @@ const ROLE_PRIMARY_DOMAIN: Partial<Record<UserRole, PermissionDomain>> = {
   client: "clients",
 };
 
+// Domains that are cross-cutting infrastructure — all employee roles have explicit RBAC grants
+// for these, so they must not be restricted by the primary-domain scope rule.
+const CROSS_CUTTING_DOMAINS = new Set<PermissionDomain>([
+  "files", "notifications", "reports", "revisions",
+]);
+
 export const hasPermissionScoped = (user: User | null, domain: PermissionDomain, action: PermissionAction): boolean => {
   // super_admin has unrestricted access
   if (!user) return false;
   if (user.role === "super_admin") return true;
 
-  // management role is a cross-domain manager and follows RBAC_MATRIX as-is
+  // management role is cross-domain — always check the full matrix (no scope restriction)
+  if (user.role === "management") {
+    return hasPermission(user, domain, action);
+  }
+
   const rolePrimary = ROLE_PRIMARY_DOMAIN[user.role as UserRole] ?? null;
 
-  // Enforce scope: non-manager and non-super_admin cannot perform non-VIEW actions outside their primary domain
-  if (rolePrimary && user.role !== "management") {
+  // Enforce scope: dept roles cannot perform non-VIEW actions outside their primary domain.
+  // Cross-cutting infrastructure domains (files, notifications, reports, revisions) are exempt
+  // because all roles have explicit matrix grants for them.
+  if (rolePrimary && !CROSS_CUTTING_DOMAINS.has(domain)) {
     if (action !== "VIEW" && rolePrimary !== domain) {
       return false;
     }
@@ -129,6 +145,12 @@ export const hasPermissionScoped = (user: User | null, domain: PermissionDomain,
 
   // Fallback to the regular matrix check
   return hasPermission(user, domain, action);
+};
+
+// Budget ownership check: only super_admin, management, and sales_admin can manage budgets
+export const canManageBudget = (user: User | null): boolean => {
+  if (!user) return false;
+  return ["super_admin", "management", "sales_admin"].includes(user.role);
 };
 
 export const canView = (user: User | null, domain: PermissionDomain) => hasPermissionScoped(user, domain, "VIEW");

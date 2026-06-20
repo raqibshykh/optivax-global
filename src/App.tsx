@@ -155,6 +155,7 @@ export default function App() {
             <Route path="/production/deliverables"  element={<Deliverables />} />
             <Route path="/production/files"         element={<AdminFiles />} />
             <Route path="/production/reports"       element={<Reports />} />
+            <Route path="/production/revisions"    element={<AdminRevisions />} />
             <Route path="/production/notifications" element={<AdminNotifications />} />
             <Route path="/production/settings"      element={<Settings />} />
             <Route path="/production/profile"       element={<Profile />} />
@@ -196,6 +197,7 @@ export default function App() {
             <Route path="/hr/leave"          element={<LeaveRequests />} />
             <Route path="/hr/attendance"     element={<Attendance />} />
             <Route path="/hr/tasks"          element={<Tasks />} />
+            <Route path="/hr/files"          element={<AdminFiles />} />
             <Route path="/hr/settings"       element={<Settings />} />
             <Route path="/hr/reports"        element={<Reports />} />
             <Route path="/hr/notifications"  element={<AdminNotifications />} />
@@ -214,6 +216,8 @@ export default function App() {
             <Route path="/management/notifications"  element={<AdminNotifications />} />
             <Route path="/management/audit-logs"     element={<AuditLogs />} />
             <Route path="/management/deliverables"   element={<Deliverables />} />
+            <Route path="/management/revisions"      element={<AdminRevisions />} />
+            <Route path="/management/files"          element={<AdminFiles />} />
             <Route path="/management/profile"        element={<Profile />} />
             <Route element={<ProtectedRoute allowedDomain="reports" allowedRoles={["management", "hr_admin"]} />}>
               <Route path="/management/users" element={<Employees />} />

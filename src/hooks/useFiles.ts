@@ -39,7 +39,9 @@ export function useFiles(projectId?: string) {
         name: file.name,
         size: file.size,
         type: file.type,
-        uploadedBy: user?.id || "",
+        uploadedBy:   user?.name || user?.id || "",
+        uploadedById: user?.id || "",
+        uploaderDept: user?.departmentId || "",
         uploadDate: new Date().toISOString(),
         url: URL.createObjectURL(file),
         ...metadata

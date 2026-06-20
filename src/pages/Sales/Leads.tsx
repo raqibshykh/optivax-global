@@ -75,6 +75,7 @@ export default function Leads() {
   const [form, setForm] = useState<LeadFormData>(EMPTY_FORM);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
 
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
@@ -150,6 +151,29 @@ export default function Leads() {
       fetchLeads();
     } catch {
       showToast("Failed to delete lead", "error");
+    }
+  };
+
+  const handleConvert = async (lead: LeadRow) => {
+    if (lead.status === "converted") {
+      showToast("This lead has already been converted to a client.", "error");
+      return;
+    }
+    if (!window.confirm(`Convert "${lead.name}" (${lead.company ?? lead.email}) to a client? This cannot be undone.`)) return;
+    setConvertingId(lead.id);
+    try {
+      await api.post("/saas/v1/leads/convert", {
+        leadId: lead.id,
+        convertedBy: user?.id,
+        convertedByName: user?.name,
+      });
+      showToast(`"${lead.name}" converted to client successfully.`, "success");
+      fetchLeads();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Conversion failed";
+      showToast(msg, "error");
+    } finally {
+      setConvertingId(null);
     }
   };
 
@@ -283,6 +307,21 @@ export default function Leads() {
                             >
                               <PencilIcon className="w-4 h-4" />
                             </button>
+                          )}
+                          {isAdmin && lead.status !== "converted" && (
+                            <button
+                              onClick={() => handleConvert(lead)}
+                              disabled={convertingId === lead.id}
+                              className="px-2 py-1 text-xs font-medium rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40 transition-colors disabled:opacity-50"
+                              title="Convert to client"
+                            >
+                              {convertingId === lead.id ? "Converting…" : "Convert"}
+                            </button>
+                          )}
+                          {lead.status === "converted" && (
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+                              Client
+                            </span>
                           )}
                           {canDelete("sales") && isAdmin && (
                             <button

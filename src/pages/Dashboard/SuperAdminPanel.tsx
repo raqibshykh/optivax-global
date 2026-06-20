@@ -12,6 +12,7 @@ import { safeParse } from "../../lib/storage";
 import type { LeaveRequest } from "../Client/Profile";
 import { seedAllMockData } from "../../lib/devSeed";
 import { getCampaigns, getTargets, getSalesTasks } from "../../mock/salesData";
+import { AuditLogService } from "../../services/auditLogService";
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 interface Organization    { id: string; name: string; owner_id: string; created_at: string; }
@@ -373,7 +374,19 @@ export default function SuperAdminPanel() {
     try {
       const newUser = await UserService.create({ full_name: createForm.full_name, email: createForm.email, avatar_url: "", company: createForm.company, role: createForm.role, created_at: new Date().toISOString() });
       storeMockPassword(createForm.email, createForm.password);
-      if (currentUser) notifyUserCreated(currentUser.id, currentUser.name, currentUser.role, newUser.id, newUser.full_name, newUser.email, newUser.role);
+      if (currentUser) {
+        notifyUserCreated(currentUser.id, currentUser.name, currentUser.role, newUser.id, newUser.full_name, newUser.email, newUser.role);
+        AuditLogService.add({
+          action: "USER_CREATED",
+          entityType: "user",
+          entityId: newUser.id,
+          entityName: `${newUser.full_name} (${newUser.role})`,
+          performedBy: currentUser.id,
+          performedByName: currentUser.name,
+          performedByRole: currentUser.role,
+          description: `Created new user ${newUser.full_name} with role ${newUser.role} — email: ${newUser.email}`,
+        });
+      }
       setShowCreateUser(false);
       setCreateForm({ full_name: "", email: "", password: "", role: "hr_admin", company: "Optivax Global" });
       fetchData();
@@ -392,6 +405,10 @@ export default function SuperAdminPanel() {
       "mock_payments", "mock_tasks", "marketing_campaigns", "optivax_deliverables",
       "optivax_leave_requests", "optivax_employee_extra", "email_templates",
       "email_campaigns", "email_automations", "mock_organizations", "mock_subscriptions",
+      "mock_attendance", "mock_assignments", "mock_leads", "mock_commissions",
+      "sales_campaigns", "sales_tasks", "sales_targets",
+      "social_links", "social_clicks", "social_account_metrics",
+      "optivax_audit_logs", "mock_notifications", "mock_passwords",
     ];
     MOCK_KEYS.forEach(k => localStorage.removeItem(k));
     seedAllMockData();
@@ -417,9 +434,22 @@ export default function SuperAdminPanel() {
   };
 
   const handleLeaveAction = (id: string, action: "Approved" | "Rejected") => {
+    const leave = leaveRequests.find(l => l.id === id);
     const updated = leaveRequests.map(l => l.id === id ? { ...l, status: action } : l);
     setLeaveRequests(updated);
     localStorage.setItem(LEAVE_KEY, JSON.stringify(updated));
+    if (currentUser && leave) {
+      AuditLogService.add({
+        action: action === "Approved" ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
+        entityType: "leave_request",
+        entityId: leave.id,
+        entityName: `${leave.employeeName} — ${leave.type} (${leave.days}d)`,
+        performedBy: currentUser.id,
+        performedByName: currentUser.name,
+        performedByRole: currentUser.role,
+        description: `${action} leave request for ${leave.employeeName}: ${leave.type} from ${leave.startDate} to ${leave.endDate}`,
+      });
+    }
   };
 
   // ── Filtered lists ────────────────────────────────────────────────────────

@@ -14,8 +14,9 @@ const INVOICES_KEY      = "mock_invoices";
 const FILES_KEY         = "mock_files";
 const REVISIONS_KEY     = "mock_revisions";
 const PAYMENTS_KEY      = "mock_payments";
-const SOCIAL_LINKS_KEY  = "social_links";
-const SOCIAL_CLICKS_KEY = "social_clicks";
+const SOCIAL_LINKS_KEY   = "social_links";
+const SOCIAL_CLICKS_KEY  = "social_clicks";
+const SOCIAL_METRICS_KEY = "social_account_metrics";
 
 type Profile = {
   id: string;
@@ -137,6 +138,38 @@ function seedClients(): any[] {
       totalProjects: 1, totalBilled: 1800,
       createdBy: "u1", createdByName: "Super Admin",
     }),
+    normalizeClient({
+      id: "u30", name: "Carol Stevens", company: "TechNova Inc",
+      email: "client3@example.com", phone: "+1-555-0103",
+      status: "active", joinDate: "2026-02-20T00:00:00Z",
+      address: "789 Pine Rd", city: "Chicago",
+      totalProjects: 0, totalBilled: 0,
+      createdBy: "u1", createdByName: "Super Admin",
+    }),
+    normalizeClient({
+      id: "u31", name: "Daniel Foster", company: "BluePeak Retail",
+      email: "client4@example.com", phone: "+1-555-0104",
+      status: "active", joinDate: "2026-03-05T00:00:00Z",
+      address: "321 Elm St", city: "Houston",
+      totalProjects: 0, totalBilled: 0,
+      createdBy: "u1", createdByName: "Super Admin",
+    }),
+    normalizeClient({
+      id: "u32", name: "Elena Vasquez", company: "MediCore Solutions",
+      email: "client5@example.com", phone: "+1-555-0105",
+      status: "active", joinDate: "2026-03-18T00:00:00Z",
+      address: "654 Maple Ave", city: "Phoenix",
+      totalProjects: 0, totalBilled: 0,
+      createdBy: "u1", createdByName: "Super Admin",
+    }),
+    normalizeClient({
+      id: "u33", name: "Frank Huang", company: "CapitalEdge Finance",
+      email: "client6@example.com", phone: "+1-555-0106",
+      status: "active", joinDate: "2026-04-02T00:00:00Z",
+      address: "987 Birch Blvd", city: "Seattle",
+      totalProjects: 0, totalBilled: 0,
+      createdBy: "u1", createdByName: "Super Admin",
+    }),
   ];
 }
 
@@ -206,13 +239,17 @@ function seedFiles(): any[] {
   return [
     {
       id: "file-1", name: "Website_Mockup_v1.pdf", size: 2457600, type: "application/pdf",
-      uploadedBy: "u10", uploadDate: "2026-05-10T10:00:00Z",
+      uploadedBy: "Marketing Admin", uploadedById: "u10", uploaderDept: "dept-marketing",
+      uploadDate: "2026-05-10T10:00:00Z",
       clientId: "u6", projectId: "proj-1", url: "#",
+      visibility: "department",
     },
     {
       id: "file-2", name: "Brand_Guidelines.pdf", size: 1843200, type: "application/pdf",
-      uploadedBy: "u10", uploadDate: "2026-04-20T09:00:00Z",
+      uploadedBy: "Marketing Admin", uploadedById: "u10", uploaderDept: "dept-marketing",
+      uploadDate: "2026-04-20T09:00:00Z",
       clientId: "u7", projectId: "proj-3", url: "#",
+      visibility: "department",
     },
   ];
 }
@@ -379,8 +416,10 @@ export function startMockServer() {
           return new Response(JSON.stringify({ success: false, error: "Forbidden" }), { status: 403, headers: { "Content-Type": "application/json" } });
         }
         const body = safeParseBody<any>(init?.body, {});
+        const piTs = Date.now();
         const amountCents = Math.round((body.amount || 0) * 100);
-        return ok({ clientSecret: `pi_mock_${amountCents}_${Date.now()}_secret_mock` });
+        const paymentIntentId = `pi_mock_${amountCents}_${piTs}`;
+        return ok({ clientSecret: `${paymentIntentId}_secret_mock`, paymentIntentId });
       }
 
       // ── Settings (super_admin only for write) ─────────────────────────────
@@ -517,6 +556,28 @@ export function startMockServer() {
           writeStore(PROJECTS_KEY, projects.filter((x: any) => x.id !== body.id));
           return ok({});
         }
+
+        if (method === "GET" && p === "/saas/v1/projects/billing-summary") {
+          const projectId = parsed.searchParams.get("projectId");
+          if (!projectId) {
+            return new Response(JSON.stringify({ success: false, error: "projectId required" }), { status: 400, headers: { "Content-Type": "application/json" } });
+          }
+          const proj = projects.find((x: any) => x.id === projectId);
+          if (!proj) {
+            return new Response(JSON.stringify({ success: false, error: "Project not found" }), { status: 404, headers: { "Content-Type": "application/json" } });
+          }
+          const allInvoices = readStore<any>(INVOICES_KEY, seedInvoices);
+          const projectInvoices = allInvoices.filter((x: any) => x.projectId === projectId);
+          const totalInvoiced = projectInvoices.reduce((s: number, x: any) => s + Number(x.amount || 0), 0);
+          const allPayments = readStore<any>(PAYMENTS_KEY, () => []);
+          const paidInvoiceIds = new Set(projectInvoices.filter((x: any) => x.status === "paid").map((x: any) => x.id));
+          const totalPaid = allPayments
+            .filter((p: any) => paidInvoiceIds.has(p.invoiceId))
+            .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+          const budget = Number(proj.budget || 0);
+          const remainingBillable = Math.max(0, budget - totalInvoiced);
+          return ok({ budget, totalInvoiced, totalPaid, remainingBillable, invoiceCount: projectInvoices.length });
+        }
       }
 
       // ── Invoices ──────────────────────────────────────────────────────────
@@ -526,7 +587,18 @@ export function startMockServer() {
         if (method === "GET" && p.endsWith("/list")) {
           const id       = parsed.searchParams.get("id");
           const clientId = parsed.searchParams.get("clientId");
-          let out = invoices;
+          // Auto-flag pending invoices whose dueDate has passed as overdue
+          const today = new Date().toISOString().split("T")[0];
+          let dirty = false;
+          const refreshed = invoices.map((x: any) => {
+            if (x.status === "pending" && x.dueDate && x.dueDate < today) {
+              dirty = true;
+              return { ...x, status: "overdue" };
+            }
+            return x;
+          });
+          if (dirty) writeStore(INVOICES_KEY, refreshed);
+          let out = dirty ? refreshed : invoices;
           if (id)       out = out.filter((x: any) => x.id === id);
           if (clientId) out = out.filter((x: any) => x.clientId === clientId);
           return ok(out);
@@ -534,7 +606,27 @@ export function startMockServer() {
 
         if (method === "POST" && p.endsWith("/generate")) {
           const body = safeParseBody<any>(init?.body, {});
-          const inv  = {
+
+          if (!body.projectId) {
+            return new Response(JSON.stringify({ success: false, error: "Project selection is required to generate an invoice." }), { status: 400, headers: { "Content-Type": "application/json" } });
+          }
+
+          // Enforce: amount ≤ remaining billable for this project
+          const allProjects = readStore<any>(PROJECTS_KEY, seedProjects);
+          const proj = allProjects.find((x: any) => x.id === body.projectId);
+          if (proj?.budget) {
+            const projectInvoices = invoices.filter((x: any) => x.projectId === body.projectId);
+            const totalInvoiced = projectInvoices.reduce((s: number, x: any) => s + Number(x.amount || 0), 0);
+            const remainingBillable = Number(proj.budget) - totalInvoiced;
+            if (Number(body.amount) > remainingBillable) {
+              return new Response(
+                JSON.stringify({ success: false, error: `Invoice amount $${Number(body.amount).toLocaleString()} exceeds the remaining billable amount of $${remainingBillable.toLocaleString()} for this project.` }),
+                { status: 422, headers: { "Content-Type": "application/json" } }
+              );
+            }
+          }
+
+          const inv = {
             items: [], status: "pending",
             ...body,
             id: `inv-${Date.now()}`,
@@ -552,14 +644,110 @@ export function startMockServer() {
         }
 
         if (method === "POST" && p.endsWith("/mark-paid")) {
-          const body    = safeParseBody<any>(init?.body, {});
-          const updated = invoices.map((x: any) =>
-            x.id === body.id
-              ? { ...x, status: "paid", paidDate: new Date().toISOString().split("T")[0] }
-              : x
+          // Manual mark-paid is disabled — all payments must go through Stripe checkout.
+          return new Response(
+            JSON.stringify({ success: false, error: "Manual payment marking is disabled. All invoice payments must be processed through Stripe checkout." }),
+            { status: 410, headers: { "Content-Type": "application/json" } }
           );
-          writeStore(INVOICES_KEY, updated);
-          return ok(updated.find((x: any) => x.id === body.id) || null);
+        }
+
+        if (method === "POST" && p.endsWith("/stripe-confirm")) {
+          const body = safeParseBody<any>(init?.body, {});
+          const { invoiceId, stripePaymentIntentId, stripeChargeId, amount, currency = "usd", paidByUserId, cardholderName } = body;
+
+          const invoice = invoices.find((x: any) => x.id === invoiceId);
+          if (!invoice) {
+            return new Response(JSON.stringify({ success: false, error: "Invoice not found" }), { status: 404, headers: { "Content-Type": "application/json" } });
+          }
+          if (invoice.status === "paid") {
+            return new Response(JSON.stringify({ success: false, error: "Invoice already paid" }), { status: 409, headers: { "Content-Type": "application/json" } });
+          }
+
+          // Duplicate payment guard
+          const existingPayments = readStore<any>(PAYMENTS_KEY, () => []);
+          if (existingPayments.some((pay: any) => pay.invoiceId === invoiceId)) {
+            return new Response(JSON.stringify({ success: false, error: "Payment already recorded for this invoice" }), { status: 409, headers: { "Content-Type": "application/json" } });
+          }
+
+          const now = new Date().toISOString();
+          const paidDate = now.split("T")[0];
+          const ts = Date.now();
+
+          // Mark invoice paid
+          const updatedInvoices = invoices.map((x: any) =>
+            x.id === invoiceId ? { ...x, status: "paid", paidDate } : x
+          );
+          writeStore(INVOICES_KEY, updatedInvoices);
+          const paidInvoice = updatedInvoices.find((x: any) => x.id === invoiceId);
+
+          // Create payment record
+          const payRecord = {
+            id: `pay-stripe-${ts}`,
+            invoiceId,
+            amount: Number(amount),
+            currency,
+            date: paidDate,
+            paidAt: now,
+            paidByUserId: paidByUserId || mockUserId || "",
+            method: "credit-card",
+            transactionId: stripePaymentIntentId || `TXN-${ts}`,
+            stripePaymentIntentId: stripePaymentIntentId || `pi_mock_${ts}`,
+            stripeChargeId: stripeChargeId || `ch_mock_${ts}`,
+            created_at: now,
+          };
+          writeStore(PAYMENTS_KEY, [payRecord, ...existingPayments]);
+
+          // Update project.spent
+          if (paidInvoice?.projectId && paidInvoice.amount) {
+            const projects = readStore<any>(PROJECTS_KEY, seedProjects);
+            writeStore(PROJECTS_KEY, projects.map((proj: any) =>
+              proj.id !== paidInvoice.projectId
+                ? proj
+                : { ...proj, spent: (proj.spent ?? 0) + Number(paidInvoice.amount) }
+            ));
+          }
+
+          // Notifications
+          const notifs = safeParse<any[]>(localStorage.getItem(NOTIFS_KEY) || "[]", []);
+          const newNotifs: any[] = [];
+          const invoiceLabel = paidInvoice?.number || invoiceId;
+          const amtLabel = `$${Number(amount).toLocaleString()}`;
+
+          if (paidInvoice?.clientId) {
+            newNotifs.push({
+              id: `notif-stripe-client-${ts}`,
+              userId: paidInvoice.clientId,
+              type: "payment",
+              title: "Payment Successful",
+              message: `Invoice ${invoiceLabel} for ${amtLabel} has been paid. Thank you!`,
+              read: false,
+              createdAt: now,
+              actionUrl: "/client/billing",
+            });
+          }
+
+          // Management and super_admin notifications
+          const allProfiles = readProfiles();
+          allProfiles
+            .filter((pr: Profile) => pr.role === "management" || pr.role === "super_admin")
+            .forEach((pr: Profile, i: number) => {
+              newNotifs.push({
+                id: `notif-stripe-staff-${ts + i + 1}`,
+                userId: pr.id,
+                type: "payment",
+                title: "Invoice Paid",
+                message: `Invoice ${invoiceLabel} for ${amtLabel} paid${cardholderName ? ` by ${cardholderName}` : ""} via Stripe.`,
+                read: false,
+                createdAt: now,
+                actionUrl: "/management/billing",
+              });
+            });
+
+          if (newNotifs.length > 0) {
+            localStorage.setItem(NOTIFS_KEY, JSON.stringify([...newNotifs, ...notifs]));
+          }
+
+          return ok({ invoice: paidInvoice, payment: payRecord });
         }
 
         if (method === "DELETE" && p.endsWith("/delete")) {
@@ -577,6 +765,28 @@ export function startMockServer() {
           const projectId = parsed.searchParams.get("projectId");
           const clientId  = parsed.searchParams.get("clientId");
           let out = files;
+
+          // Visibility enforcement (super_admin and management see everything)
+          if (mockUserId && mockUserRole && mockUserRole !== "super_admin" && mockUserRole !== "management") {
+            const currentUserProfile = readProfiles().find((pr: Profile) => pr.id === mockUserId);
+            const userDept = currentUserProfile?.departmentId;
+            out = out.filter((f: any) => {
+              const vis: string | undefined = f.visibility;
+              if (!vis) return mockUserRole !== "client"; // legacy files visible to all staff
+              if (vis === "private") return f.uploadedById === mockUserId;
+              if (vis === "department") return !!userDept && f.uploaderDept === userDept;
+              if (vis === "specific") return Array.isArray(f.visibleTo) && f.visibleTo.includes(mockUserId);
+              if (vis === "project-team") {
+                if (!f.projectId) return false;
+                const projects = readStore<any>(PROJECTS_KEY, seedProjects);
+                const proj = projects.find((pr: any) => pr.id === f.projectId);
+                return !!(proj && Array.isArray(proj.assignedTo) && proj.assignedTo.includes(mockUserId));
+              }
+              if (vis === "client") return mockUserRole === "client" && f.clientId === mockUserId;
+              return false;
+            });
+          }
+
           if (projectId) out = out.filter((x: any) => x.projectId === projectId);
           if (clientId)  out = out.filter((x: any) => x.clientId === clientId);
           return ok(out);
@@ -584,8 +794,62 @@ export function startMockServer() {
 
         if (method === "POST" && p.endsWith("/create")) {
           const body = safeParseBody<any>(init?.body, {});
-          const file = { ...body, id: `file-${Date.now()}`, uploadDate: new Date().toISOString() };
+          const ts   = Date.now();
+          const now  = new Date().toISOString();
+          const file = { ...body, id: `file-${ts}`, uploadDate: now };
           writeStore(FILES_KEY, [file, ...files]);
+
+          // Audit revision — record every upload regardless of visibility
+          const revisions = readStore<any>(REVISIONS_KEY, () => []);
+          const rev = {
+            id:         `rev-file-${ts}`,
+            projectId:  file.projectId  || "",
+            clientId:   file.clientId   || "",
+            comment:    `File uploaded: "${file.name}"${file.description ? ` — ${file.description}` : ""}`,
+            status:     "completed",
+            type:       "file_upload",
+            updatedBy:  mockUserId || file.uploadedById || "",
+            created_at: now,
+          };
+          writeStore(REVISIONS_KEY, [rev, ...revisions]);
+
+          // Notifications — only when the file is actually shared with others
+          const uploader = mockUserId || file.uploadedById || "";
+          const makeNotif = (userId: string, actionUrl: string, seq: number) => ({
+            id:        `notif-file-${ts + seq}-${userId}`,
+            userId,
+            type:      "file",
+            title:     `New file shared: "${file.name}"`,
+            message:   `${file.uploadedBy || "A team member"} uploaded "${file.name}"${file.description ? `: ${file.description}` : ""}.`,
+            read:      false,
+            createdAt: now,
+            actionUrl,
+          });
+
+          const pendingNotifs: any[] = [];
+          const vis = file.visibility as string | undefined;
+
+          if (vis === "specific" && Array.isArray(file.visibleTo)) {
+            (file.visibleTo as string[])
+              .filter((uid) => uid !== uploader)
+              .forEach((uid, i) => pendingNotifs.push(makeNotif(uid, "/files", i + 1)));
+          } else if (vis === "client" && file.clientId) {
+            pendingNotifs.push(makeNotif(file.clientId, "/client/files", 1));
+          } else if (vis === "project-team" && file.projectId) {
+            const projects = readStore<any>(PROJECTS_KEY, seedProjects);
+            const proj = projects.find((pr: any) => pr.id === file.projectId);
+            if (proj && Array.isArray(proj.assignedTo)) {
+              (proj.assignedTo as string[])
+                .filter((uid) => uid !== uploader)
+                .forEach((uid, i) => pendingNotifs.push(makeNotif(uid, "/files", i + 1)));
+            }
+          }
+
+          if (pendingNotifs.length > 0) {
+            const notifs = safeParse<any[]>(localStorage.getItem(NOTIFS_KEY) || "[]", []);
+            localStorage.setItem(NOTIFS_KEY, JSON.stringify([...pendingNotifs, ...notifs]));
+          }
+
           return ok(file);
         }
 
@@ -604,6 +868,24 @@ export function startMockServer() {
           const clientId  = parsed.searchParams.get("clientId");
           const projectId = parsed.searchParams.get("projectId");
           let out = revisions;
+
+          // Role-based visibility scoping
+          if (mockUserRole === "production_member" && mockUserId) {
+            const projects = readStore<any>(PROJECTS_KEY, seedProjects);
+            const myProjIds = new Set(
+              projects
+                .filter((proj: any) => Array.isArray(proj.assignedTo) && proj.assignedTo.includes(mockUserId))
+                .map((proj: any) => proj.id)
+            );
+            out = out.filter((r: any) => myProjIds.has(r.projectId));
+          } else if (
+            mockUserRole !== "super_admin" &&
+            mockUserRole !== "management" &&
+            mockUserRole !== "production_admin"
+          ) {
+            out = []; // All other roles have no revision access
+          }
+
           if (clientId)  out = out.filter((x: any) => x.clientId === clientId);
           if (projectId) out = out.filter((x: any) => x.projectId === projectId);
           return ok(out);
@@ -723,16 +1005,12 @@ export function startMockServer() {
         }
 
         if (method === "POST" && p.endsWith("/create")) {
-          const body = safeParseBody<any>(init?.body, {});
-          const pay  = {
-            date: new Date().toISOString().split("T")[0],
-            transactionId: `TXN-${Date.now()}`,
-            ...body,
-            id: `pay-${Date.now()}`,
-            created_at: new Date().toISOString(),
-          };
-          writeStore(PAYMENTS_KEY, [pay, ...payments]);
-          return ok(pay);
+          // Direct payment creation is disabled — all payments are created atomically by the
+          // stripe-confirm endpoint which validates the Stripe payment intent.
+          return new Response(
+            JSON.stringify({ success: false, error: "Direct payment creation is disabled. Payments are recorded automatically after Stripe checkout." }),
+            { status: 410, headers: { "Content-Type": "application/json" } }
+          );
         }
       }
 
@@ -905,18 +1183,78 @@ export function startMockServer() {
         return ok({ totalClicks: clicks.length, byPlatform, byLink, links, clicks: clicks.slice(0, 200) });
       }
 
+      // ── Social Account Metrics (persistent, not random per render) ────────
+      if (p === "/saas/v1/social-analytics/account-metrics") {
+        const links = safeParse<any[]>(localStorage.getItem(SOCIAL_LINKS_KEY), []);
+        let metrics = safeParse<Record<string, any>>(localStorage.getItem(SOCIAL_METRICS_KEY), {});
+
+        // Seed realistic metrics for any link that doesn't have them yet
+        const PLATFORM_DEFAULTS: Record<string, { followers: number; engagement: number; reach: number }> = {
+          facebook:   { followers: 12400,  engagement: 3.2,  reach: 8500  },
+          instagram:  { followers: 28700,  engagement: 4.8,  reach: 15200 },
+          linkedin:   { followers: 5800,   engagement: 2.1,  reach: 3400  },
+          tiktok:     { followers: 45300,  engagement: 6.7,  reach: 32000 },
+          youtube:    { followers: 9200,   engagement: 3.9,  reach: 6800  },
+          twitter:    { followers: 7600,   engagement: 1.8,  reach: 4200  },
+          google_ads: { followers: 0,      engagement: 2.4,  reach: 18000 },
+          other:      { followers: 2500,   engagement: 2.0,  reach: 1800  },
+        };
+        let updated = false;
+        for (const link of links) {
+          if (!metrics[link.id]) {
+            const base = PLATFORM_DEFAULTS[link.platform] ?? PLATFORM_DEFAULTS.other;
+            // Use link.id hash to add per-link variation deterministically
+            const seed = link.id.split("").reduce((s: number, c: string) => s + c.charCodeAt(0), 0);
+            const variance = (n: number) => Math.round(n * (0.85 + ((seed % 30) / 100)));
+            metrics[link.id] = {
+              linkId:     link.id,
+              platform:   link.platform,
+              followers:  variance(base.followers),
+              engagement: parseFloat((base.engagement + ((seed % 10) / 10 - 0.5)).toFixed(1)),
+              reach:      variance(base.reach),
+              lastSync:   new Date(Date.now() - Math.floor((seed % 3) * 86400000)).toISOString(),
+            };
+            updated = true;
+          }
+        }
+        if (updated) localStorage.setItem(SOCIAL_METRICS_KEY, JSON.stringify(metrics));
+
+        if (method === "GET") {
+          return ok(Object.values(metrics).filter((m: any) => links.some((l: any) => l.id === m.linkId)));
+        }
+
+        if (method === "POST") {
+          // Sync: update a specific link's metrics with slight variation
+          const body = safeParseBody<any>(init?.body, {});
+          if (body.linkId && metrics[body.linkId]) {
+            const m = metrics[body.linkId];
+            const delta = (n: number) => Math.round(n * (0.99 + Math.random() * 0.04));
+            metrics[body.linkId] = {
+              ...m,
+              followers:  delta(m.followers),
+              engagement: parseFloat(Math.min(10, Math.max(0.1, m.engagement + (Math.random() * 0.4 - 0.2))).toFixed(1)),
+              reach:      delta(m.reach),
+              lastSync:   new Date().toISOString(),
+            };
+            localStorage.setItem(SOCIAL_METRICS_KEY, JSON.stringify(metrics));
+            return ok(metrics[body.linkId]);
+          }
+          return ok(null);
+        }
+      }
+
       // ── Leads ────────────────────────────────────────────────────────────
       if (p.startsWith("/saas/v1/leads")) {
         const LEADS_KEY = "mock_leads";
         const seedLeads = () => [
-          { id: "lead-1", name: "Priya Sharma",    email: "priya@techwave.io",    phone: "+92-300-1234567", company: "TechWave",       source: "website",  status: "new",        estimated_value: 15000, assignedTo: "u3", created_at: "2026-05-10T08:00:00Z", updated_at: "2026-05-10T08:00:00Z" },
-          { id: "lead-2", name: "Omar Farooq",     email: "omar@nexadigital.com", phone: "+92-321-9876543", company: "NexaDigital",    source: "referral", status: "contacted",  estimated_value: 8500,  assignedTo: "u4", created_at: "2026-05-14T10:30:00Z", updated_at: "2026-05-15T09:00:00Z" },
-          { id: "lead-3", name: "Sara Malik",      email: "sara@brightcorp.pk",   phone: "+92-333-2345678", company: "BrightCorp",     source: "linkedin", status: "qualified",  estimated_value: 22000, assignedTo: "u3", created_at: "2026-05-18T11:00:00Z", updated_at: "2026-05-20T14:00:00Z" },
-          { id: "lead-4", name: "Bilal Ahmed",     email: "bilal@globaltech.net", phone: "+92-345-3456789", company: "GlobalTech",     source: "cold-call",status: "converted", estimated_value: 30000, assignedTo: "u4", created_at: "2026-04-02T09:00:00Z", updated_at: "2026-06-01T10:00:00Z" },
-          { id: "lead-5", name: "Nadia Hussain",   email: "nadia@pixelstudio.pk", phone: "+92-311-4567890", company: "PixelStudio",    source: "website",  status: "new",        estimated_value: 5000,  assignedTo: "u3", created_at: "2026-06-01T07:30:00Z", updated_at: "2026-06-01T07:30:00Z" },
-          { id: "lead-6", name: "Raza Khan",       email: "raza@alphasolutions.pk",phone: "+92-322-5678901", company: "AlphaSolutions", source: "event",    status: "contacted",  estimated_value: 12000, assignedTo: "u4", created_at: "2026-06-05T12:00:00Z", updated_at: "2026-06-06T10:00:00Z" },
-          { id: "lead-7", name: "Fatima Zahra",    email: "fatima@cloudbase.io",  phone: "+92-315-6789012", company: "CloudBase",      source: "linkedin", status: "lost",       estimated_value: 9000,  assignedTo: "u3", created_at: "2026-05-25T09:00:00Z", updated_at: "2026-06-10T08:00:00Z" },
-          { id: "lead-8", name: "Hamza Sheikh",    email: "hamza@innotech.com",   phone: "+92-301-7890123", company: "InnoTech",       source: "referral", status: "qualified",  estimated_value: 18500, assignedTo: "u4", created_at: "2026-06-08T14:00:00Z", updated_at: "2026-06-09T11:00:00Z" },
+          { id: "lead-1", name: "Priya Sharma",    email: "priya@techwave.io",    phone: "+92-300-1234567", company: "TechWave",       source: "website",  status: "new",        estimated_value: 15000, assignedTo: "u8",  created_at: "2026-05-10T08:00:00Z", updated_at: "2026-05-10T08:00:00Z" },
+          { id: "lead-2", name: "Omar Farooq",     email: "omar@nexadigital.com", phone: "+92-321-9876543", company: "NexaDigital",    source: "referral", status: "contacted",  estimated_value: 8500,  assignedTo: "u12", created_at: "2026-05-14T10:30:00Z", updated_at: "2026-05-15T09:00:00Z" },
+          { id: "lead-3", name: "Sara Malik",      email: "sara@brightcorp.pk",   phone: "+92-333-2345678", company: "BrightCorp",     source: "linkedin", status: "qualified",  estimated_value: 22000, assignedTo: "u8",  created_at: "2026-05-18T11:00:00Z", updated_at: "2026-05-20T14:00:00Z" },
+          { id: "lead-4", name: "Bilal Ahmed",     email: "bilal@globaltech.net", phone: "+92-345-3456789", company: "GlobalTech",     source: "cold-call",status: "converted", estimated_value: 30000, assignedTo: "u12", created_at: "2026-04-02T09:00:00Z", updated_at: "2026-06-01T10:00:00Z" },
+          { id: "lead-5", name: "Nadia Hussain",   email: "nadia@pixelstudio.pk", phone: "+92-311-4567890", company: "PixelStudio",    source: "website",  status: "new",        estimated_value: 5000,  assignedTo: "u8",  created_at: "2026-06-01T07:30:00Z", updated_at: "2026-06-01T07:30:00Z" },
+          { id: "lead-6", name: "Raza Khan",       email: "raza@alphasolutions.pk",phone: "+92-322-5678901", company: "AlphaSolutions", source: "event",    status: "contacted",  estimated_value: 12000, assignedTo: "u22", created_at: "2026-06-05T12:00:00Z", updated_at: "2026-06-06T10:00:00Z" },
+          { id: "lead-7", name: "Fatima Zahra",    email: "fatima@cloudbase.io",  phone: "+92-315-6789012", company: "CloudBase",      source: "linkedin", status: "lost",       estimated_value: 9000,  assignedTo: "u8",  created_at: "2026-05-25T09:00:00Z", updated_at: "2026-06-10T08:00:00Z" },
+          { id: "lead-8", name: "Hamza Sheikh",    email: "hamza@innotech.com",   phone: "+92-301-7890123", company: "InnoTech",       source: "referral", status: "qualified",  estimated_value: 18500, assignedTo: "u23", created_at: "2026-06-08T14:00:00Z", updated_at: "2026-06-09T11:00:00Z" },
         ];
         const leads = readStore<any>(LEADS_KEY, seedLeads);
 
@@ -937,6 +1275,64 @@ export function startMockServer() {
         if (method === "GET" && p.startsWith("/saas/v1/leads/")) {
           const id = p.split("/").pop();
           return ok({ lead: leads.find((l: any) => l.id === id) ?? null });
+        }
+
+        if (method === "POST" && p.endsWith("/convert")) {
+          const body   = safeParseBody<any>(init?.body, {});
+          const leadId = body.leadId;
+          const lead   = leads.find((l: any) => l.id === leadId);
+          if (!lead) return new Response(JSON.stringify({ error: "Lead not found" }), { status: 404 });
+          if (lead.status === "converted") return new Response(JSON.stringify({ error: "Lead already converted" }), { status: 409 });
+
+          // Duplicate email guard — prevent creating a second client with the same email
+          const existingClients = readStore<any>(CLIENTS_KEY, () => []);
+          const duplicate = existingClients.find(
+            (c: any) => c.email && lead.email && c.email.toLowerCase() === lead.email.toLowerCase()
+          );
+          if (duplicate) return new Response(JSON.stringify({ error: "A client with this email already exists", clientId: duplicate.id }), { status: 409 });
+
+          // Build client record from lead data
+          const now = new Date().toISOString();
+          const newClient = {
+            id: `client-${Date.now()}`,
+            name: lead.name, contactName: lead.name,
+            company: lead.company || lead.name, companyName: lead.company || lead.name,
+            email: lead.email, phone: lead.phone || "",
+            address: "", city: "",
+            totalProjects: 0, totalBilled: 0,
+            assignedProductionMembers: [],
+            status: "active",
+            joinDate: now, createdAt: now,
+            createdBy: body.convertedBy || "",
+            createdByName: body.convertedByName || "",
+            convertedFromLead: leadId,
+            source: lead.source,
+          };
+          const clients = readStore<any>(CLIENTS_KEY, () => []);
+          writeStore(CLIENTS_KEY, [newClient, ...clients]);
+
+          // Mark lead as converted
+          const updatedLeads = leads.map((l: any) =>
+            l.id === leadId ? { ...l, status: "converted", convertedAt: now, convertedToClientId: newClient.id, updated_at: now } : l
+          );
+          writeStore(LEADS_KEY, updatedLeads);
+
+          // Notify the converting user that the client was created successfully
+          if (body.convertedBy) {
+            const notifs = safeParse<any[]>(localStorage.getItem(NOTIFS_KEY) || "[]", []);
+            notifs.unshift({
+              id: `notif-conv-${Date.now()}`,
+              userId: body.convertedBy,
+              type: "lead_converted",
+              title: "Lead Converted",
+              message: `${lead.name} (${lead.company}) has been converted to a client.`,
+              read: false,
+              createdAt: now,
+            });
+            localStorage.setItem(NOTIFS_KEY, JSON.stringify(notifs));
+          }
+
+          return ok({ lead: updatedLeads.find((l: any) => l.id === leadId), client: newClient });
         }
 
         if (method === "POST" && (p === "/saas/v1/leads" || p.endsWith("/create"))) {

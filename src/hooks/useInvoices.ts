@@ -75,18 +75,6 @@ export function useInvoices() {
     }
   };
 
-  const markAsPaid = async (id: string) => {
-    try {
-      const updatedInvoice = await InvoiceService.markPaid(id);
-      setInvoices((prev) =>
-        prev.map((i) => (i.id === id ? updatedInvoice : i))
-      );
-      return updatedInvoice;
-    } catch (err: unknown) {
-      throw new Error(err instanceof Error ? err.message : "Failed to mark invoice as paid");
-    }
-  };
-
   return {
     invoices,
     isLoading,
@@ -94,7 +82,6 @@ export function useInvoices() {
     addInvoice,
     updateInvoice,
     deleteInvoice,
-    markAsPaid,
     refreshInvoices: fetchInvoices,
   };
 }

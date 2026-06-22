@@ -402,7 +402,8 @@ export default function SuperAdminPanel() {
   const handleResetMockData = () => {
     const MOCK_KEYS = [
       "mock_profiles", "optivax_clients", "mock_projects", "mock_invoices",
-      "mock_payments", "mock_tasks", "marketing_campaigns", "optivax_deliverables",
+      "mock_payments", "mock_tasks", "mock_files", "mock_revisions",
+      "marketing_campaigns", "optivax_deliverables",
       "optivax_leave_requests", "optivax_employee_extra", "email_templates",
       "email_campaigns", "email_automations", "mock_organizations", "mock_subscriptions",
       "mock_attendance", "mock_assignments", "mock_leads", "mock_commissions",

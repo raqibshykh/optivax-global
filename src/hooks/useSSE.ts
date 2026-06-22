@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useToast } from "../context/ToastContext";
 import { safeParse } from "../lib/storage";
+import { _mockServerReady } from "../lib/client";
 
 const buildSseUrl = (): string => {
   const apiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "");
@@ -29,7 +30,9 @@ export const useSSE = (enabled: boolean) => {
 
     let mounted = true;
 
-    const connect = () => {
+    const connect = async () => {
+      await _mockServerReady;
+      if (!mounted) return;
       const url = buildSseUrl();
       try {
         const es = new EventSource(url);

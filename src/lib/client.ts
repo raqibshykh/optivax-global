@@ -2,10 +2,11 @@
 import { mockUsers } from "../mock/users";
 import { seedAllMockData } from "./devSeed";
 
-// Seed all mock localStorage data synchronously at module-load time.
-// This runs before any React component renders or calls useState/useEffect,
-// ensuring direct localStorage reads in panels always find data.
-if (typeof window !== "undefined" && import.meta.env?.DEV) {
+// Use mock server + seed data when VITE_USE_MOCK_SERVER=true (dev and production).
+// Set to false and provide VITE_API_URL when a real backend is available.
+const USE_MOCK = import.meta.env.VITE_USE_MOCK_SERVER === "true";
+
+if (typeof window !== "undefined" && USE_MOCK) {
   seedAllMockData();
 }
 
@@ -16,15 +17,11 @@ interface SaasApiResponse<T = unknown> {
   error?: string | null;
 }
 
-// Resolve base URL from Vite environment variables.
-// In DEV mode the in-browser mock server intercepts window.fetch and matches
-// routes by pathname (e.g. "/saas/v1/..."). Any absolute base URL prefix would
-// change the pathname to "/api/saas/v1/..." and break every mock handler.
-// → Always return "" in DEV so all requests use relative paths.
-// In production Vite sets import.meta.env.DEV = false and the VITE_API_URL
-// env var supplies the real API origin (e.g. "https://api.optivax.com").
+// When USE_MOCK is true, all requests use relative paths so the in-browser mock
+// server's window.fetch override can match "/saas/v1/..." by pathname.
+// When USE_MOCK is false, VITE_API_URL supplies the real API origin.
 const getBaseUrl = (): string => {
-  if (import.meta.env.DEV) return "";
+  if (USE_MOCK) return "";
   const env = import.meta.env as Record<string, string | undefined>;
   const envUrl = env.VITE_API_URL ?? env.VITE_API_BASE;
   return envUrl ? envUrl.replace(/\/$/, "") : "";
@@ -207,12 +204,12 @@ export const fetchSession = async (): Promise<MockUserSession | null> => {
   }
 };
 
-// Start the in-browser mock server in dev mode.
+// Start the in-browser mock server when USE_MOCK is true (dev and production).
 // We keep a promise so request() can await server readiness before the first call.
 let _mockServerReady: Promise<void> = Promise.resolve();
 
 try {
-  if (typeof window !== "undefined" && (import.meta.env?.DEV)) {
+  if (typeof window !== "undefined" && USE_MOCK) {
     _mockServerReady = import("../mock/server")
       .then((m) => { m.startMockServer(); })
       .catch(() => {});

@@ -29,7 +29,8 @@ export default function Billing() {
   const { showToast } = useToast();
   const { checkPermission } = useAuth();
 
-  const canEditInvoice = checkPermission("billing", "EDIT");
+  const canEditInvoice   = checkPermission("billing", "EDIT");
+  const canCreateInvoice = checkPermission("billing", "CREATE");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -114,15 +115,17 @@ export default function Billing() {
             Generate invoices. Clients pay via Stripe. No manual payment methods.
           </p>
         </div>
-        <button
-          onClick={handleAdd}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 transition"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Generate Invoice
-        </button>
+        {canCreateInvoice && (
+          <button
+            onClick={handleAdd}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 transition"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Generate Invoice
+          </button>
+        )}
       </div>
 
       {/* ── Overview stats ──────────────────────────────────────────────────── */}
@@ -168,12 +171,14 @@ export default function Billing() {
             ) : invoices.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">No invoices yet.</p>
-                <button
-                  onClick={handleAdd}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Generate your first invoice →
-                </button>
+                {canCreateInvoice && (
+                  <button
+                    onClick={handleAdd}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Generate your first invoice →
+                  </button>
+                )}
               </div>
             ) : (
               invoices.map((invoice) => {

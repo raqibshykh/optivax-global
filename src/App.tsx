@@ -113,8 +113,6 @@ export default function App() {
             <Route path="/admin/settings"              element={<Settings />} />
             <Route path="/admin/reports"               element={<Reports />} />
             <Route path="/admin/audit-logs"            element={<AuditLogs />} />
-            <Route path="/admin/leave"                element={<LeaveRequests />} />
-            <Route path="/admin/attendance"           element={<Attendance />} />
             <Route path="/admin/commissions"          element={<Commissions />} />
             <Route path="/admin/email/campaigns"       element={<Campaigns />} />
             <Route path="/admin/email/templates"       element={<Templates />} />
@@ -219,7 +217,7 @@ export default function App() {
             <Route path="/management/revisions"      element={<AdminRevisions />} />
             <Route path="/management/files"          element={<AdminFiles />} />
             <Route path="/management/profile"        element={<Profile />} />
-            <Route element={<ProtectedRoute allowedDomain="reports" allowedRoles={["management", "hr_admin"]} />}>
+            <Route element={<ProtectedRoute allowedDomain="reports" allowedRoles={["management"]} />}>
               <Route path="/management/users" element={<Employees />} />
             </Route>
           </Route>

@@ -17,11 +17,12 @@ interface EmployeeExtraData {
 }
 
 const DEPARTMENTS = [
-  { value: "dept-marketing",  label: "Marketing" },
-  { value: "dept-sales",      label: "Sales" },
-  { value: "dept-production", label: "Production" },
-  { value: "dept-hr",         label: "HR" },
-  { value: "dept-management", label: "Management" },
+  { value: "dept-marketing",   label: "Marketing" },
+  { value: "dept-sales",       label: "Sales" },
+  { value: "dept-production",  label: "Production" },
+  { value: "dept-hr",          label: "HR" },
+  { value: "dept-management",  label: "Management" },
+  { value: "dept-it-support",  label: "IT Support" },
 ];
 
 export default function Employees() {

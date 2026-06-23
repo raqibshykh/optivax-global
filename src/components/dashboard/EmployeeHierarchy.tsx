@@ -20,6 +20,8 @@ const ROLE_META: Record<string, { label: string; color: string; dot: string }> =
   production_member: { label: "Production Members",  color: "border-orange-300 bg-orange-50/50 dark:bg-orange-900/10", dot: "bg-orange-300" },
   marketing_admin:   { label: "Marketing Admin",     color: "border-pink-500 bg-pink-50 dark:bg-pink-900/20",       dot: "bg-pink-500" },
   marketing_member:  { label: "Marketing Members",   color: "border-pink-300 bg-pink-50/50 dark:bg-pink-900/10",    dot: "bg-pink-300" },
+  it_admin:          { label: "IT Admin",            color: "border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20",       dot: "bg-cyan-500" },
+  it_member:         { label: "IT Support Members",  color: "border-cyan-300 bg-cyan-50/50 dark:bg-cyan-900/10",    dot: "bg-cyan-300" },
 };
 
 function UserPills({ users }: { users: UserProfile[] }) {
@@ -93,6 +95,8 @@ export default function EmployeeHierarchy() {
     { roleKey: "production_member", indent: 3, isLast: true },
     { roleKey: "marketing_admin",   indent: 2 },
     { roleKey: "marketing_member",  indent: 3, isLast: true },
+    { roleKey: "it_admin",          indent: 2 },
+    { roleKey: "it_member",         indent: 3, isLast: true },
   ];
 
   if (loading) {

@@ -1,21 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import { MailIcon } from "../../icons";
 import { useNotifications } from "../../hooks/useNotifications";
 import { useAuth } from "../../context/AuthContext";
-import { safeParse } from "../../lib/storage";
-
-const PROD_MESSAGES_KEY = "optivax_client_messages";
-
-interface ClientMessage {
-  id: string;
-  fromId: string;
-  fromName: string;
-  toClientId: string;
-  toClientName: string;
-  message: string;
-  sentAt: string;
-}
+import { getConversations, type Conversation } from "../../mock/conversationsData";
 
 function timeAgo(dateStr: string): string {
   const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -35,17 +24,31 @@ const TYPE_COLORS: Record<string, string> = {
   profile: "text-gray-500",
 };
 
+const DEPT_COLOR: Record<string, string> = {
+  Sales:      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  Marketing:  "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
+  Production: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  Management: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+};
+
 export default function Notifications() {
   const { notifications, isLoading, unreadCount, markAsRead, markAllAsRead, deleteNotification } =
     useNotifications();
   const { user } = useAuth();
   const [tab, setTab] = useState<"notifications" | "messages">("notifications");
+  const [myConvs, setMyConvs] = useState<Conversation[]>([]);
 
-  const allMessages = safeParse<ClientMessage[]>(localStorage.getItem(PROD_MESSAGES_KEY), []);
-  const myMessages = user?.id
-    ? allMessages.filter((m) => m.toClientId === user.id)
-    : [];
-  const displayMessages = myMessages;
+  useEffect(() => {
+    if (!user) return;
+    const all = getConversations();
+    const mine = all
+      .filter(c => c.clientId === user.id)
+      .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
+      .slice(0, 5);
+    setMyConvs(mine);
+  }, [user]);
+
+  const unreadMsgCount = myConvs.reduce((sum, c) => sum + c.unreadByClient, 0);
 
   return (
     <>
@@ -98,9 +101,9 @@ export default function Notifications() {
           }`}
         >
           Messages from Team
-          {displayMessages.length > 0 && (
+          {unreadMsgCount > 0 && (
             <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
-              {displayMessages.length}
+              {unreadMsgCount}
             </span>
           )}
         </button>
@@ -187,13 +190,19 @@ export default function Notifications() {
         </div>
       ) : (
         <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Messages from Production Team
+              Messages from Your Team
             </h3>
+            <Link
+              to="/client/messages"
+              className="text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline"
+            >
+              View all messages →
+            </Link>
           </div>
           <div className="p-6">
-            {displayMessages.length === 0 ? (
+            {myConvs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <MailIcon className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-3" />
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -201,33 +210,54 @@ export default function Notifications() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {[...displayMessages].reverse().map((msg) => (
-                  <div
-                    key={msg.id}
-                    className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-xs font-semibold text-blue-700 dark:text-blue-300">
-                          {msg.fromName.charAt(0).toUpperCase()}
+              <div className="space-y-3">
+                {myConvs.map((conv) => {
+                  const lastMsg = conv.messages[conv.messages.length - 1];
+                  return (
+                    <Link
+                      key={conv.id}
+                      to="/client/messages"
+                      className="block p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-1">
+                        <p className={`text-sm truncate flex-1 ${conv.unreadByClient > 0 ? "font-semibold text-gray-900 dark:text-white" : "font-medium text-gray-700 dark:text-gray-300"}`}>
+                          {conv.subject}
+                        </p>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {conv.unreadByClient > 0 && (
+                            <span className="w-5 h-5 rounded-full bg-brand-500 text-white text-xs flex items-center justify-center">
+                              {conv.unreadByClient}
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">{timeAgo(conv.lastActivity)}</span>
                         </div>
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">
-                          {msg.fromName}
-                        </span>
-                        <span className="text-xs text-gray-400 dark:text-gray-500">
-                          &bull; Production Team
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-xs font-semibold text-blue-700 dark:text-blue-300">
+                          {conv.assignedUserName.charAt(0)}
+                        </div>
+                        <span className="text-xs text-gray-500">{conv.assignedUserName}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${DEPT_COLOR[conv.assignedDept] ?? "bg-gray-100 text-gray-600"}`}>
+                          {conv.assignedDept}
                         </span>
                       </div>
-                      <span className="text-xs text-gray-400 dark:text-gray-500">
-                        {timeAgo(msg.sentAt)}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-700 dark:text-gray-300 pl-9">
-                      {msg.message}
-                    </p>
-                  </div>
-                ))}
+                      {lastMsg && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate pl-8">
+                          {lastMsg.senderRole === "client" ? "You: " : `${lastMsg.senderName}: `}
+                          {lastMsg.body}
+                        </p>
+                      )}
+                    </Link>
+                  );
+                })}
+                <div className="pt-2 text-center">
+                  <Link
+                    to="/client/messages"
+                    className="text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline"
+                  >
+                    Open Messages page to reply →
+                  </Link>
+                </div>
               </div>
             )}
           </div>

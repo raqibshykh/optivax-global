@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { RequirePermission } from "../../components/auth/RequirePermission";
@@ -8,12 +9,12 @@ import { ClientService } from "../../services/clientService";
 import { safeParse } from "../../lib/storage";
 import { StoredClient } from "../../types";
 import type { MockTask } from "../Common/Tasks";
+import { getConversations, getVisibleConversations, getConvStats } from "../../mock/conversationsData";
 
 const PROJECTS_KEY = "mock_projects";
 
 // ── Storage keys ─────────────────────────────────────────────────────────────
 const PROD_ASSIGNMENTS_KEY = "production_client_assignments";
-const PROD_MESSAGES_KEY    = "optivax_client_messages";
 const CLIENTS_KEY          = "optivax_clients";
 const TASKS_KEY            = "mock_tasks";
 
@@ -42,37 +43,9 @@ interface Member {
   id: string; full_name: string; email: string; role: string;
 }
 
-interface ChatMessage {
-  id: string;
-  fromId: string;
-  fromName: string;
-  fromRole: string;
-  toId: string;
-  toName: string;
-  message: string;
-  sentAt: string;
-  // legacy fields kept for backward-compat with old stored messages
-  toClientId?: string;
-  toClientName?: string;
-}
-const normMsg = (m: Record<string, unknown>): ChatMessage => {
-  const r = m as Partial<ChatMessage> & { toClientId?: string; toClientName?: string };
-  return {
-    id: r.id ?? "",
-    fromId: r.fromId ?? "",
-    fromName: r.fromName ?? "",
-    fromRole: r.fromRole ?? "production_member",
-    toId: r.toId ?? r.toClientId ?? "",
-    toName: r.toName ?? r.toClientName ?? "",
-    message: r.message ?? "",
-    sentAt: r.sentAt ?? "",
-    toClientId: r.toClientId,
-    toClientName: r.toClientName,
-  };
-};
-
 export default function ProductionPanel() {
   const { user, checkPermission } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = checkPermission("production", "EDIT");
 
   const [activeTab, setActiveTab] = useState("tasks");
@@ -141,51 +114,14 @@ export default function ProductionPanel() {
     localStorage.setItem(PROD_ASSIGNMENTS_KEY, JSON.stringify(assignments));
   }, [assignments]);
 
-  // ── Messaging state ──────────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    safeParse<any[]>(localStorage.getItem(PROD_MESSAGES_KEY), []).map(normMsg)
-  );
-  const [msgClient, setMsgClient] = useState<StoredClient | null>(null);
-  const [msgText, setMsgText] = useState("");
-  const chatEndRef = useRef<HTMLDivElement>(null);
-
-  // Thread between current user and the open client chat
-  const activeThread: ChatMessage[] = msgClient
-    ? messages
-        .filter(
-          (m) =>
-            (m.fromId === user?.id && (m.toId === msgClient.id || m.toClientId === msgClient.id)) ||
-            (m.fromId === msgClient.id && (m.toId === user?.id))
-        )
-        .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime())
-    : [];
-
-  // Auto-scroll to latest message when thread or modal changes
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeThread.length, msgClient]);
-
-  const sendMessage = () => {
-    if (!msgClient || !msgText.trim() || !user) return;
-    const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      fromId: user.id,
-      fromName: user.name,
-      fromRole: user.role,
-      toId: msgClient.id,
-      toName: msgClient.contactName,
-      toClientId: msgClient.id,
-      toClientName: msgClient.contactName,
-      message: msgText.trim(),
-      sentAt: new Date().toISOString(),
-    };
-    const updated = [...messages, newMsg];
-    setMessages(updated);
-    localStorage.setItem(PROD_MESSAGES_KEY, JSON.stringify(updated));
-    setMsgText("");
-    // keep modal open for continued conversation
-  };
+  // ── Conversation stats (for widget) ──────────────────────────────────────
+  const convStats = (() => {
+    if (!user) return { open: 0, awaitingTeam: 0, unreadByTeam: 0 };
+    const all = getConversations();
+    const visible = getVisibleConversations(all, user.role, user.id);
+    const s = getConvStats(visible);
+    return { open: s.open, awaitingTeam: s.awaitingTeam, unreadByTeam: s.unreadByTeam };
+  })();
 
   // ── Assignment helpers ───────────────────────────────────────────────────
   const toggleAssignment = async (clientId: string, memberId: string) => {
@@ -234,9 +170,6 @@ export default function ProductionPanel() {
         return directlyAssigned || assignedViaProject;
       });
 
-  // My messages sent (for member view)
-  const myMessages = messages.filter((m) => m.fromId === user?.id);
-
   // Visible tasks: admin sees all, member sees only assigned to them
   const visibleTasks: MockTask[] = isAdmin
     ? tasks
@@ -268,22 +201,33 @@ export default function ProductionPanel() {
       <PageBreadcrumb pageTitle="Production Dashboard" />
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{isAdmin ? "Total Projects" : "My Projects"}</p>
           <h4 className="mt-2 text-2xl font-bold text-gray-800 dark:text-white">{visibleProjects.length}</h4>
         </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Pending Tasks</p>
           <h4 className="mt-2 text-2xl font-bold text-yellow-500">{pendingTasks.length}</h4>
         </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
             {isAdmin ? "All Clients" : "My Clients"}
           </p>
           <h4 className="mt-2 text-2xl font-bold text-gray-800 dark:text-white">{myClients.length}</h4>
           {storedClients.length === 0 && <p className="text-xs text-gray-400 mt-1">Sales Admin must create clients</p>}
         </div>
+        <button
+          onClick={() => navigate("/conversations")}
+          className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 text-left hover:border-brand-300 dark:hover:border-brand-700 transition-colors group"
+        >
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Open Client Messages</p>
+          <h4 className="mt-2 text-2xl font-bold text-brand-600 dark:text-brand-400">{convStats.open}</h4>
+          {convStats.awaitingTeam > 0 && (
+            <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">{convStats.awaitingTeam} awaiting reply</p>
+          )}
+          <p className="text-xs text-brand-500 mt-1 group-hover:underline">View all →</p>
+        </button>
       </div>
 
       {/* Tabs */}
@@ -479,7 +423,7 @@ export default function ProductionPanel() {
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
                       <thead>
                         <tr>
-                          {["Contact", "Company", "Phone", "Email", "Created By", "Created", "Status", "Message", "Assign Members"].map((h) => (
+                          {["Contact", "Company", "Phone", "Email", "Created By", "Created", "Status", "Assign Members"].map((h) => (
                             <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                           ))}
                         </tr>
@@ -501,14 +445,6 @@ export default function ProductionPanel() {
                                   ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                                   : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                               }`}>{client.status}</span>
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <button
-                                onClick={() => { setMsgClient(client); setMsgText(""); }}
-                                className="text-xs font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/20 dark:hover:bg-brand-900/40 dark:text-brand-400 py-1 px-3 rounded-lg transition-colors whitespace-nowrap"
-                              >
-                                Message
-                              </button>
                             </td>
                             <td className="px-4 py-3 text-sm">
                               {members.length === 0 ? (
@@ -542,34 +478,37 @@ export default function ProductionPanel() {
                   )}
                 </div>
 
-                {/* Client Communications Log */}
+                {/* Client Messages Widget */}
                 <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-                  <h3 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Client Communications Log</h3>
-                  {messages.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">No messages yet. Use the Message button above to start a conversation with a client.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {messages.slice().reverse().map((msg) => {
-                        const isFromClient = msg.fromRole === "client";
-                        return (
-                          <div key={msg.id} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
-                            <div className="flex justify-between text-xs text-gray-500 mb-1">
-                              <span>
-                                <span className="font-medium text-gray-700 dark:text-gray-300">{msg.fromName}</span>
-                                <span className="mx-1">→</span>
-                                <span className="font-medium text-gray-700 dark:text-gray-300">{msg.toName || msg.toClientName}</span>
-                                {isFromClient && (
-                                  <span className="ml-1.5 px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">client reply</span>
-                                )}
-                              </span>
-                              <span>{new Date(msg.sentAt).toLocaleString()}</span>
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">{msg.message}</p>
-                          </div>
-                        );
-                      })}
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-white">Client Messages</h3>
+                    <button
+                      onClick={() => navigate("/conversations")}
+                      className="text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline"
+                    >
+                      View all →
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                      <p className="text-2xl font-bold text-green-600">{convStats.open}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Open</p>
                     </div>
-                  )}
+                    <div className="text-center p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                      <p className="text-2xl font-bold text-yellow-600">{convStats.awaitingTeam}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Awaiting Reply</p>
+                    </div>
+                    <div className="text-center p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                      <p className="text-2xl font-bold text-brand-600">{convStats.unreadByTeam}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Unread</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate("/conversations")}
+                    className="mt-4 w-full py-2 text-sm font-medium text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/40 rounded-xl transition-colors"
+                  >
+                    Open Client Messages
+                  </button>
                 </div>
               </div>
             )}
@@ -623,10 +562,10 @@ export default function ProductionPanel() {
                             </p>
                           </div>
                           <button
-                            onClick={() => { setMsgClient(client); setMsgText(""); }}
+                            onClick={() => navigate("/conversations")}
                             className="w-full text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/20 dark:hover:bg-brand-900/40 dark:text-brand-400 py-1.5 px-3 rounded-lg transition-colors"
                           >
-                            Message Client
+                            View Messages
                           </button>
                         </div>
                         );
@@ -635,50 +574,35 @@ export default function ProductionPanel() {
                   </div>
                 )}
 
-                {/* Conversations summary for member */}
-                {myMessages.length > 0 && (
-                  <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-                    <h3 className="mb-1 text-lg font-bold text-gray-800 dark:text-white">Recent Conversations</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Click a client card above to open the chat thread.</p>
-                    <div className="space-y-2">
-                      {storedClients
-                        .filter((c) => messages.some((m) =>
-                          (m.fromId === user?.id && (m.toId === c.id || m.toClientId === c.id)) ||
-                          (m.fromId === c.id && m.toId === user?.id)
-                        ))
-                        .map((c) => {
-                          const lastMsg = messages
-                            .filter((m) =>
-                              (m.fromId === user?.id && (m.toId === c.id || m.toClientId === c.id)) ||
-                              (m.fromId === c.id && m.toId === user?.id)
-                            )
-                            .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())[0];
-                          return (
-                            <button
-                              key={c.id}
-                              onClick={() => { setMsgClient(c); setMsgText(""); }}
-                              className="w-full flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 hover:bg-brand-50 dark:hover:bg-brand-900/20 text-left transition-colors"
-                            >
-                              <div className="w-9 h-9 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 font-bold text-sm flex-shrink-0">
-                                {c.contactName.charAt(0)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-gray-900 dark:text-white">{c.contactName}</p>
-                                {lastMsg && (
-                                  <p className="text-xs text-gray-400 truncate">{lastMsg.fromId === user?.id ? "You: " : ""}{lastMsg.message}</p>
-                                )}
-                              </div>
-                              {lastMsg && (
-                                <span className="text-xs text-gray-400 flex-shrink-0">
-                                  {new Date(lastMsg.sentAt).toLocaleDateString()}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
+                {/* Client Messages Widget for member */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-white">Client Messages</h3>
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                    View and reply to client conversations assigned to your department.
+                  </p>
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="text-center p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                      <p className="text-xl font-bold text-green-600">{convStats.open}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Open</p>
+                    </div>
+                    <div className="text-center p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                      <p className="text-xl font-bold text-yellow-600">{convStats.awaitingTeam}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Needs Reply</p>
+                    </div>
+                    <div className="text-center p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                      <p className="text-xl font-bold text-brand-600">{convStats.unreadByTeam}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Unread</p>
                     </div>
                   </div>
-                )}
+                  <button
+                    onClick={() => navigate("/conversations")}
+                    className="w-full py-2 text-sm font-medium text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/40 rounded-xl transition-colors"
+                  >
+                    Open Client Messages
+                  </button>
+                </div>
               </div>
             )}
           </>
@@ -686,93 +610,6 @@ export default function ProductionPanel() {
 
       </div>
 
-      {/* ── Chat Window ─────────────────────────────────────────────────────── */}
-      {msgClient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div
-            className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-2xl flex flex-col"
-            style={{ height: "540px" }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 font-bold text-sm">
-                  {msgClient.contactName.charAt(0)}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{msgClient.contactName}</p>
-                  <p className="text-xs text-gray-500">{msgClient.companyName} · {msgClient.email}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setMsgClient(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {activeThread.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-sm text-gray-400 dark:text-gray-500">No messages yet. Start the conversation!</p>
-                </div>
-              ) : (
-                activeThread.map((msg) => {
-                  const isMine = msg.fromId === user?.id;
-                  return (
-                    <div key={msg.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                      <div
-                        className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
-                          isMine
-                            ? "bg-brand-500 text-white rounded-br-sm"
-                            : "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-sm"
-                        }`}
-                      >
-                        {!isMine && (
-                          <p className="text-xs font-semibold mb-0.5 opacity-70">{msg.fromName}</p>
-                        )}
-                        <p className="text-sm leading-relaxed">{msg.message}</p>
-                        <p className={`text-xs mt-1 ${isMine ? "text-white/60" : "text-gray-400"}`}>
-                          {new Date(msg.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 flex-shrink-0">
-              <div className="flex gap-2 items-end">
-                <textarea
-                  rows={2}
-                  value={msgText}
-                  onChange={(e) => setMsgText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage();
-                    }
-                  }}
-                  placeholder="Type a message… (Enter to send)"
-                  className="flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white resize-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={!msgText.trim()}
-                  className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-xl transition-colors disabled:opacity-40 self-end"
-                >
-                  Send
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

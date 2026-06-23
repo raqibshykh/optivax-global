@@ -1,42 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import { useAuth } from "../../context/AuthContext";
 import { useClients } from "../../hooks/useClients";
 import { useToast } from "../../context/ToastContext";
 import { safeParse } from "../../lib/storage";
 import { notifyLeaveRequestSubmitted } from "../../services/notificationHelpers";
+import { getConversations } from "../../mock/conversationsData";
 
 // ── Leave Request types (shared with HRPanel) ─────────────────────────────
 const LEAVE_REQUESTS_KEY = "optivax_leave_requests";
-const PROD_MESSAGES_KEY = "optivax_client_messages";
-
-interface ChatMessage {
-  id: string;
-  fromId: string;
-  fromName: string;
-  fromRole: string;
-  toId: string;
-  toName: string;
-  message: string;
-  sentAt: string;
-  toClientId?: string;
-  toClientName?: string;
-}
-const normChatMsg = (m: Record<string, unknown>): ChatMessage => {
-  const r = m as Partial<ChatMessage> & { toClientId?: string; toClientName?: string };
-  return {
-    id: r.id ?? "",
-    fromId: r.fromId ?? "",
-    fromName: r.fromName ?? "",
-    fromRole: r.fromRole ?? "production_member",
-    toId: r.toId ?? r.toClientId ?? "",
-    toName: r.toName ?? r.toClientName ?? "",
-    message: r.message ?? "",
-    sentAt: r.sentAt ?? "",
-    toClientId: r.toClientId,
-    toClientName: r.toClientName,
-  };
-};
 
 export interface LeaveRequest {
   id: string;
@@ -84,108 +57,16 @@ export default function Profile() {
 
   const isEmployee = !!user && user.role !== "client";
 
-  // ── Chat state (clients only) ──────────────────────────────────────────
-  const [allChatMessages, setAllChatMessages] = useState<ChatMessage[]>([]);
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState("");
-  const chatEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (user?.role !== "client") return;
-    const load = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const all = safeParse<any[]>(localStorage.getItem(PROD_MESSAGES_KEY), []).map(normChatMsg);
-      const uid = user.id;
-      setAllChatMessages(
-        all.filter(
-          (m) =>
-            m.fromId === uid ||
-            m.toId === uid ||
-            m.toClientId === uid
-        )
-      );
+  // ── Conversation summary for client ──────────────────────────────────────
+  const convSummary = useMemo(() => {
+    if (!user || user.role !== "client") return { total: 0, unread: 0 };
+    const all = getConversations();
+    const mine = all.filter(c => c.clientId === user.id);
+    return {
+      total: mine.length,
+      unread: mine.reduce((sum, c) => sum + c.unreadByClient, 0),
     };
-    load();
-    window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
   }, [user]);
-
-  // Derive contacts: production members who have chatted with this client
-  // plus anyone in the client record's assignedProductionMembers[]
-  const contacts = useMemo(() => {
-    if (!user || user.role !== "client") return [];
-    const map = new Map<string, { id: string; name: string }>();
-
-    // From existing messages
-    allChatMessages.forEach((m) => {
-      const otherId = m.fromId === user.id ? m.toId : m.fromId;
-      const otherName = m.fromId === user.id ? m.toName : m.fromName;
-      if (otherId && otherId !== user.id && !map.has(otherId)) {
-        map.set(otherId, { id: otherId, name: otherName || otherId });
-      }
-    });
-
-    // From assigned production members in client record
-    const clientRecord = clients.find((c) => c.id === user.id);
-    const assignedIds: string[] = clientRecord?.assignedProductionMembers ?? [];
-    if (assignedIds.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const profiles = safeParse<any[]>(localStorage.getItem("mock_profiles"), []);
-      assignedIds.forEach((id) => {
-        if (!map.has(id)) {
-          const p = profiles.find((x) => x.id === id);
-          const name = p?.full_name ?? p?.name ?? id;
-          map.set(id, { id, name });
-        }
-      });
-    }
-
-    return Array.from(map.values());
-  }, [allChatMessages, clients, user]);
-
-  // Auto-select first contact when list loads
-  useEffect(() => {
-    if (contacts.length > 0 && !selectedContactId) {
-      setSelectedContactId(contacts[0].id);
-    }
-  }, [contacts, selectedContactId]);
-
-  // Active thread: messages between this client and the selected contact
-  const activeThread = useMemo(() => {
-    if (!selectedContactId || !user) return [];
-    return allChatMessages
-      .filter(
-        (m) =>
-          (m.fromId === user.id && (m.toId === selectedContactId)) ||
-          (m.fromId === selectedContactId && (m.toId === user.id || m.toClientId === user.id))
-      )
-      .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
-  }, [allChatMessages, selectedContactId, user]);
-
-  // Auto-scroll when thread updates
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeThread.length]);
-
-  const sendReply = () => {
-    if (!selectedContactId || !replyText.trim() || !user) return;
-    const contact = contacts.find((c) => c.id === selectedContactId);
-    const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      fromId: user.id,
-      fromName: user.name,
-      fromRole: "client",
-      toId: selectedContactId,
-      toName: contact?.name ?? selectedContactId,
-      message: replyText.trim(),
-      sentAt: new Date().toISOString(),
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const existing = safeParse<any[]>(localStorage.getItem(PROD_MESSAGES_KEY), []);
-    localStorage.setItem(PROD_MESSAGES_KEY, JSON.stringify([...existing, newMsg]));
-    setAllChatMessages((prev) => [...prev, newMsg]);
-    setReplyText("");
-  };
 
   // ── Client profile state ───────────────────────────────────────────────
   const [profile, setProfile] = useState<ClientProfile>(defaultProfile);
@@ -388,144 +269,37 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Chat with Production Team */}
+          {/* Messages — link to unified Messages page */}
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Messages</h3>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Chat with your assigned production team members.</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Conversations with your assigned team.</p>
               </div>
-              {allChatMessages.length > 0 && (
+              {convSummary.unread > 0 && (
                 <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400">
-                  {allChatMessages.length}
+                  {convSummary.unread} unread
                 </span>
               )}
             </div>
-
-            {contacts.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                No production team contacts assigned yet. Contact your account manager to get started.
-              </div>
-            ) : (
-              <div className="flex" style={{ height: "480px" }}>
-                {/* Contact list */}
-                <div className="w-56 border-r border-gray-200 dark:border-gray-800 flex-shrink-0 overflow-y-auto">
-                  {contacts.map((contact) => {
-                    const lastMsg = allChatMessages
-                      .filter(
-                        (m) =>
-                          (m.fromId === user?.id && m.toId === contact.id) ||
-                          (m.fromId === contact.id && (m.toId === user?.id || m.toClientId === user?.id))
-                      )
-                      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())[0];
-                    const isActive = selectedContactId === contact.id;
-                    return (
-                      <button
-                        key={contact.id}
-                        onClick={() => setSelectedContactId(contact.id)}
-                        className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0 ${
-                          isActive
-                            ? "bg-brand-50 dark:bg-brand-900/20"
-                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                        }`}
-                      >
-                        <div className="w-9 h-9 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 font-bold text-sm flex-shrink-0">
-                          {contact.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className={`text-sm font-medium truncate ${isActive ? "text-brand-700 dark:text-brand-400" : "text-gray-900 dark:text-white"}`}>
-                            {contact.name}
-                          </p>
-                          <p className="text-xs text-gray-400 truncate">
-                            {lastMsg ? lastMsg.message : "No messages yet"}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
+            <div className="p-6 flex flex-col items-center text-center gap-4">
+              <div className="grid grid-cols-2 gap-4 w-full max-w-xs">
+                <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{convSummary.total}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Conversations</p>
                 </div>
-
-                {/* Chat thread */}
-                <div className="flex-1 flex flex-col min-w-0">
-                  {selectedContactId ? (
-                    <>
-                      {/* Thread header */}
-                      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 flex-shrink-0">
-                        <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 font-bold text-sm">
-                          {contacts.find((c) => c.id === selectedContactId)?.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                            {contacts.find((c) => c.id === selectedContactId)?.name}
-                          </p>
-                          <p className="text-xs text-gray-400">Production Team</p>
-                        </div>
-                      </div>
-
-                      {/* Messages */}
-                      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                        {activeThread.length === 0 ? (
-                          <div className="flex items-center justify-center h-full">
-                            <p className="text-sm text-gray-400 dark:text-gray-500">No messages yet. Say hello!</p>
-                          </div>
-                        ) : (
-                          activeThread.map((msg) => {
-                            const isMine = msg.fromId === user?.id;
-                            return (
-                              <div key={msg.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                                <div
-                                  className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
-                                    isMine
-                                      ? "bg-brand-500 text-white rounded-br-sm"
-                                      : "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-sm"
-                                  }`}
-                                >
-                                  <p className="text-sm leading-relaxed">{msg.message}</p>
-                                  <p className={`text-xs mt-1 ${isMine ? "text-white/60" : "text-gray-400"}`}>
-                                    {new Date(msg.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                        <div ref={chatEndRef} />
-                      </div>
-
-                      {/* Reply input */}
-                      <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 flex-shrink-0">
-                        <div className="flex gap-2 items-end">
-                          <textarea
-                            rows={2}
-                            value={replyText}
-                            onChange={(e) => setReplyText(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                sendReply();
-                              }
-                            }}
-                            placeholder="Type a message… (Enter to send)"
-                            className="flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white resize-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                          />
-                          <button
-                            onClick={sendReply}
-                            disabled={!replyText.trim()}
-                            className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-xl transition-colors disabled:opacity-40 self-end"
-                          >
-                            Send
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center">
-                      <p className="text-sm text-gray-400">Select a contact to start chatting</p>
-                    </div>
-                  )}
+                <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                  <p className="text-2xl font-bold text-brand-600">{convSummary.unread}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Unread</p>
                 </div>
               </div>
-            )}
+              <Link
+                to="/client/messages"
+                className="w-full max-w-xs py-2.5 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-xl transition-colors text-center"
+              >
+                Open Messages
+              </Link>
+            </div>
           </div>
         </div>
       )}

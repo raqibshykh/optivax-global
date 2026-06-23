@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { RequirePermission } from "../../components/auth/RequirePermission";
@@ -12,6 +13,7 @@ import { UserService } from "../../services/userService";
 import { ClientService } from "../../services/clientService";
 import { notifyClientCreated } from "../../services/notificationHelpers";
 import { storeMockPassword } from "../../lib/client";
+import { getBudgets, getBudgetStats } from "../../mock/budgetData";
 
 const CLIENTS_KEY = "optivax_clients";
 
@@ -124,6 +126,7 @@ export default function SalesPanel() {
   const targets   = useMemo(() => getTargets(), []);
   const campaigns = useMemo(() => getCampaigns(), []);
   const tasks     = useMemo(() => getSalesTasks(), []);
+  const budgetStats = useMemo(() => getBudgetStats(getBudgets()), []);
 
   const teamRevenue  = targets.reduce((s, t) => s + t.achievedAmount, 0);
   const teamTarget   = targets.reduce((s, t) => s + t.monthlyTarget, 0);
@@ -251,6 +254,32 @@ export default function SalesPanel() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Budget summary (admin only) ─────────────────────────────────── */}
+      {isAdmin && (
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-5 mb-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Budget Overview</h3>
+            <Link to="/budget" className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline">Manage →</Link>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: "Total Budget",   value: `$${budgetStats.total.toLocaleString()}`,     color: "text-gray-900 dark:text-white" },
+              { label: "Used",           value: `$${budgetStats.used.toLocaleString()}`,      color: "text-blue-600 dark:text-blue-400" },
+              { label: "Remaining",      value: `$${budgetStats.remaining.toLocaleString()}`, color: budgetStats.remaining < 0 ? "text-red-600" : "text-green-600 dark:text-green-400" },
+              { label: "Utilization",    value: `${budgetStats.utilPct}%`,                    color: budgetStats.utilPct >= 90 ? "text-red-600" : "text-brand-600 dark:text-brand-400" },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="text-center p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                <div className={`text-lg font-bold ${color}`}>{value}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{label}</div>
+              </div>
+            ))}
+          </div>
+          {budgetStats.overspent > 0 && (
+            <p className="mt-3 text-xs text-red-600 dark:text-red-400">{budgetStats.overspent} budget(s) overspent — review required.</p>
+          )}
         </div>
       )}
 

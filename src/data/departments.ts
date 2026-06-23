@@ -32,4 +32,9 @@ export const departments: Department[] = [
     name: "Marketing",
     adminIds: adminIdsFor("Marketing"), // ["u10"]
   },
+  {
+    id: "d5",
+    name: "IT Support",
+    adminIds: adminIdsFor("IT Support"), // ["u16"]
+  },
 ];

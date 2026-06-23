@@ -213,7 +213,9 @@ function seedTasks(): void {
     { id: "t9",  title: "Deploy to staging",         description: "Push latest build to staging",   status: "in-progress", priority: "high",   assignee: "James Carter",   assigneeId: "u8",  dueDate: "2026-06-17", budget: 300,   budgetUsed: 120,  category: "general", assigneeDept: "dept-sales",        assigneeRole: "sales_admin" },
     { id: "t10", title: "Onboard client — Globex",   description: "Initial setup and handover",     status: "todo",        priority: "medium", assignee: "Sarah Mitchell", assigneeId: "u2",  dueDate: "2026-06-28", budget: 400,   budgetUsed: 0,    category: "general", assigneeRole: "management" },
     { id: "t11", title: "Q3 content calendar",       description: "Plan all social posts for Q3",   status: "in-progress", priority: "medium", assignee: "Noah Davis",     assigneeId: "u14", dueDate: "2026-07-05", budget: 350,   budgetUsed: 140,  category: "content",  assigneeDept: "dept-marketing",    assigneeRole: "marketing_member" },
-    { id: "t12", title: "Mobile UI prototype",       description: "Interactive Figma prototype",    status: "in-progress", priority: "high",   assignee: "Edgar Wright",   assigneeId: "u24", dueDate: "2026-07-10", budget: 1200,  budgetUsed: 480,  category: "general", assigneeDept: "dept-production",   assigneeRole: "production_member" },
+    { id: "t12", title: "Mobile UI prototype",       description: "Interactive Figma prototype",    status: "in-progress", priority: "high",   assignee: "Edgar Wright",   assigneeId: "u24", dueDate: "2026-07-10", budget: 1200,  budgetUsed: 480,  category: "general",  assigneeDept: "dept-production",   assigneeRole: "production_member" },
+    { id: "t13", title: "Network infrastructure audit", description: "Audit all switches and firewall rules", status: "in-progress", priority: "high", assignee: "Ryan Patel", assigneeId: "u16", dueDate: "2026-07-05", budget: 900, budgetUsed: 300, category: "general", assigneeDept: "dept-it-support", assigneeRole: "it_admin" },
+    { id: "t14", title: "ZKTeco firmware update",   description: "Upgrade firmware on all 5 biometric devices", status: "todo", priority: "medium", assignee: "Sophia Kim", assigneeId: "u26", dueDate: "2026-07-15", budget: 400, budgetUsed: 0, category: "general", assigneeDept: "dept-it-support", assigneeRole: "it_member" },
   ]);
 }
 
@@ -432,6 +434,13 @@ function seedLeaveRequests(): void {
       type: "Annual", startDate: "2026-06-20", endDate: "2026-06-23", days: 4,
       reason: "Short holiday", submittedAt: "2026-06-10T14:00:00Z",
     },
+    {
+      id: "leave-5", status: "Pending",
+      employeeId: "u26", employeeName: "Sophia Kim",
+      role: "it_member", department: "IT Support",
+      type: "Annual", startDate: "2026-07-14", endDate: "2026-07-18", days: 5,
+      reason: "Annual holiday", submittedAt: "2026-06-20T09:00:00Z",
+    },
   ]);
 }
 
@@ -456,6 +465,9 @@ function seedEmployeeExtras(): void {
     u23: { userId: "u23", salary: 53000,  salaryStatus: "Paid", workMode: "Onsite",  leavesTaken: 3 },
     u24: { userId: "u24", salary: 58000,  salaryStatus: "Paid", workMode: "Onsite",  leavesTaken: 2 },
     u25: { userId: "u25", salary: 50000,  salaryStatus: "Paid", workMode: "Onsite",  leavesTaken: 1 },
+    u16: { userId: "u16", salary: 95000,  salaryStatus: "Paid", workMode: "Onsite",  leavesTaken: 2 },
+    u26: { userId: "u26", salary: 65000,  salaryStatus: "Paid", workMode: "Onsite",  leavesTaken: 3 },
+    u27: { userId: "u27", salary: 70000,  salaryStatus: "Paid", workMode: "Hybrid",  leavesTaken: 1 },
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));

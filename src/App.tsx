@@ -16,6 +16,7 @@ import ProductionPanel from "./pages/Dashboard/ProductionPanel";
 import MarketingPanel from "./pages/Dashboard/MarketingPanel";
 import HRPanel from "./pages/Dashboard/HRPanel";
 import ManagementPanel from "./pages/Dashboard/ManagementPanel";
+import ITSupportPanel from "./pages/Dashboard/ITSupportPanel";
 
 // ── HR pages ─────────────────────────────────────────────────────────────
 import Employees from "./pages/HR/Employees";
@@ -58,6 +59,27 @@ import Deliverables from "./pages/Production/Deliverables";
 // ── Marketing pages ───────────────────────────────────────────────────────
 import SocialTracking from "./pages/Marketing/SocialTracking";
 import MarketingLeads from "./pages/Marketing/Leads";
+
+// ── Client Communication pages ────────────────────────────────────────────
+import ClientConversations from "./pages/Conversations/ClientConversations";
+import ClientMessages from "./pages/Client/Messages";
+
+// ── Budget Management ─────────────────────────────────────────────────────
+import BudgetManagement from "./pages/Budget/BudgetManagement";
+
+// ── Payroll & Salary ──────────────────────────────────────────────────────
+import SalarySlips from "./pages/HR/SalarySlips";
+import AdvanceSalary from "./pages/HR/AdvanceSalary";
+import MySalarySlips from "./pages/Employee/MySalarySlips";
+import AdvanceSalaryRequest from "./pages/Employee/AdvanceSalaryRequest";
+
+// ── IT Support pages ─────────────────────────────────────────────────────
+import AttendanceDashboard from "./pages/ITSupport/AttendanceDashboard";
+import Devices from "./pages/ITSupport/Devices";
+import DeviceLogs from "./pages/ITSupport/DeviceLogs";
+import AttendanceExceptions from "./pages/ITSupport/AttendanceExceptions";
+import AttendanceReports from "./pages/ITSupport/AttendanceReports";
+import ITTickets from "./pages/ITSupport/Tickets";
 
 // ── Admin feature pages ───────────────────────────────────────────────────
 import Departments from "./pages/Admin/Departments";
@@ -222,6 +244,47 @@ export default function App() {
             </Route>
           </Route>
 
+          {/* ── CLIENT CONVERSATIONS — all client-facing depts + management/super_admin ── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "sales_member", "marketing_admin", "marketing_member", "production_admin", "production_member"]} />}>
+            <Route path="/conversations" element={<ClientConversations />} />
+          </Route>
+
+          {/* ── BUDGET MANAGEMENT ─────────────────────────────────────────── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "production_admin", "marketing_admin", "hr_admin"]} />}>
+            <Route path="/budget" element={<BudgetManagement />} />
+          </Route>
+
+          {/* ── PAYROLL / SALARY SLIPS (admin view) ───────────────────────── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "hr_admin"]} />}>
+            <Route path="/hr/salary-slips"    element={<SalarySlips />} />
+            <Route path="/hr/advance-salary"  element={<AdvanceSalary />} />
+          </Route>
+
+          {/* ── SALARY SLIPS + ADVANCE (cross-cutting — all non-IT employees) */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "sales_member", "production_admin", "production_member", "marketing_admin", "marketing_member", "hr_admin", "hr_member"]} />}>
+            <Route path="/salary-slips"       element={<MySalarySlips />} />
+            <Route path="/advance-salary"     element={<AdvanceSalaryRequest />} />
+          </Route>
+
+          {/* ── IT TICKETS — all internal staff (non-client) can submit ── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "sales_member", "production_admin", "production_member", "marketing_admin", "marketing_member", "hr_admin", "hr_member", "it_admin", "it_member"]} />}>
+            <Route path="/it/tickets" element={<ITTickets />} />
+          </Route>
+
+          {/* ── IT SUPPORT ────────────────────────────────────────── */}
+          {/* No billing / payroll / salary / financial routes exposed here. */}
+          <Route element={<ProtectedRoute allowedDomain="it_support" allowedRoles={["it_admin", "it_member"]} />}>
+            <Route path="/it"               element={<Navigate to="/it/dashboard" replace />} />
+            <Route path="/it/dashboard"     element={<ITSupportPanel />} />
+            <Route path="/it/attendance"    element={<AttendanceDashboard />} />
+            <Route path="/it/devices"       element={<Devices />} />
+            <Route path="/it/device-logs"   element={<DeviceLogs />} />
+            <Route path="/it/exceptions"    element={<AttendanceExceptions />} />
+            <Route path="/it/reports"       element={<AttendanceReports />} />
+            <Route path="/it/notifications" element={<AdminNotifications />} />
+            <Route path="/it/profile"       element={<Profile />} />
+          </Route>
+
           {/* ── CLIENT ────────────────────────────────────────────── */}
           <Route element={<ProtectedRoute allowedDomain="clients" allowedRoles={["client"]} />}>
             <Route path="/client"               element={<Navigate to="/client/dashboard" replace />} />
@@ -230,6 +293,7 @@ export default function App() {
             <Route path="/client/billing"       element={<ClientBilling />} />
             <Route path="/client/files"         element={<ClientFiles />} />
             <Route path="/client/notifications" element={<ClientNotifications />} />
+            <Route path="/client/messages"      element={<ClientMessages />} />
             <Route path="/client/revisions"     element={<MyRevisions />} />
             <Route path="/client/profile"       element={<Profile />} />
           </Route>

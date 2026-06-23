@@ -7,6 +7,7 @@ export const ROLE_HOME: Record<UserRole, string> = {
   production_admin: "/production/dashboard",
   marketing_admin: "/marketing/dashboard",
   hr_admin: "/hr/dashboard",
+  it_admin: "/it/dashboard",
   management: "/management/dashboard",
   client: "/client/dashboard",
   // Member variants map to their department dashboards
@@ -14,6 +15,7 @@ export const ROLE_HOME: Record<UserRole, string> = {
   production_member: "/production/dashboard",
   marketing_member: "/marketing/dashboard",
   hr_member: "/hr/dashboard",
+  it_member: "/it/dashboard",
 };
 
 export const getRoleHome = (role: UserRole): string =>

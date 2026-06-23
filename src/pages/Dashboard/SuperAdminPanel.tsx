@@ -44,12 +44,15 @@ const ALL_ROLES = [
   { value: "production_member", label: "Production Member" },
   { value: "marketing_admin",   label: "Marketing Admin" },
   { value: "marketing_member",  label: "Marketing Member" },
+  { value: "it_admin",          label: "IT Admin" },
+  { value: "it_member",         label: "IT Member" },
   { value: "client",            label: "Client" },
 ];
 
 const DEPT_MAP: Record<string, string> = {
   sales: "Sales", marketing: "Marketing", production: "Production",
   hr: "HR", management: "Management", super_admin: "Management", client: "Client",
+  it: "IT Support",
 };
 
 const getDept = (role?: string): string => {
@@ -61,13 +64,14 @@ const getDept = (role?: string): string => {
 };
 
 const DEPT_COLORS: Record<string, string> = {
-  Sales:      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
-  Marketing:  "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300",
-  Production: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-  HR:         "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
-  Management: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
-  Client:     "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  General:    "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
+  Sales:        "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  Marketing:    "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300",
+  Production:   "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
+  HR:           "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
+  Management:   "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  "IT Support": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
+  Client:       "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  General:      "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -113,9 +117,12 @@ const PANEL_LINKS = [
   { label: "Marketing Tasks",    path: "/marketing/tasks",          dept: "Marketing" },
   { label: "Social Tracking",    path: "/marketing/social",         dept: "Marketing" },
   { label: "Prod. Deliverables", path: "/production/deliverables",  dept: "Production" },
-  { label: "Email Campaigns",    path: "/admin/email/campaigns",    dept: "Management" },
-  { label: "Billing",            path: "/admin/billing",            dept: "Management" },
-  { label: "Audit Logs",         path: "/admin/audit-logs",         dept: "Management" },
+  { label: "IT Support",          path: "/it/dashboard",             dept: "IT Support" },
+  { label: "IT Tickets",          path: "/it/tickets",               dept: "IT Support" },
+  { label: "Biometric Devices",   path: "/it/devices",               dept: "IT Support" },
+  { label: "Email Campaigns",     path: "/admin/email/campaigns",    dept: "Management" },
+  { label: "Billing",             path: "/admin/billing",            dept: "Management" },
+  { label: "Audit Logs",          path: "/admin/audit-logs",         dept: "Management" },
 ];
 
 const LEAVE_KEY = "optivax_leave_requests";
@@ -326,7 +333,7 @@ export default function SuperAdminPanel() {
   ], [mockTasks, salesTasks]);
 
   const depts = useMemo(() => {
-    const map: Record<string, UserProfile[]> = { Sales: [], Marketing: [], Production: [], HR: [], Management: [] };
+    const map: Record<string, UserProfile[]> = { Sales: [], Marketing: [], Production: [], HR: [], Management: [], "IT Support": [] };
     employees.forEach(u => { const d = getDept(u.role); if (map[d]) map[d].push(u); });
     return map;
   }, [employees]);
@@ -410,6 +417,9 @@ export default function SuperAdminPanel() {
       "sales_campaigns", "sales_tasks", "sales_targets",
       "social_links", "social_clicks", "social_account_metrics",
       "optivax_audit_logs", "mock_notifications", "mock_passwords",
+      "mock_it_tickets", "mock_biometric_devices", "mock_device_sync_logs", "mock_attendance_exceptions",
+      "mock_conversations", "mock_budgets", "mock_budget_audit_logs",
+      "mock_salary_slips", "mock_advance_requests",
     ];
     MOCK_KEYS.forEach(k => localStorage.removeItem(k));
     seedAllMockData();

@@ -6,12 +6,14 @@ export type UserRole =
   | "production_admin" | "production_member"
   | "marketing_admin" | "marketing_member"
   | "hr_admin" | "hr_member"
+  | "it_admin" | "it_member"
   | "client";
 
 export type PermissionDomain =
-  | "sales" | "production" | "marketing" | "hr"
+  | "sales" | "production" | "marketing" | "hr" | "it_support"
   | "clients" | "system" | "billing" | "reports"
-  | "files" | "notifications" | "revisions";
+  | "files" | "notifications" | "revisions" | "conversations" | "budget"
+  | "payroll" | "salary_slips" | "advance_salary";
 
 export type PermissionAction =
   | "VIEW" | "CREATE" | "EDIT" | "DELETE"
@@ -47,6 +49,8 @@ export const DESIGNATIONS_BY_ROLE: Partial<Record<UserRole, string[]>> = {
   sales_member:      ["Sales Executive", "Account Executive", "Business Development Executive"],
   hr_admin:          ["HR Manager", "HR Lead"],
   hr_member:         ["Recruiter", "HR Executive", "Payroll Specialist"],
+  it_admin:          ["IT Manager", "IT Lead", "Systems Administrator"],
+  it_member:         ["IT Support Specialist", "Help Desk Technician", "Network Engineer", "Systems Engineer", "Field Technician"],
   management:        ["Director", "VP", "C-Level Executive"],
 };
 

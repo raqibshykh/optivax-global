@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
@@ -9,6 +9,7 @@ import { UserService, UserProfile } from "../../services/userService";
 import { notifyUserCreated } from "../../services/notificationHelpers";
 import { useAuth } from "../../context/AuthContext";
 import { storeMockPassword } from "../../lib/client";
+import { getAdvanceRequests } from "../../mock/payrollData";
 
 const LEAVE_REQUESTS_KEY = "optivax_leave_requests";
 const EXTRA_KEY = "optivax_employee_extra";
@@ -162,6 +163,10 @@ export default function HRPanel() {
   // ── Derived ───────────────────────────────────────────────────────────
   const pendingLeaves = leaveRequests.filter((r) => r.status === "Pending").length;
 
+  const pendingAdvance = useMemo(() =>
+    getAdvanceRequests().filter(r => r.status === "pending").length,
+  []);
+
   const deptCount = new Set(
     employees.map((u) => u.departmentId || (u.role ? u.role.split("_")[0] : "other"))
   ).size;
@@ -271,7 +276,7 @@ export default function HRPanel() {
       <PageBreadcrumb pageTitle="HR Dashboard" />
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Employees</p>
           <h4 className="mt-2 text-2xl font-bold text-gray-800 dark:text-white">
@@ -296,6 +301,15 @@ export default function HRPanel() {
           <h4 className="mt-2 text-2xl font-bold text-red-500 dark:text-red-400">
             {employees.filter((e) => getStatusForDate(e.id, todayStr) === "Absent").length}
           </h4>
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Advance Requests</p>
+          <h4 className={`mt-2 text-2xl font-bold ${pendingAdvance > 0 ? "text-orange-500 dark:text-orange-400" : "text-gray-800 dark:text-white"}`}>
+            {pendingAdvance}
+          </h4>
+          <Link to="/hr/advance-salary" className="text-xs text-brand-500 hover:text-brand-600 mt-1 block">
+            {pendingAdvance > 0 ? "Review pending →" : "View all →"}
+          </Link>
         </div>
       </div>
 

@@ -27,13 +27,14 @@ interface DeptFormData {
 const STORAGE_KEY = "mock_departments";
 
 const DOMAIN_OPTIONS: { value: PermissionDomain; label: string }[] = [
-  { value: "sales",      label: "Sales"      },
-  { value: "production", label: "Production" },
-  { value: "marketing",  label: "Marketing"  },
-  { value: "hr",         label: "HR"         },
-  { value: "system",     label: "System"     },
-  { value: "billing",    label: "Billing"    },
-  { value: "reports",    label: "Reports"    },
+  { value: "sales",       label: "Sales"       },
+  { value: "production",  label: "Production"  },
+  { value: "marketing",   label: "Marketing"   },
+  { value: "hr",          label: "HR"          },
+  { value: "it_support",  label: "IT Support"  },
+  { value: "system",      label: "System"      },
+  { value: "billing",     label: "Billing"     },
+  { value: "reports",     label: "Reports"     },
 ];
 
 const DOMAIN_COLORS: Record<string, string> = {
@@ -41,16 +42,18 @@ const DOMAIN_COLORS: Record<string, string> = {
   production: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
   marketing:  "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300",
   hr:         "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
+  it_support: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
   system:     "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
   billing:    "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
   reports:    "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
 };
 
 const SEED_DEPARTMENTS: Department[] = [
-  { id: "dept-sales",      name: "Sales",      domain: "sales",      description: "Revenue generation and client acquisition", createdAt: "2026-01-01T00:00:00Z" },
-  { id: "dept-production", name: "Production", domain: "production", description: "Project delivery and development",           createdAt: "2026-01-01T00:00:00Z" },
-  { id: "dept-marketing",  name: "Marketing",  domain: "marketing",  description: "Brand, campaigns and lead generation",       createdAt: "2026-01-01T00:00:00Z" },
-  { id: "dept-hr",         name: "HR",         domain: "hr",         description: "People operations and payroll",             createdAt: "2026-01-01T00:00:00Z" },
+  { id: "dept-sales",       name: "Sales",       domain: "sales",      description: "Revenue generation and client acquisition",       createdAt: "2026-01-01T00:00:00Z" },
+  { id: "dept-production",  name: "Production",  domain: "production", description: "Project delivery and development",                createdAt: "2026-01-01T00:00:00Z" },
+  { id: "dept-marketing",   name: "Marketing",   domain: "marketing",  description: "Brand, campaigns and lead generation",            createdAt: "2026-01-01T00:00:00Z" },
+  { id: "dept-hr",          name: "HR",          domain: "hr",         description: "People operations and payroll",                   createdAt: "2026-01-01T00:00:00Z" },
+  { id: "dept-it-support",  name: "IT Support",  domain: "it_support", description: "Biometric attendance, devices and IT ticketing",  createdAt: "2026-01-01T00:00:00Z" },
 ];
 
 function loadDepts(): Department[] {
@@ -185,7 +188,8 @@ export default function Departments() {
               dept.domain === "sales" ? "bg-green-500" :
               dept.domain === "production" ? "bg-orange-500" :
               dept.domain === "marketing" ? "bg-pink-500" :
-              dept.domain === "hr" ? "bg-indigo-500" : "bg-brand-500"
+              dept.domain === "hr" ? "bg-indigo-500" :
+              dept.domain === "it_support" ? "bg-cyan-500" : "bg-brand-500"
             }`} />
             <div className="p-5">
               <div className="flex items-start justify-between gap-3 mb-3">

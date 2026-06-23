@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import { UserService, UserProfile } from "../../services/userService";
 import EmployeeHierarchy from "../../components/dashboard/EmployeeHierarchy";
 import ActivityFeed from "../../components/dashboard/ActivityFeed";
 import { safeParse } from "../../lib/storage";
 import { StoredClient, Deliverable } from "../../types";
+import { getBudgets, getBudgetStats } from "../../mock/budgetData";
+import { getAdvanceRequests } from "../../mock/payrollData";
 
 const CLIENTS_KEY   = "optivax_clients";
 const DELIVS_KEY    = "optivax_deliverables";
@@ -64,9 +67,14 @@ export default function ManagementPanel() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [projects, setProjects] = useState<MockProject[]>([]);
   const [payments, setPayments] = useState<{ amount: number }[]>([]);
+  const [budgetStats, setBudgetStats] = useState({ total: 0, used: 0, remaining: 0, utilPct: 0, active: 0, overspent: 0, count: 0 });
+  const [advancePending, setAdvancePending] = useState({ count: 0, total: 0 });
 
   useEffect(() => {
     UserService.getAll().then(setAllUsers).catch(() => {});
+    setBudgetStats(getBudgetStats(getBudgets()));
+    const advReqs = getAdvanceRequests().filter(r => r.status === "pending");
+    setAdvancePending({ count: advReqs.length, total: advReqs.reduce((s, r) => s + r.requestedAmount, 0) });
     setClients(safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []));
     setDeliverables(safeParse<Deliverable[]>(localStorage.getItem(DELIVS_KEY), []));
     const generalTasks = safeParse<MockTask[]>(localStorage.getItem(TASKS_KEY), []);
@@ -407,6 +415,50 @@ export default function ManagementPanel() {
               )}
             </SectionCard>
           </div>
+
+          {/* Budget Overview */}
+          <SectionCard title="Budget Overview">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              {[
+                { label: "Total Budget",   value: `$${budgetStats.total.toLocaleString()}`,   color: "text-gray-900 dark:text-white" },
+                { label: "Used",           value: `$${budgetStats.used.toLocaleString()}`,    color: "text-blue-600" },
+                { label: "Remaining",      value: `$${budgetStats.remaining.toLocaleString()}`, color: budgetStats.remaining < 0 ? "text-red-600" : "text-green-600" },
+                { label: "Utilization",    value: `${budgetStats.utilPct}%`,                  color: budgetStats.utilPct >= 90 ? "text-red-600" : budgetStats.utilPct >= 70 ? "text-yellow-600" : "text-green-600" },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                  <div className={`text-xl font-bold ${color}`}>{value}</div>
+                  <div className="text-xs text-gray-500 mt-1">{label}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">{budgetStats.active} active · {budgetStats.overspent} overspent · {budgetStats.count} total budgets</span>
+              <Link to="/budget" className="text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline">Manage Budgets →</Link>
+            </div>
+          </SectionCard>
+
+          {/* Advance Salary Requests */}
+          <SectionCard title="Advance Salary Requests">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                <div className={`text-xl font-bold ${advancePending.count > 0 ? "text-orange-500" : "text-gray-900 dark:text-white"}`}>
+                  {advancePending.count}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">Pending Requests</div>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                <div className={`text-xl font-bold ${advancePending.total > 0 ? "text-orange-500" : "text-gray-900 dark:text-white"}`}>
+                  Rs. {advancePending.total.toLocaleString()}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">Pending Amount</div>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Link to="/hr/advance-salary" className="text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline">
+                {advancePending.count > 0 ? `Review ${advancePending.count} pending →` : "View all →"}
+              </Link>
+            </div>
+          </SectionCard>
         </div>
       )}
 

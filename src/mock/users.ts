@@ -113,6 +113,38 @@ export const mockUsers: User[] = [
     departmentId: "dept-hr",
   },
 
+  // ── IT Support ───────────────────────────────────────────────────────────
+  {
+    id: "u16",
+    email: "it.admin@example.com",
+    password: "password123",
+    name: "Ryan Patel",
+    role: "it_admin",
+    avatar: "https://i.pravatar.cc/150?img=16",
+    joinDate: d,
+    departmentId: "dept-it-support",
+  },
+  {
+    id: "u26",
+    email: "it.member@example.com",
+    password: "password123",
+    name: "Sophia Kim",
+    role: "it_member",
+    avatar: "https://i.pravatar.cc/150?img=26",
+    joinDate: d,
+    departmentId: "dept-it-support",
+  },
+  {
+    id: "u27",
+    email: "it.member2@example.com",
+    password: "password123",
+    name: "Marcus Bell",
+    role: "it_member",
+    avatar: "https://i.pravatar.cc/150?img=27",
+    joinDate: d,
+    departmentId: "dept-it-support",
+  },
+
   // ── Employees (mock staff) ─────────────────────────────────────────────────
   {
     id: "u20",

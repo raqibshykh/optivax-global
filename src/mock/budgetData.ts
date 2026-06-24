@@ -293,7 +293,7 @@ function seedAuditLogs(): BudgetAuditLog[] {
       id: "al-008", budgetId: "bud-010", budgetName: "Employee Training Program Q2",
       action: "adjust", previousValue: 40000, newValue: 40000,
       changedById: "u2", changedByName: "Rania Al-Sayed",
-      timestamp: "2026-06-12T16:00:00Z", reason: "Budget reviewed — overspend of $200 due to external trainer overtime. Flagged for Q3 top-up.",
+      timestamp: "2026-06-12T16:00:00Z", reason: "Budget reviewed — overspend of $200 due to extended external training sessions. Flagged for Q3 top-up.",
     },
     {
       id: "al-009", budgetId: "bud-007", budgetName: "Social Media Brand Campaign",

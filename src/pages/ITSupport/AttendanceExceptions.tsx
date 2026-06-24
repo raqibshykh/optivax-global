@@ -12,7 +12,6 @@ const EXCEPTION_LABELS: Record<ExceptionType, string> = {
   "missing-punch":    "Missing Punch",
   "late-arrival":     "Late Arrival",
   "early-departure":  "Early Departure",
-  "overtime":         "Overtime",
   "no-record":        "No Record",
 };
 

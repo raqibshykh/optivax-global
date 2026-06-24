@@ -66,7 +66,7 @@ export interface DeviceSyncLog {
 
 // ── Attendance exception types ─────────────────────────────────────────────────
 
-export type ExceptionType = "missing-punch" | "late-arrival" | "early-departure" | "overtime" | "no-record";
+export type ExceptionType = "missing-punch" | "late-arrival" | "early-departure" | "no-record";
 
 export interface AttendanceException {
   id: string;
@@ -424,19 +424,6 @@ export const mockAttendanceExceptions: AttendanceException[] = [
     expectedCheckIn: "09:00",
     status: "approved",
     notes: "Approved — medical appointment.",
-  },
-  {
-    id: "exc-006",
-    employeeId: "u25",
-    employeeName: "Fiona Gallagher",
-    department: "HR",
-    date: new Date(now.getTime() - 3 * 86_400_000).toISOString().split("T")[0],
-    exceptionType: "overtime",
-    checkIn: "08:45",
-    checkOut: "21:15",
-    expectedCheckIn: "09:00",
-    status: "approved",
-    notes: "Payroll quarter-end — pre-approved overtime.",
   },
 ];
 

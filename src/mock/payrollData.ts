@@ -16,10 +16,9 @@ export interface SalarySlip {
   basicSalary: number;
   allowances: PayrollItem[];
   bonuses: PayrollItem[];
-  overtime: number;          // total overtime pay amount
   deductions: PayrollItem[];
   advanceSalaryDeduction: number;
-  grossSalary: number;       // basic + allowances + bonuses + overtime
+  grossSalary: number;       // basic + allowances + bonuses
   totalDeductions: number;   // deductions + advanceSalaryDeduction
   netSalary: number;         // grossSalary - totalDeductions
   generatedAt: string;
@@ -58,8 +57,7 @@ export const ADVANCE_REQUESTS_KEY   = "mock_advance_requests";
 export const computeGross = (s: SalarySlip) =>
   s.basicSalary +
   s.allowances.reduce((a, i) => a + i.amount, 0) +
-  s.bonuses.reduce((a, i) => a + i.amount, 0) +
-  s.overtime;
+  s.bonuses.reduce((a, i) => a + i.amount, 0);
 
 export const computeDeductions = (s: SalarySlip) =>
   s.advanceSalaryDeduction;
@@ -86,7 +84,6 @@ const SEED_SLIPS: SalarySlip[] = [
     bonuses: [
       { label: "Performance Bonus", amount: 10000 },
     ],
-    overtime: 0,
     deductions: [],
     advanceSalaryDeduction: 0,
     grossSalary: 65000,
@@ -112,7 +109,6 @@ const SEED_SLIPS: SalarySlip[] = [
       { label: "Medical Allowance",    amount: 2500 },
     ],
     bonuses: [],
-    overtime: 4500,
     deductions: [],
     advanceSalaryDeduction: 15000,
     grossSalary: 55000,
@@ -140,7 +136,6 @@ const SEED_SLIPS: SalarySlip[] = [
     bonuses: [
       { label: "Campaign Bonus", amount: 5000 },
     ],
-    overtime: 0,
     deductions: [],
     advanceSalaryDeduction: 0,
     grossSalary: 48000,
@@ -168,7 +163,6 @@ const SEED_SLIPS: SalarySlip[] = [
     bonuses: [
       { label: "Quarterly Bonus", amount: 20000 },
     ],
-    overtime: 3000,
     deductions: [],
     advanceSalaryDeduction: 0,
     grossSalary: 65000,
@@ -193,7 +187,6 @@ const SEED_SLIPS: SalarySlip[] = [
       { label: "Transport Allowance",  amount: 3000 },
     ],
     bonuses: [],
-    overtime: 0,
     deductions: [],
     advanceSalaryDeduction: 0,
     grossSalary: 42000,
@@ -221,7 +214,6 @@ const SEED_SLIPS: SalarySlip[] = [
     bonuses: [
       { label: "Project Completion Bonus", amount: 8000 },
     ],
-    overtime: 6000,
     deductions: [],
     advanceSalaryDeduction: 0,
     grossSalary: 55000,

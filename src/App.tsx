@@ -23,6 +23,12 @@ import Employees from "./pages/HR/Employees";
 import Payroll from "./pages/HR/Payroll";
 import LeaveRequests from "./pages/HR/LeaveRequests";
 import Attendance from "./pages/HR/Attendance";
+import AttendanceMonthly from "./pages/HR/AttendanceMonthly";
+import AttendanceYearly from "./pages/HR/AttendanceYearly";
+import AttendanceAnalytics from "./pages/HR/AttendanceAnalytics";
+import AttendanceCalendar from "./pages/HR/AttendanceCalendar";
+import AttendancePayroll from "./pages/HR/AttendancePayroll";
+import AttendanceCorrections from "./pages/HR/AttendanceCorrections";
 
 // ── Admin / shared pages ──────────────────────────────────────────────────
 import Clients from "./pages/Admin/Clients";
@@ -221,7 +227,17 @@ export default function App() {
             </Route>
             <Route path="/hr/payroll"        element={<Payroll />} />
             <Route path="/hr/leave"          element={<LeaveRequests />} />
-            <Route path="/hr/attendance"     element={<Attendance />} />
+            <Route path="/hr/attendance"         element={<Attendance />} />
+            <Route path="/hr/attendance/monthly" element={<AttendanceMonthly />} />
+            <Route path="/hr/attendance/yearly"  element={<AttendanceYearly />} />
+            <Route path="/hr/attendance/analytics"   element={<AttendanceAnalytics />} />
+            <Route path="/hr/attendance/calendar"    element={<AttendanceCalendar />} />
+            <Route element={<ProtectedRoute allowedDomain="hr" allowedRoles={["hr_admin", "management"]} />}>
+              <Route path="/hr/attendance/payroll" element={<AttendancePayroll />} />
+            </Route>
+            <Route element={<ProtectedRoute allowedDomain="hr" allowedRoles={["super_admin"]} />}>
+              <Route path="/hr/attendance/corrections" element={<AttendanceCorrections />} />
+            </Route>
             <Route path="/hr/tasks"          element={<Tasks />} />
             <Route path="/hr/files"          element={<AdminFiles />} />
             <Route path="/hr/settings"       element={<Settings />} />

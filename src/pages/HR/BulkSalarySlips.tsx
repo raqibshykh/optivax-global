@@ -83,8 +83,7 @@ function buildSlip(
 
   const allowances: PayrollItem[] = [];  // breakdown is display-only, not stored
   const bonuses: PayrollItem[]    = template?.bonuses?.map(b => ({ ...b })) ?? [];
-  const overtime                  = template?.overtime ?? 0;
-  
+
   // Only advance salary recovery is deducted per policy
   const strictDeductions       = computeStrictDeductions(emp.id, month, basicSalary);
   const deductions: PayrollItem[] = [];
@@ -104,7 +103,6 @@ function buildSlip(
     basicSalary,
     allowances,
     bonuses,
-    overtime,
     deductions,
     advanceSalaryDeduction,
     grossSalary,

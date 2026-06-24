@@ -102,7 +102,6 @@ export default function AttendanceReports() {
               { label: "Missing Punches",   count: missingPunches, color: "bg-red-500" },
               { label: "Late Arrivals",     count: lateArrivals, color: "bg-yellow-500" },
               { label: "Early Departures",  count: exceptions.filter(e => e.exceptionType === "early-departure").length, color: "bg-orange-500" },
-              { label: "Overtime",          count: exceptions.filter(e => e.exceptionType === "overtime").length, color: "bg-blue-500" },
               { label: "No Records",        count: exceptions.filter(e => e.exceptionType === "no-record").length, color: "bg-gray-500" },
             ].map(item => (
               <div key={item.label} className="flex items-center gap-3">

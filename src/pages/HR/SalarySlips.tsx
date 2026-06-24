@@ -185,7 +185,6 @@ function GenerateSlipModal({
   const [basicSalary, setBasicSalary] = useState("");
   const [allowances, setAllowances] = useState<PayrollItem[]>([]);
   const [bonuses, setBonuses] = useState<PayrollItem[]>([]);
-  const [overtime, setOvertime] = useState("0");
   const [designation, setDesignation] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
@@ -213,7 +212,6 @@ function GenerateSlipModal({
 
   const selectedEmp = employees.find(e => e.id === empId);
   const basic = parseFloat(basicSalary) || 0;
-  const ot    = parseFloat(overtime) || 0;
 
   // Auto-calculated deductions based on strict rules
   const strictDeductions = useMemo(() => {
@@ -255,7 +253,6 @@ function GenerateSlipModal({
       basicSalary: basic,
       allowances: allowances.filter(i => i.label && i.amount > 0),
       bonuses: bonuses.filter(i => i.label && i.amount > 0),
-      overtime: ot,
       deductions: [],
       advanceSalaryDeduction: adv,
       grossSalary: basic,
@@ -313,13 +310,6 @@ function GenerateSlipModal({
 
           {/* Bonuses */}
           <ItemList items={bonuses} onChange={setBonuses} label="Bonuses" />
-
-          {/* Overtime */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Overtime Amount (Rs.)</label>
-            <input type="number" min="0" className={inputCls} value={overtime}
-              onChange={e => setOvertime(e.target.value)} />
-          </div>
 
           {/* Advance Salary Recovery (auto-detected) */}
           {adv > 0 && (

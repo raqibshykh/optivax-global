@@ -157,20 +157,7 @@ export default function AdvanceSalaryRequest() {
     [requests, filterStatus]
   );
 
-  const hasPending  = requests.some(r => r.status === "pending");
-  const isITUser    = (user?.role ?? "").startsWith("it_");
-
-  if (isITUser) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <PageMeta title="Access Denied" description="" />
-        <div className="text-center p-8 rounded-2xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800">
-          <p className="text-lg font-semibold text-red-700 dark:text-red-400">Access Denied</p>
-          <p className="text-sm text-red-600 dark:text-red-300 mt-2">IT Support does not have access to advance salary requests.</p>
-        </div>
-      </div>
-    );
-  }
+  const hasPending = requests.some(r => r.status === "pending");
 
   const handleSubmit = (amount: number, reason: string) => {
     const dept = getDeptFromRole(user?.role ?? "");

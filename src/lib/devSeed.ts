@@ -518,6 +518,34 @@ function seedSubscriptions(): void {
   ]);
 }
 
+// ── Social Tracking ───────────────────────────────────────────────────────────
+function seedSocialTracking(): void {
+  seedKey("social_links", [
+    { id: "sl-1", trackingId: "trk-fb001", platform: "facebook",   label: "Optivax Facebook Page",    url: "https://facebook.com/optivax",   status: "active", createdAt: "2026-04-01T00:00:00Z", createdBy: "u10" },
+    { id: "sl-2", trackingId: "trk-ig001", platform: "instagram",  label: "Optivax Instagram Profile", url: "https://instagram.com/optivax",  status: "active", createdAt: "2026-04-01T00:00:00Z", createdBy: "u10" },
+    { id: "sl-3", trackingId: "trk-li001", platform: "linkedin",   label: "Optivax LinkedIn Company",  url: "https://linkedin.com/company/optivax", status: "active", createdAt: "2026-04-05T00:00:00Z", createdBy: "u14" },
+    { id: "sl-4", trackingId: "trk-yt001", platform: "youtube",    label: "Optivax YouTube Channel",   url: "https://youtube.com/@optivax",   status: "active", createdAt: "2026-04-10T00:00:00Z", createdBy: "u10" },
+    { id: "sl-5", trackingId: "trk-gad01", platform: "google_ads", label: "Google Ads — Q2 Campaign",  url: "https://ads.google.com/optivax", status: "active", createdAt: "2026-05-01T00:00:00Z", createdBy: "u10" },
+  ]);
+  seedKey("social_clicks", [
+    { id: "clk-1",  linkId: "sl-1", trackingId: "trk-fb001", platform: "facebook",   visitorId: "v-a1", referrer: "direct",       device: "desktop", browser: "Chrome", timestamp: "2026-05-02T08:10:00Z" },
+    { id: "clk-2",  linkId: "sl-1", trackingId: "trk-fb001", platform: "facebook",   visitorId: "v-a2", referrer: "facebook.com", device: "mobile",  browser: "Safari", timestamp: "2026-05-03T09:25:00Z" },
+    { id: "clk-3",  linkId: "sl-2", trackingId: "trk-ig001", platform: "instagram",  visitorId: "v-b1", referrer: "direct",       device: "mobile",  browser: "Safari", timestamp: "2026-05-04T11:00:00Z" },
+    { id: "clk-4",  linkId: "sl-2", trackingId: "trk-ig001", platform: "instagram",  visitorId: "v-b2", referrer: "instagram.com",device: "mobile",  browser: "Chrome", timestamp: "2026-05-05T14:30:00Z" },
+    { id: "clk-5",  linkId: "sl-2", trackingId: "trk-ig001", platform: "instagram",  visitorId: "v-b3", referrer: "direct",       device: "desktop", browser: "Firefox",timestamp: "2026-05-06T16:45:00Z" },
+    { id: "clk-6",  linkId: "sl-3", trackingId: "trk-li001", platform: "linkedin",   visitorId: "v-c1", referrer: "linkedin.com", device: "desktop", browser: "Chrome", timestamp: "2026-05-08T10:15:00Z" },
+    { id: "clk-7",  linkId: "sl-4", trackingId: "trk-yt001", platform: "youtube",    visitorId: "v-d1", referrer: "direct",       device: "desktop", browser: "Chrome", timestamp: "2026-05-10T13:20:00Z" },
+    { id: "clk-8",  linkId: "sl-1", trackingId: "trk-fb001", platform: "facebook",   visitorId: "v-a3", referrer: "direct",       device: "desktop", browser: "Edge",   timestamp: "2026-05-12T09:00:00Z" },
+    { id: "clk-9",  linkId: "sl-5", trackingId: "trk-gad01", platform: "google_ads", visitorId: "v-e1", referrer: "google.com",   device: "desktop", browser: "Chrome", timestamp: "2026-05-14T11:30:00Z" },
+    { id: "clk-10", linkId: "sl-5", trackingId: "trk-gad01", platform: "google_ads", visitorId: "v-e2", referrer: "google.com",   device: "mobile",  browser: "Safari", timestamp: "2026-05-15T14:00:00Z" },
+    { id: "clk-11", linkId: "sl-2", trackingId: "trk-ig001", platform: "instagram",  visitorId: "v-b4", referrer: "instagram.com",device: "mobile",  browser: "Chrome", timestamp: "2026-05-17T17:00:00Z" },
+    { id: "clk-12", linkId: "sl-3", trackingId: "trk-li001", platform: "linkedin",   visitorId: "v-c2", referrer: "direct",       device: "desktop", browser: "Chrome", timestamp: "2026-05-19T09:45:00Z" },
+    { id: "clk-13", linkId: "sl-1", trackingId: "trk-fb001", platform: "facebook",   visitorId: "v-a4", referrer: "facebook.com", device: "mobile",  browser: "Safari", timestamp: "2026-06-01T10:00:00Z" },
+    { id: "clk-14", linkId: "sl-5", trackingId: "trk-gad01", platform: "google_ads", visitorId: "v-e3", referrer: "google.com",   device: "desktop", browser: "Chrome", timestamp: "2026-06-03T11:00:00Z" },
+    { id: "clk-15", linkId: "sl-2", trackingId: "trk-ig001", platform: "instagram",  visitorId: "v-b5", referrer: "direct",       device: "mobile",  browser: "Safari", timestamp: "2026-06-05T15:30:00Z" },
+  ]);
+}
+
 // ── Public entry point ────────────────────────────────────────────────────────
 export function seedAllMockData(): void {
   if (typeof window === "undefined") return;
@@ -534,4 +562,5 @@ export function seedAllMockData(): void {
   seedEmailMarketing();
   seedOrganizations();
   seedSubscriptions();
+  seedSocialTracking();
 }

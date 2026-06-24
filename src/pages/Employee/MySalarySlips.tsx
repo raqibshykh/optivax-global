@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
-import { getSalarySlips, printSalarySlip, computeGross, computeDeductions, computeNet, type SalarySlip } from "../../mock/payrollData";
+import { getSalarySlips, printSalarySlip, computeDeductions, computeSlipBreakdown, type SalarySlip } from "../../mock/payrollData";
+import { getCompanySettings } from "../../services/companySettingsService";
 
 const fmtRs = (n: number) => `Rs. ${Math.round(n).toLocaleString()}`;
 
@@ -44,7 +45,7 @@ function SlipCard({ slip, onPrint, onView }: {
         </div>
         <div className="text-center p-2 rounded-lg bg-brand-50 dark:bg-brand-900/20">
           <p className="text-xs text-gray-400">Net</p>
-          <p className="text-sm font-bold text-brand-600 dark:text-brand-400">{fmtRs(computeNet(slip))}</p>
+          <p className="text-sm font-bold text-brand-600 dark:text-brand-400">{fmtRs(slip.basicSalary - computeDeductions(slip))}</p>
         </div>
       </div>
 
@@ -68,6 +69,8 @@ function SlipCard({ slip, onPrint, onView }: {
 
 function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => void }) {
   const monthLabel = new Date(slip.salaryMonth + "-01").toLocaleString("default", { month: "long", year: "numeric" });
+  const company    = useMemo(() => getCompanySettings(), []);
+  const bd         = computeSlipBreakdown(slip.basicSalary);
 
   const Row = ({ label, value, accent }: { label: string; value: string; accent?: string }) => (
     <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
@@ -79,13 +82,30 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="bg-brand-600 text-white px-6 py-4 rounded-t-2xl flex-shrink-0 flex items-start justify-between">
-          <div>
-            <p className="text-xs opacity-75 uppercase tracking-wide">Optivax Global — Salary Slip</p>
-            <h3 className="text-lg font-bold mt-0.5">{slip.employeeName}</h3>
-            <p className="text-sm opacity-80">{monthLabel} · {slip.department}</p>
+        {/* Company branded header */}
+        <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2563eb] text-white px-6 py-4 rounded-t-2xl flex-shrink-0">
+          <div className="flex items-center gap-3 mb-3">
+            <img
+              src="/images/logo/logo-icon-dark.png"
+              alt={company.name}
+              className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold tracking-widest opacity-75 uppercase">{company.name}</p>
+              {company.tagline && <p className="text-[10px] opacity-60 italic">{company.tagline}</p>}
+            </div>
+            <button onClick={onClose} className="text-white opacity-70 hover:opacity-100 text-2xl leading-none ml-2">×</button>
           </div>
-          <button onClick={onClose} className="text-white opacity-70 hover:opacity-100 text-2xl leading-none ml-4">×</button>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs opacity-65 uppercase tracking-wide mb-0.5">Salary Slip</p>
+              <h3 className="text-lg font-bold">{slip.employeeName}</h3>
+              <p className="text-sm opacity-80">{monthLabel} · {slip.department}</p>
+            </div>
+            <div className="text-right text-xs opacity-60 mt-1">
+              <p>ID: {slip.id.toUpperCase()}</p>
+            </div>
+          </div>
         </div>
 
         <div className="overflow-y-auto flex-1 p-6 space-y-4">
@@ -96,35 +116,33 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <div><span className="text-xs text-gray-400 block">Salary Month</span><span className="font-medium">{monthLabel}</span></div>
           </div>
 
+          {/* Earnings — display-only breakdown, does not affect stored payroll data */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Earnings</p>
-            <Row label="Basic Salary" value={fmtRs(slip.basicSalary)} />
-            {slip.allowances.map(a => <Row key={a.label} label={a.label} value={fmtRs(a.amount)} />)}
-            {slip.bonuses.map(b => <Row key={b.label} label={b.label} value={`+${fmtRs(b.amount)}`} accent="text-green-600 dark:text-green-400" />)}
-            {slip.overtime > 0 && <Row label="Overtime" value={`+${fmtRs(slip.overtime)}`} accent="text-green-600 dark:text-green-400" />}
+            <Row label="Basic Salary (50%)"          value={fmtRs(bd.basic)} />
+            <Row label="House Rent Allowance (20%)"  value={fmtRs(bd.hra)} />
+            <Row label="Transport Allowance (15%)"   value={fmtRs(bd.transport)} />
+            <Row label="Medical Allowance (15%)"     value={fmtRs(bd.medical)} />
             <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
-              <span className="font-semibold text-sm">Gross Salary</span>
-              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(computeGross(slip))}</span>
+              <span className="font-semibold text-sm">Total Earnings</span>
+              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(slip.basicSalary)}</span>
             </div>
           </div>
 
-          {(slip.deductions.length > 0 || slip.advanceSalaryDeduction > 0) && (
+          {slip.advanceSalaryDeduction > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Deductions</p>
-              {slip.deductions.map(d => <Row key={d.label} label={d.label} value={`−${fmtRs(d.amount)}`} accent="text-red-600 dark:text-red-400" />)}
-              {slip.advanceSalaryDeduction > 0 && (
-                <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />
-              )}
+              <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />
               <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
                 <span className="font-semibold text-sm">Total Deductions</span>
-                <span className="font-bold text-sm text-red-600">−{fmtRs(computeDeductions(slip))}</span>
+                <span className="font-bold text-sm text-red-600">−{fmtRs(slip.advanceSalaryDeduction)}</span>
               </div>
             </div>
           )}
 
           <div className="rounded-xl bg-brand-600 text-white px-5 py-4 flex justify-between items-center">
             <span className="text-sm font-semibold">NET SALARY</span>
-            <span className="text-xl font-bold">{fmtRs(computeNet(slip))}</span>
+            <span className="text-xl font-bold">{fmtRs(slip.basicSalary - computeDeductions(slip))}</span>
           </div>
 
           {slip.notes && (
@@ -145,8 +163,6 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
 
 export default function MySalarySlips() {
   const { user } = useAuth();
-  const isITUser = (user?.role ?? "").startsWith("it_");
-
   const [slips, setSlips]       = useState<SalarySlip[]>([]);
   const [filterMonth, setFilter] = useState("all");
   const [viewing, setViewing]    = useState<SalarySlip | null>(null);
@@ -161,18 +177,6 @@ export default function MySalarySlips() {
     [slips, filterMonth]
   );
 
-  if (isITUser) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <PageMeta title="Access Denied" description="" />
-        <div className="text-center p-8 rounded-2xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800">
-          <p className="text-lg font-semibold text-red-700 dark:text-red-400">Access Denied</p>
-          <p className="text-sm text-red-600 dark:text-red-300 mt-2">IT Support does not have access to salary information.</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       <PageMeta title="My Salary Slips | Optivax Global" description="View and download your salary slips" />
@@ -181,11 +185,17 @@ export default function MySalarySlips() {
       {/* Summary */}
       {slips.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {[
-            { label: "Total Slips",      value: slips.length,                                               color: "text-gray-900 dark:text-white" },
-            { label: "Latest Net Salary", value: fmtRs(slips.sort((a,b) => b.salaryMonth.localeCompare(a.salaryMonth))[0]?.netSalary ?? 0), color: "text-brand-600 dark:text-brand-400" },
-            { label: "YTD Net Paid",     value: fmtRs(slips.reduce((s, sl) => s + sl.netSalary, 0)),        color: "text-green-600" },
-          ].map(({ label, value, color }) => (
+          {(() => {
+            const sorted = [...slips].sort((a, b) => b.salaryMonth.localeCompare(a.salaryMonth));
+            const latest = sorted[0];
+            const latestNet = latest ? latest.basicSalary - computeDeductions(latest) : 0;
+            const ytdNet    = slips.reduce((s, sl) => s + (sl.basicSalary - computeDeductions(sl)), 0);
+            return [
+              { label: "Total Slips",       value: slips.length, color: "text-gray-900 dark:text-white" },
+              { label: "Latest Net Salary", value: fmtRs(latestNet), color: "text-brand-600 dark:text-brand-400" },
+              { label: "YTD Net Paid",      value: fmtRs(ytdNet),    color: "text-green-600" },
+            ];
+          })().map(({ label, value, color }) => (
             <div key={label} className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
               <p className={`mt-1 text-xl font-bold ${color}`}>{value}</p>

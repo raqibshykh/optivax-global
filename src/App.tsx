@@ -69,8 +69,10 @@ import BudgetManagement from "./pages/Budget/BudgetManagement";
 
 // ── Payroll & Salary ──────────────────────────────────────────────────────
 import SalarySlips from "./pages/HR/SalarySlips";
+import BulkSalarySlips from "./pages/HR/BulkSalarySlips";
 import AdvanceSalary from "./pages/HR/AdvanceSalary";
 import MySalarySlips from "./pages/Employee/MySalarySlips";
+import MyBudget from "./pages/Employee/MyBudget";
 import AdvanceSalaryRequest from "./pages/Employee/AdvanceSalaryRequest";
 
 // ── IT Support pages ─────────────────────────────────────────────────────
@@ -156,8 +158,10 @@ export default function App() {
             <Route path="/sales/team-performance"   element={<TeamPerformance />} />
             <Route path="/sales/commissions"        element={<Commissions />} />
             <Route path="/sales/reports"            element={<Reports />} />
-            <Route path="/sales/billing"            element={<AdminBilling />} />
             <Route path="/sales/files"              element={<AdminFiles />} />
+            <Route element={<ProtectedRoute allowedDomain="sales" allowedRoles={["sales_admin"]} />}>
+              <Route path="/sales/billing"          element={<AdminBilling />} />
+            </Route>
             <Route path="/sales/notifications"      element={<AdminNotifications />} />
             <Route path="/sales/settings"           element={<Settings />} />
             <Route path="/sales/profile"            element={<Profile />} />
@@ -197,8 +201,10 @@ export default function App() {
             <Route path="/marketing/email/campaigns"       element={<Campaigns />} />
             <Route path="/marketing/email/templates"       element={<Templates />} />
             <Route path="/marketing/email/audience"        element={<Audience />} />
-            <Route path="/marketing/email/analytics"       element={<Analytics />} />
-            <Route path="/marketing/email/automation"      element={<Automation />} />
+            <Route element={<ProtectedRoute allowedDomain="marketing" allowedRoles={["marketing_admin"]} />}>
+              <Route path="/marketing/email/analytics"     element={<Analytics />} />
+              <Route path="/marketing/email/automation"    element={<Automation />} />
+            </Route>
             <Route path="/marketing/settings"              element={<Settings />} />
             <Route path="/marketing/profile"               element={<Profile />} />
             <Route element={<ProtectedRoute allowedDomain="marketing" allowedRoles={["marketing_admin", "hr_admin", "management"]} />}>
@@ -250,8 +256,13 @@ export default function App() {
           </Route>
 
           {/* ── BUDGET MANAGEMENT ─────────────────────────────────────────── */}
-          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "production_admin", "marketing_admin", "hr_admin"]} />}>
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "production_admin", "marketing_admin", "hr_admin", "it_admin"]} />}>
             <Route path="/budget" element={<BudgetManagement />} />
+          </Route>
+
+          {/* ── MY BUDGET — member-level personal budget view ─────────────── */}
+          <Route element={<ProtectedRoute allowedRoles={["sales_member", "production_member", "marketing_member", "hr_member"]} />}>
+            <Route path="/my-budget" element={<MyBudget />} />
           </Route>
 
           {/* ── PAYROLL / SALARY SLIPS (admin view) ───────────────────────── */}
@@ -260,8 +271,13 @@ export default function App() {
             <Route path="/hr/advance-salary"  element={<AdvanceSalary />} />
           </Route>
 
-          {/* ── SALARY SLIPS + ADVANCE (cross-cutting — all non-IT employees) */}
-          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "sales_member", "production_admin", "production_member", "marketing_admin", "marketing_member", "hr_admin", "hr_member"]} />}>
+          {/* ── BULK SALARY SLIP GENERATION — Super Admin & HR Admin only ── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "hr_admin"]} />}>
+            <Route path="/hr/bulk-salary-slips" element={<BulkSalarySlips />} />
+          </Route>
+
+          {/* ── SALARY SLIPS + ADVANCE — all internal employees including IT ── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "sales_member", "production_admin", "production_member", "marketing_admin", "marketing_member", "hr_admin", "hr_member", "it_admin", "it_member"]} />}>
             <Route path="/salary-slips"       element={<MySalarySlips />} />
             <Route path="/advance-salary"     element={<AdvanceSalaryRequest />} />
           </Route>

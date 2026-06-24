@@ -2,15 +2,16 @@ import { useState } from "react";
 import PageMeta from "../../../components/common/PageMeta";
 import { useCampaigns, useTemplates } from "../../../hooks/useEmailMarketing";
 import type { EmailCampaign } from "../../../types";
-import { PlusIcon, EyeIcon, TrashBinIcon } from "../../../icons";
+import { PlusIcon, TrashBinIcon } from "../../../icons";
 import { useToast } from "../../../context/ToastContext";
 import Badge from "../../../components/ui/badge/Badge";
 
 export default function Campaigns() {
-  const { campaigns, isLoading, addCampaign, deleteCampaign } = useCampaigns();
+  const { campaigns, isLoading, addCampaign, updateCampaign, deleteCampaign } = useCampaigns();
   const { templates } = useTemplates();
   const { showToast } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [sending, setSending] = useState<string | null>(null);
   const [newCampaign, setNewCampaign] = useState({
     name: "",
     subject: "",
@@ -34,8 +35,21 @@ export default function Campaigns() {
     setNewCampaign({ name: "", subject: "", templateId: "", status: "draft", scheduleDate: "" });
   };
 
-  const handleSendTest = () => {
-    showToast("Test email sent successfully!", "success");
+  const handleSendNow = async (camp: EmailCampaign) => {
+    if (!confirm(`Send campaign "${camp.name}" to all recipients now?`)) return;
+    setSending(camp.id);
+    try {
+      await updateCampaign(camp.id, {
+        status: "sent",
+        sentDate: new Date().toISOString(),
+        stats: { sent: 100, opened: 0, clicked: 0 },
+      });
+      showToast(`Campaign "${camp.name}" sent successfully!`, "success");
+    } catch {
+      showToast("Failed to send campaign.", "error");
+    } finally {
+      setSending(null);
+    }
   };
 
   if (isLoading) {
@@ -99,9 +113,16 @@ export default function Campaigns() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={handleSendTest} className="text-brand-500 hover:text-brand-600 dark:text-brand-400" title="Send Test Email">
-                        <EyeIcon className="w-5 h-5" />
-                      </button>
+                      {camp.status !== "sent" && (
+                        <button
+                          onClick={() => handleSendNow(camp)}
+                          disabled={sending === camp.id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50 transition"
+                          title="Send Now"
+                        >
+                          {sending === camp.id ? "Sending…" : "Send Now"}
+                        </button>
+                      )}
                       <button onClick={() => deleteCampaign(camp.id)} className="text-red-500 hover:text-red-600 dark:text-red-400" title="Delete">
                         <TrashBinIcon className="w-5 h-5" />
                       </button>

@@ -200,10 +200,9 @@ export const hasPermissionScoped = (user: User | null, domain: PermissionDomain,
   return hasPermission(user, domain, action);
 };
 
-// Budget ownership check: only super_admin, management, and sales_admin can manage budgets
 export const canManageBudget = (user: User | null): boolean => {
   if (!user) return false;
-  return ["super_admin", "management", "sales_admin"].includes(user.role);
+  return ["super_admin", "management", "sales_admin", "production_admin", "marketing_admin", "hr_admin", "it_admin"].includes(user.role);
 };
 
 export const canView = (user: User | null, domain: PermissionDomain) => hasPermissionScoped(user, domain, "VIEW");

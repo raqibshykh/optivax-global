@@ -62,7 +62,7 @@ export const computeGross = (s: SalarySlip) =>
   s.overtime;
 
 export const computeDeductions = (s: SalarySlip) =>
-  s.deductions.reduce((a, i) => a + i.amount, 0) + s.advanceSalaryDeduction;
+  s.advanceSalaryDeduction;
 
 export const computeNet = (s: SalarySlip) => computeGross(s) - computeDeductions(s);
 
@@ -87,14 +87,11 @@ const SEED_SLIPS: SalarySlip[] = [
       { label: "Performance Bonus", amount: 10000 },
     ],
     overtime: 0,
-    deductions: [
-      { label: "Income Tax",      amount: 8500 },
-      { label: "Provident Fund",  amount: 5000 },
-    ],
+    deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 99250,
-    totalDeductions: 13500,
-    netSalary: 85750,
+    grossSalary: 65000,
+    totalDeductions: 0,
+    netSalary: 65000,
     generatedAt: "2026-04-30T10:00:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -116,14 +113,11 @@ const SEED_SLIPS: SalarySlip[] = [
     ],
     bonuses: [],
     overtime: 4500,
-    deductions: [
-      { label: "Income Tax",     amount: 6500 },
-      { label: "Provident Fund", amount: 4000 },
-    ],
+    deductions: [],
     advanceSalaryDeduction: 15000,
-    grossSalary: 79750,
-    totalDeductions: 25500,
-    netSalary: 54250,
+    grossSalary: 55000,
+    totalDeductions: 15000,
+    netSalary: 40000,
     generatedAt: "2026-04-30T10:15:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -147,14 +141,11 @@ const SEED_SLIPS: SalarySlip[] = [
       { label: "Campaign Bonus", amount: 5000 },
     ],
     overtime: 0,
-    deductions: [
-      { label: "Income Tax",     amount: 5200 },
-      { label: "Provident Fund", amount: 3500 },
-    ],
+    deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 70500,
-    totalDeductions: 8700,
-    netSalary: 61800,
+    grossSalary: 48000,
+    totalDeductions: 0,
+    netSalary: 48000,
     generatedAt: "2026-04-30T10:30:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -178,14 +169,11 @@ const SEED_SLIPS: SalarySlip[] = [
       { label: "Quarterly Bonus", amount: 20000 },
     ],
     overtime: 3000,
-    deductions: [
-      { label: "Income Tax",     amount: 9500 },
-      { label: "Provident Fund", amount: 5000 },
-    ],
+    deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 112250,
-    totalDeductions: 14500,
-    netSalary: 97750,
+    grossSalary: 65000,
+    totalDeductions: 0,
+    netSalary: 65000,
     generatedAt: "2026-05-31T10:00:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -206,15 +194,11 @@ const SEED_SLIPS: SalarySlip[] = [
     ],
     bonuses: [],
     overtime: 0,
-    deductions: [
-      { label: "Income Tax",           amount: 4200 },
-      { label: "Provident Fund",       amount: 3000 },
-      { label: "Late Arrival Penalty", amount: 1000 },
-    ],
+    deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 55500,
-    totalDeductions: 8200,
-    netSalary: 47300,
+    grossSalary: 42000,
+    totalDeductions: 0,
+    netSalary: 42000,
     generatedAt: "2026-05-31T11:00:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -238,14 +222,11 @@ const SEED_SLIPS: SalarySlip[] = [
       { label: "Project Completion Bonus", amount: 8000 },
     ],
     overtime: 6000,
-    deductions: [
-      { label: "Income Tax",     amount: 7800 },
-      { label: "Provident Fund", amount: 4000 },
-    ],
+    deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 89250,
-    totalDeductions: 11800,
-    netSalary: 77450,
+    grossSalary: 55000,
+    totalDeductions: 0,
+    netSalary: 55000,
     generatedAt: "2026-05-31T11:30:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -432,92 +413,241 @@ export function getPayrollStats(slips: SalarySlip[], requests: AdvanceSalaryRequ
   };
 }
 
+// ── Display-only salary breakdown — used ONLY in slip templates (PDF/preview) ─
+// Stored payroll values, budgets, reports, and all other modules are unchanged.
+
+export interface SlipBreakdown {
+  basic:     number; // 50%
+  hra:       number; // 20%
+  transport: number; // 15%
+  medical:   number; // 15% (remainder — ensures sum === grossSalary exactly)
+}
+
+export function computeSlipBreakdown(grossSalary: number): SlipBreakdown {
+  const basic     = Math.round(grossSalary * 0.50);
+  const hra       = Math.round(grossSalary * 0.20);
+  const transport = Math.round(grossSalary * 0.15);
+  const medical   = grossSalary - basic - hra - transport;
+  return { basic, hra, transport, medical };
+}
+
+// ── Strict Deductions Logic ───────────────────────────────────────────────────
+
+export interface StrictDeductions {
+  advanceSalaryDeduction: number;
+  unpaidLeaveDays: number;
+  unpaidLeaveDeduction: number;
+  lateCount: number;
+  lateAttendanceDeduction: number;
+}
+
+export function computeStrictDeductions(employeeId: string, _salaryMonth: string, _basicSalary: number): StrictDeductions {
+  // Per policy: only advance salary recovery is deducted in salary slips.
+  const advances = getAdvanceRequests().filter(
+    (r) => r.employeeId === employeeId && (r.status === "approved" || r.status === "paid")
+  );
+  const totalApprovedAdvance = advances.reduce((s, r) => s + r.requestedAmount, 0);
+
+  const pastSlips = getSalarySlips().filter((s) => s.employeeId === employeeId);
+  const totalRecovered = pastSlips.reduce((s, sl) => s + sl.advanceSalaryDeduction, 0);
+
+  const outstandingAdvance = Math.max(0, totalApprovedAdvance - totalRecovered);
+
+  return {
+    advanceSalaryDeduction: outstandingAdvance,
+    unpaidLeaveDays: 0,
+    unpaidLeaveDeduction: 0,
+    lateCount: 0,
+    lateAttendanceDeduction: 0,
+  };
+}
+
+// ── Company branding (read directly from localStorage — no import needed) ─────
+
+interface _CompanyBranding {
+  name: string; tagline: string; address: string; city: string; country: string;
+  phone: string; email: string; website: string; logoDataUrl: string;
+}
+
+function _readBranding(): _CompanyBranding {
+  const def: _CompanyBranding = {
+    name: "Optivax Global", tagline: "Digital Marketing Agency",
+    address: "", city: "Karachi", country: "Pakistan",
+    phone: "", email: "info@optivaxglobal.com",
+    website: "www.optivaxglobal.com", logoDataUrl: "",
+  };
+  try {
+    const raw = localStorage.getItem("optivax_company_settings");
+    if (raw) return { ...def, ...(JSON.parse(raw) as Partial<_CompanyBranding>) };
+    const old = JSON.parse(localStorage.getItem("optivax_profile_settings") ?? "{}") as { name?: string; email?: string };
+    return { ...def, ...(old.name ? { name: old.name } : {}), ...(old.email ? { email: old.email } : {}) };
+  } catch { return def; }
+}
+
+function _slipHtml(slip: SalarySlip, co: _CompanyBranding): string {
+  const fmtR = (n: number) => `Rs. ${Math.round(n).toLocaleString()}`;
+  const ml   = new Date(slip.salaryMonth + "-01").toLocaleString("default", { month: "long", year: "numeric" });
+  const bd         = computeSlipBreakdown(slip.basicSalary);
+  const displayNet = slip.basicSalary - slip.totalDeductions;
+
+  const lineRows = (items: PayrollItem[], cls = "earn", prefix = "") =>
+    items.map(i =>
+      `<div class="lr"><span class="ll">${i.label}</span><span class="lv ${cls}">${prefix}${fmtR(i.amount)}</span></div>`
+    ).join("");
+
+  const addrParts = [co.address, co.city, co.country].filter(Boolean).join(", ");
+  const contactLine = [
+    co.phone   ? `Tel: ${co.phone}`     : "",
+    co.email   ? `Email: ${co.email}`   : "",
+    co.website ? `Web: ${co.website}`   : "",
+  ].filter(Boolean).join("  &nbsp;|&nbsp;  ");
+
+  const logoSrc  = `${window.location.origin}/images/logo/logo-icon-dark.png`;
+  const logoHtml = `<img src="${logoSrc}" style="width:68px;height:68px;object-fit:contain;border-radius:10px;background:#fff;padding:6px;display:block;" alt="${co.name}" />`;
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Salary Slip — ${slip.employeeName} — ${ml}</title>
+<style>
+*{box-sizing:border-box;}
+body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:28px;background:#f4f6f9;color:#1a2733;}
+.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);}
+/* Header */
+.hdr{display:flex;align-items:center;gap:18px;padding:22px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}
+.co-block{flex:1;min-width:0;}
+.co-name{font-size:19px;font-weight:800;letter-spacing:0.3px;margin:0 0 2px;}
+.co-tag{font-size:11px;opacity:.72;margin:0 0 5px;font-style:italic;}
+.co-det{font-size:10.5px;opacity:.70;line-height:1.65;}
+.slip-box{text-align:right;flex-shrink:0;}
+.slip-badge{display:inline-block;border:1px solid rgba(255,255,255,0.45);background:rgba(255,255,255,0.15);border-radius:5px;padding:4px 11px;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:5px;}
+.slip-mo{font-size:14px;font-weight:600;}
+.slip-id{font-size:9.5px;opacity:.60;margin-top:3px;}
+/* Employee grid */
+.eg{display:grid;grid-template-columns:repeat(3,1fr);background:#f0f4f8;border-bottom:1px solid #dde3ec;}
+.ec{padding:13px 18px;border-right:1px solid #dde3ec;}
+.ec:last-child{border-right:none;}
+.ec.row2{border-top:1px solid #dde3ec;}
+.el{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#7b8fa6;margin-bottom:3px;}
+.ev{font-size:13px;font-weight:600;color:#1a2733;}
+.ev.sm{font-size:11px;}
+/* Salary lines */
+.sh{background:#e8edf3;padding:8px 18px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#4a6075;border-top:1px solid #dde3ec;border-bottom:1px solid #dde3ec;}
+.lr{display:flex;justify-content:space-between;padding:6.5px 18px;border-bottom:1px solid #f0f4f8;font-size:12.5px;}
+.ll{color:#4a5568;}
+.lv{font-weight:500;}
+.lv.earn{color:#1a2733;}
+.lv.bon{color:#047857;}
+.lv.ded{color:#c53030;}
+.sub{display:flex;justify-content:space-between;padding:9px 18px;background:#edf2f7;font-size:13px;font-weight:700;color:#1a2733;border-top:2px solid #dde3ec;}
+.sub.ded{color:#c53030;}
+/* Net */
+.net{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}
+.net-lbl{font-size:13px;font-weight:700;letter-spacing:1.5px;opacity:.9;}
+.net-amt{font-size:26px;font-weight:800;}
+/* Notes */
+.notes{margin:14px 18px 0;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:11px;color:#92400e;}
+/* Footer */
+.ftr{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 28px 16px;border-top:1px solid #e8edf3;background:#f9fafb;margin-top:0;}
+.ft{font-size:9.5px;color:#9aabb7;line-height:1.55;}
+.ft strong{color:#7b8fa6;}
+@media print{body{background:#fff;padding:0;}.wrap{box-shadow:none;border-radius:0;}@page{margin:12mm;size:A4 portrait;}}
+</style></head><body>
+<div class="wrap">
+  <div class="hdr">
+    <div style="flex-shrink:0;">${logoHtml}</div>
+    <div class="co-block">
+      <div class="co-name">${co.name.toUpperCase()}</div>
+      ${co.tagline ? `<div class="co-tag">${co.tagline}</div>` : ""}
+      <div class="co-det">
+        ${addrParts ? addrParts + "<br>" : ""}
+        ${contactLine}
+      </div>
+    </div>
+    <div class="slip-box">
+      <div class="slip-badge">SALARY SLIP</div>
+      <div class="slip-mo">${ml}</div>
+      <div class="slip-id">ID: ${slip.id.toUpperCase()}</div>
+    </div>
+  </div>
+
+  <div class="eg">
+    <div class="ec"><div class="el">Employee Name</div><div class="ev">${slip.employeeName}</div></div>
+    <div class="ec"><div class="el">Employee ID</div><div class="ev">${slip.employeeId}</div></div>
+    <div class="ec"><div class="el">Email</div><div class="ev sm">${slip.employeeEmail}</div></div>
+    <div class="ec row2"><div class="el">Department</div><div class="ev">${slip.department}</div></div>
+    <div class="ec row2"><div class="el">Designation</div><div class="ev">${slip.designation}</div></div>
+    <div class="ec row2"><div class="el">Salary Period</div><div class="ev">${ml}</div></div>
+  </div>
+
+  <div class="sh">Earnings</div>
+  <div class="lr"><span class="ll">Basic Salary (50%)</span><span class="lv earn">${fmtR(bd.basic)}</span></div>
+  <div class="lr"><span class="ll">House Rent Allowance (20%)</span><span class="lv earn">${fmtR(bd.hra)}</span></div>
+  <div class="lr"><span class="ll">Transport Allowance (15%)</span><span class="lv earn">${fmtR(bd.transport)}</span></div>
+  <div class="lr"><span class="ll">Medical Allowance (15%)</span><span class="lv earn">${fmtR(bd.medical)}</span></div>
+  <div class="sub"><span>Total Earnings</span><span>${fmtR(slip.basicSalary)}</span></div>
+
+  ${slip.deductions.length > 0 || slip.advanceSalaryDeduction > 0 ? `
+  <div class="sh">Deductions</div>
+  ${lineRows(slip.deductions, "ded", "−")}
+  ${slip.advanceSalaryDeduction > 0 ? `<div class="lr"><span class="ll">Advance Salary Recovery</span><span class="lv ded">−${fmtR(slip.advanceSalaryDeduction)}</span></div>` : ""}
+  <div class="sub ded"><span>Total Deductions</span><span>−${fmtR(slip.totalDeductions)}</span></div>
+  ` : ""}
+
+  <div class="net">
+    <span class="net-lbl">NET SALARY PAYABLE</span>
+    <span class="net-amt">${fmtR(displayNet)}</span>
+  </div>
+
+  ${slip.notes ? `<div class="notes"><strong>Note:</strong> ${slip.notes}</div>` : ""}
+
+  <div class="ftr">
+    <div class="ft">
+      <strong>Generated by:</strong> ${slip.generatedByName} (${slip.generatedByRole})<br>
+      <strong>Generated on:</strong> ${new Date(slip.generatedAt).toLocaleString()}
+    </div>
+    <div class="ft" style="text-align:right;">
+      This is a computer-generated salary slip.<br>
+      No physical signature is required.
+    </div>
+  </div>
+</div>
+</body></html>`;
+}
+
 // ── Print helper ──────────────────────────────────────────────────────────────
 
 export function printSalarySlip(slip: SalarySlip) {
-  const fmtRs = (n: number) => `Rs. ${Math.round(n).toLocaleString()}`;
-  const monthLabel = new Date(slip.salaryMonth + "-01").toLocaleString("default", { month: "long", year: "numeric" });
+  const co  = _readBranding();
+  const html = _slipHtml(slip, co);
+  const w   = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
+}
 
-  const rows = (items: PayrollItem[], prefix = "") =>
-    items.map(i => `
-      <tr>
-        <td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;color:#555;">${i.label}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;color:#111;">${prefix}${fmtRs(i.amount)}</td>
-      </tr>`).join("");
+export function printSalarySlipsBulk(slips: SalarySlip[]) {
+  if (slips.length === 0) return;
+  const co    = _readBranding();
+  const pages = slips.map(s => `<div style="page-break-after:always; margin-bottom: 40px;">${_slipHtml(s, co).replace(/^[\s\S]*?<body[^>]*>/, "").replace(/<\/body>[\s\S]*$/, "")}</div>`);
 
-  const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Salary Slip — ${slip.employeeName} — ${monthLabel}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Bulk Salary Slips — ${co.name}</title>
 <style>
-  body{font-family:Arial,sans-serif;margin:0;padding:32px;color:#111;}
-  .header{background:#1e3a5f;color:#fff;padding:24px 32px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center;}
-  .company{font-size:22px;font-weight:700;letter-spacing:0.5px;}
-  .slip-title{font-size:14px;opacity:0.8;margin-top:4px;}
-  .employee-section{background:#f8fafc;border:1px solid #e2e8f0;padding:20px 32px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-  .field{margin-bottom:8px;}
-  .field label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;}
-  .field value{display:block;font-size:14px;font-weight:600;color:#111;margin-top:2px;}
-  table{width:100%;border-collapse:collapse;margin-top:0;}
-  .section-header td{background:#f1f5f9;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#475569;padding:10px 12px;}
-  .totals-row td{font-weight:700;padding:10px 12px;border-top:2px solid #cbd5e1;}
-  .net-row td{background:#1e3a5f;color:#fff;font-size:16px;font-weight:700;padding:14px 12px;}
-  .footer{margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#999;text-align:center;}
-  @media print{body{padding:0;} @page{margin:24px;}}
+*{box-sizing:border-box;}
+body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:24px;background:#f4f6f9;}
+.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);}
+.hdr{display:flex;align-items:center;gap:18px;padding:22px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}
+.co-block{flex:1;min-width:0;}.co-name{font-size:19px;font-weight:800;margin:0 0 2px;}.co-tag{font-size:11px;opacity:.72;margin:0 0 5px;font-style:italic;}.co-det{font-size:10.5px;opacity:.70;line-height:1.65;}
+.slip-box{text-align:right;flex-shrink:0;}.slip-badge{display:inline-block;border:1px solid rgba(255,255,255,0.45);background:rgba(255,255,255,0.15);border-radius:5px;padding:4px 11px;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:5px;}.slip-mo{font-size:14px;font-weight:600;}.slip-id{font-size:9.5px;opacity:.60;margin-top:3px;}
+.eg{display:grid;grid-template-columns:repeat(3,1fr);background:#f0f4f8;border-bottom:1px solid #dde3ec;}.ec{padding:13px 18px;border-right:1px solid #dde3ec;}.ec:last-child{border-right:none;}.ec.row2{border-top:1px solid #dde3ec;}.el{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#7b8fa6;margin-bottom:3px;}.ev{font-size:13px;font-weight:600;color:#1a2733;}.ev.sm{font-size:11px;}
+.sh{background:#e8edf3;padding:8px 18px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#4a6075;border-top:1px solid #dde3ec;border-bottom:1px solid #dde3ec;}
+.lr{display:flex;justify-content:space-between;padding:6.5px 18px;border-bottom:1px solid #f0f4f8;font-size:12.5px;}.ll{color:#4a5568;}.lv{font-weight:500;}.lv.earn{color:#1a2733;}.lv.bon{color:#047857;}.lv.ded{color:#c53030;}
+.sub{display:flex;justify-content:space-between;padding:9px 18px;background:#edf2f7;font-size:13px;font-weight:700;color:#1a2733;border-top:2px solid #dde3ec;}.sub.ded{color:#c53030;}
+.net{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}.net-lbl{font-size:13px;font-weight:700;letter-spacing:1.5px;opacity:.9;}.net-amt{font-size:26px;font-weight:800;}
+.notes{margin:14px 18px 0;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:11px;color:#92400e;}
+.ftr{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 28px 16px;border-top:1px solid #e8edf3;background:#f9fafb;}.ft{font-size:9.5px;color:#9aabb7;line-height:1.55;}.ft strong{color:#7b8fa6;}
+@media print{body{background:#fff;padding:0;}.wrap{page-break-after:always;box-shadow:none;border-radius:0;}@page{margin:12mm;size:A4 portrait;}}
 </style></head><body>
-<div class="header">
-  <div>
-    <div class="company">OPTIVAX GLOBAL</div>
-    <div class="slip-title">SALARY SLIP — ${monthLabel.toUpperCase()}</div>
-  </div>
-  <div style="text-align:right;font-size:12px;opacity:0.8;">
-    Generated: ${new Date(slip.generatedAt).toLocaleDateString()}<br>
-    Slip ID: ${slip.id.toUpperCase()}
-  </div>
-</div>
-
-<div class="employee-section">
-  <div>
-    <div class="field"><label>Employee Name</label><value>${slip.employeeName}</value></div>
-    <div class="field"><label>Employee ID</label><value>${slip.employeeId.toUpperCase()}</value></div>
-    <div class="field"><label>Email</label><value>${slip.employeeEmail}</value></div>
-  </div>
-  <div>
-    <div class="field"><label>Department</label><value>${slip.department}</value></div>
-    <div class="field"><label>Designation</label><value>${slip.designation}</value></div>
-    <div class="field"><label>Salary Month</label><value>${monthLabel}</value></div>
-  </div>
-</div>
-
-<table>
-  <tr class="section-header"><td colspan="2">Earnings</td></tr>
-  <tr><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;color:#555;">Basic Salary</td>
-      <td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;">${fmtRs(slip.basicSalary)}</td></tr>
-  ${rows(slip.allowances)}
-  ${rows(slip.bonuses)}
-  ${slip.overtime > 0 ? `<tr><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;color:#555;">Overtime</td>
-      <td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;">${fmtRs(slip.overtime)}</td></tr>` : ""}
-  <tr class="totals-row"><td>Gross Salary</td><td style="text-align:right;">${fmtRs(slip.grossSalary)}</td></tr>
-
-  <tr class="section-header"><td colspan="2">Deductions</td></tr>
-  ${rows(slip.deductions, "−")}
-  ${slip.advanceSalaryDeduction > 0 ? `<tr><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;color:#555;">Advance Salary Recovery</td>
-      <td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:right;color:#dc2626;">−${fmtRs(slip.advanceSalaryDeduction)}</td></tr>` : ""}
-  <tr class="totals-row"><td>Total Deductions</td><td style="text-align:right;color:#dc2626;">−${fmtRs(slip.totalDeductions)}</td></tr>
-
-  <tr class="net-row"><td>NET SALARY</td><td style="text-align:right;">${fmtRs(slip.netSalary)}</td></tr>
-</table>
-
-${slip.notes ? `<div style="margin-top:16px;padding:12px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:12px;color:#92400e;"><strong>Note:</strong> ${slip.notes}</div>` : ""}
-
-<div class="footer">
-  This is a computer-generated salary slip and does not require a physical signature.
-  Generated by ${slip.generatedByName} (${slip.generatedByRole}).
-</div>
+${pages.join("\n")}
 </body></html>`;
-
   const w = window.open("", "_blank");
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-    setTimeout(() => w.print(), 500);
-  }
+  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 600); }
 }

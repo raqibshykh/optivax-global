@@ -95,11 +95,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputCls = "w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent";
 
+// ── Dept visibility ───────────────────────────────────────────────────────────
+
+const DEPT_FOR_ROLE: Record<string, string> = {
+  sales_admin:      "Sales",
+  production_admin: "Production",
+  marketing_admin:  "Marketing",
+  hr_admin:         "HR",
+  it_admin:         "IT Support",
+};
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function BudgetManagement() {
   const { user } = useAuth();
   const canManage = canManageBudget(user);
+  const userDept  = user ? (DEPT_FOR_ROLE[user.role] ?? null) : null;
+  const isDeptAdmin = userDept !== null && user?.role !== "super_admin" && user?.role !== "management";
 
   const [tab, setTab] = useState<"budgets" | "audit">("budgets");
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -125,12 +137,23 @@ export default function BudgetManagement() {
     setAuditLogs(getAuditLogs());
   }, []);
 
-  const stats = useMemo(() => getBudgetStats(budgets), [budgets]);
+  // Dept admins see only their dept's aggregated figures — not company-wide totals
+  const scopedBudgets = useMemo(
+    () => isDeptAdmin && userDept ? budgets.filter(b => b.department === userDept) : budgets,
+    [budgets, isDeptAdmin, userDept]
+  );
+
+  const stats = useMemo(() => getBudgetStats(scopedBudgets), [scopedBudgets]);
   const changesThisMonth = useMemo(() => getChangesThisMonth(auditLogs), [auditLogs]);
 
   const filteredBudgets = useMemo(() => {
     let list = [...budgets];
-    if (filterDept !== "all") list = list.filter(b => b.department === filterDept);
+    // Dept admins hard-scoped to their own dept — cannot be overridden by filter
+    if (isDeptAdmin && userDept) {
+      list = list.filter(b => b.department === userDept);
+    } else if (filterDept !== "all") {
+      list = list.filter(b => b.department === filterDept);
+    }
     if (filterStatus !== "all") list = list.filter(b => b.status === filterStatus);
     if (filterCat !== "all") list = list.filter(b => b.category === filterCat);
     if (search.trim()) {
@@ -138,11 +161,12 @@ export default function BudgetManagement() {
       list = list.filter(b =>
         b.name.toLowerCase().includes(q) ||
         b.department.toLowerCase().includes(q) ||
-        b.assignedToName.toLowerCase().includes(q)
+        b.assignedToName.toLowerCase().includes(q) ||
+        (b.purpose ?? "").toLowerCase().includes(q)
       );
     }
     return list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [budgets, filterDept, filterStatus, filterCat, search]);
+  }, [budgets, filterDept, filterStatus, filterCat, search, isDeptAdmin, userDept]);
 
   const filteredLogs = useMemo(() => {
     let list = [...auditLogs];
@@ -189,8 +213,9 @@ export default function BudgetManagement() {
   // ── Actions ──────────────────────────────────────────────────────────────
 
   const handleCreate = () => {
-    const { name, department, category, assignedToName, totalBudget, fiscalYear, notes, projectName } = form;
-    if (!name?.trim() || !department || !category || !totalBudget) {
+    const { name, department, category, assignedToName, totalBudget, fiscalYear, notes, projectName, taskName, purpose, description } = form;
+    const effectiveDept = isDeptAdmin && userDept ? userDept : department;
+    if (!name?.trim() || !effectiveDept || !category || !totalBudget) {
       setFormError("Name, Department, Category, and Total Budget are required."); return;
     }
     const amount = parseFloat(totalBudget);
@@ -200,17 +225,21 @@ export default function BudgetManagement() {
     const newBudget: Budget = {
       id: `bud-${Date.now()}`,
       name: name.trim(),
-      department,
+      department: effectiveDept,
       category: category as BudgetCategory,
       projectName: projectName?.trim() || undefined,
+      taskName: taskName?.trim() || undefined,
+      purpose: purpose?.trim() || undefined,
+      description: description?.trim() || undefined,
       assignedById: user?.id ?? "",
       assignedByName: user?.name ?? "",
       assignedToId: "",
-      assignedToName: assignedToName?.trim() || department,
+      assignedToName: assignedToName?.trim() || effectiveDept,
       totalBudget: amount,
       usedBudget: 0,
       status: "active",
       fiscalYear: fiscalYear || "FY2026",
+      allocationDate: new Date().toISOString().split("T")[0],
       notes: notes?.trim() || "",
       createdAt: now,
       updatedAt: now,
@@ -223,7 +252,7 @@ export default function BudgetManagement() {
 
   const handleEdit = () => {
     const b = modal.budget!;
-    const { name, department, category, assignedToName, fiscalYear, notes, projectName } = form;
+    const { name, department, category, assignedToName, fiscalYear, notes, projectName, taskName, purpose, description } = form;
     if (!name?.trim()) { setFormError("Name is required."); return; }
     const now = new Date().toISOString();
     const updated = budgets.map(x =>
@@ -235,7 +264,10 @@ export default function BudgetManagement() {
         assignedToName: assignedToName?.trim() || x.assignedToName,
         fiscalYear: fiscalYear || x.fiscalYear,
         notes: notes?.trim() ?? x.notes,
-        projectName: projectName?.trim() || x.projectName,
+        projectName: projectName?.trim() || undefined,
+        taskName: taskName?.trim() || undefined,
+        purpose: purpose?.trim() || undefined,
+        description: description?.trim() || undefined,
         updatedAt: now,
       }
     );
@@ -380,7 +412,7 @@ export default function BudgetManagement() {
           { label: "Active Budgets",   value: stats.active,    bg: "bg-green-50 dark:bg-green-900/20",  text: "text-green-700 dark:text-green-400" },
           { label: "Overspent",        value: stats.overspent, bg: "bg-red-50 dark:bg-red-900/20",      text: "text-red-700 dark:text-red-400" },
           { label: "Total Budgets",    value: stats.count,     bg: "bg-gray-50 dark:bg-gray-800/50",    text: "text-gray-700 dark:text-gray-300" },
-          { label: "Paused/Closed",    value: budgets.filter(b => b.status === "paused" || b.status === "closed").length,
+          { label: "Paused/Closed",    value: scopedBudgets.filter(b => b.status === "paused" || b.status === "closed").length,
             bg: "bg-yellow-50 dark:bg-yellow-900/20", text: "text-yellow-700 dark:text-yellow-400" },
         ].map(({ label, value, bg, text }) => (
           <div key={label} className={`${bg} rounded-xl p-3 flex items-center justify-between`}>
@@ -403,7 +435,7 @@ export default function BudgetManagement() {
                   : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               }`}
             >
-              {t === "budgets" ? `Budgets (${budgets.length})` : `Audit Trail (${auditLogs.length})`}
+              {t === "budgets" ? `Budgets (${scopedBudgets.length})` : `Audit Trail (${auditLogs.length})`}
             </button>
           ))}
         </div>
@@ -427,11 +459,17 @@ export default function BudgetManagement() {
               placeholder="Search budgets…"
               className="rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm flex-1 min-w-[160px] focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
-            <select value={filterDept} onChange={e => setFilterDept(e.target.value)}
-              className="rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-              <option value="all">All Departments</option>
-              {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
+            {isDeptAdmin ? (
+              <span className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400">
+                {userDept} Dept
+              </span>
+            ) : (
+              <select value={filterDept} onChange={e => setFilterDept(e.target.value)}
+                className="rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+                <option value="all">All Departments</option>
+                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            )}
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as BudgetStatus | "all")}
               className="rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
               <option value="all">All Statuses</option>
@@ -464,8 +502,9 @@ export default function BudgetManagement() {
                     const remaining = b.totalBudget - b.usedBudget;
                     return (
                       <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 max-w-[220px]">
                           <p className="text-sm font-medium text-gray-900 dark:text-white">{b.name}</p>
+                          {b.purpose && <p className="text-xs text-brand-600 dark:text-brand-400 mt-0.5 truncate" title={b.purpose}>{b.purpose}</p>}
                           {b.projectName && <p className="text-xs text-gray-400 mt-0.5">{b.projectName}</p>}
                           <p className="text-xs text-gray-400">{b.fiscalYear}</p>
                         </td>
@@ -489,7 +528,7 @@ export default function BudgetManagement() {
                           <div className="flex items-center gap-1 flex-wrap">
                             <button onClick={() => openModal("history", b)} className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">History</button>
                             {canManage && b.status !== "closed" && (<>
-                              <button onClick={() => { openModal("edit", b); setForm({ name: b.name, department: b.department, category: b.category, assignedToName: b.assignedToName, fiscalYear: b.fiscalYear, notes: b.notes, projectName: b.projectName ?? "" }); }} className="text-xs px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">Edit</button>
+                              <button onClick={() => { openModal("edit", b); setForm({ name: b.name, department: b.department, category: b.category, assignedToName: b.assignedToName, fiscalYear: b.fiscalYear, notes: b.notes, projectName: b.projectName ?? "", taskName: b.taskName ?? "", purpose: b.purpose ?? "", description: b.description ?? "" }); }} className="text-xs px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">Edit</button>
                               <button onClick={() => openModal("increase", b)} className="text-xs px-2 py-1 rounded bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">Increase</button>
                               <button onClick={() => openModal("reduce", b)} className="text-xs px-2 py-1 rounded bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors">Reduce</button>
                               <button onClick={() => openModal("transfer", b)} className="text-xs px-2 py-1 rounded bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors">Transfer</button>
@@ -577,15 +616,17 @@ export default function BudgetManagement() {
               <Field label="Budget Name *">
                 <input className={inputCls} placeholder="e.g. Q3 Sales Budget" value={form.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </Field>
-              <Field label="Total Budget ($) *">
+              <Field label="Total Budget (Rs.) *">
                 <input type="number" min="0" className={inputCls} placeholder="0" value={form.totalBudget ?? ""} onChange={e => setForm(f => ({ ...f, totalBudget: e.target.value }))} />
               </Field>
-              <Field label="Department *">
-                <select className={inputCls} value={form.department ?? ""} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
-                  <option value="">— Select —</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </Field>
+              {!isDeptAdmin && (
+                <Field label="Department *">
+                  <select className={inputCls} value={form.department ?? ""} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
+                    <option value="">— Select —</option>
+                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </Field>
+              )}
               <Field label="Category *">
                 <select className={inputCls} value={form.category ?? ""} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
                   <option value="">— Select —</option>
@@ -603,12 +644,21 @@ export default function BudgetManagement() {
               <Field label="Project Name (optional)">
                 <input className={inputCls} placeholder="Linked project" value={form.projectName ?? ""} onChange={e => setForm(f => ({ ...f, projectName: e.target.value }))} />
               </Field>
+              <Field label="Task Name (optional)">
+                <input className={inputCls} placeholder="Specific task or deliverable" value={form.taskName ?? ""} onChange={e => setForm(f => ({ ...f, taskName: e.target.value }))} />
+              </Field>
               <Field label="Creation Reason">
                 <input className={inputCls} placeholder="Why is this budget being created?" value={form.reason ?? ""} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} />
               </Field>
             </div>
+            <Field label="Purpose *">
+              <input className={inputCls} placeholder="Short title — e.g. Facebook Ads Campaign - June 2026" value={form.purpose ?? ""} onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))} />
+            </Field>
+            <Field label="Description">
+              <textarea rows={2} className={inputCls} placeholder="Detailed explanation of what this budget covers…" value={form.description ?? ""} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            </Field>
             <Field label="Notes">
-              <textarea rows={3} className={inputCls} placeholder="Any relevant notes…" value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+              <textarea rows={2} className={inputCls} placeholder="Any relevant notes…" value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </Field>
             {formError && <p className="text-sm text-red-600">{formError}</p>}
           </div>
@@ -648,9 +698,18 @@ export default function BudgetManagement() {
               <Field label="Project Name">
                 <input className={inputCls} value={form.projectName ?? ""} onChange={e => setForm(f => ({ ...f, projectName: e.target.value }))} />
               </Field>
+              <Field label="Task Name">
+                <input className={inputCls} placeholder="Specific task or deliverable" value={form.taskName ?? ""} onChange={e => setForm(f => ({ ...f, taskName: e.target.value }))} />
+              </Field>
             </div>
+            <Field label="Purpose">
+              <input className={inputCls} placeholder="Short purpose title" value={form.purpose ?? ""} onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))} />
+            </Field>
+            <Field label="Description">
+              <textarea rows={2} className={inputCls} placeholder="What does this budget cover?" value={form.description ?? ""} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            </Field>
             <Field label="Notes">
-              <textarea rows={3} className={inputCls} value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+              <textarea rows={2} className={inputCls} value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </Field>
             <Field label="Reason for Edit">
               <input className={inputCls} placeholder="Why are you editing this budget?" value={form.reason ?? ""} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} />
@@ -731,7 +790,7 @@ export default function BudgetManagement() {
             <Field label="Transfer To Budget *">
               <select className={inputCls} value={form.targetBudgetId ?? ""} onChange={e => setForm(f => ({ ...f, targetBudgetId: e.target.value }))}>
                 <option value="">— Select target budget —</option>
-                {budgets.filter(b => b.id !== modal.budget!.id && b.status !== "closed").map(b => (
+                {scopedBudgets.filter(b => b.id !== modal.budget!.id && b.status !== "closed").map(b => (
                   <option key={b.id} value={b.id}>{b.name} ({b.department})</option>
                 ))}
               </select>

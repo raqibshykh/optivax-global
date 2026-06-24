@@ -5,9 +5,10 @@ import { useAuth } from "../../context/AuthContext";
 import { UserService, type UserProfile } from "../../services/userService";
 import {
   getSalarySlips, saveSalarySlips, appendSalarySlip, printSalarySlip,
-  computeGross, computeDeductions, computeNet,
+  computeDeductions, computeSlipBreakdown, computeStrictDeductions,
   type SalarySlip, type PayrollItem,
 } from "../../mock/payrollData";
+import { getCompanySettings } from "../../services/companySettingsService";
 import { useToast } from "../../context/ToastContext";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -71,6 +72,8 @@ function ItemList({ items, onChange, label }: {
 
 function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => void }) {
   const monthLabel = new Date(slip.salaryMonth + "-01").toLocaleString("default", { month: "long", year: "numeric" });
+  const company    = useMemo(() => getCompanySettings(), []);
+  const bd         = computeSlipBreakdown(slip.basicSalary);
 
   const Row = ({ label, value, accent }: { label: string; value: string; accent?: string }) => (
     <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
@@ -82,14 +85,30 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="bg-brand-600 text-white px-6 py-4 rounded-t-2xl flex-shrink-0 flex items-start justify-between">
-          <div>
-            <p className="text-xs opacity-75 uppercase tracking-wide">Optivax Global — Salary Slip</p>
-            <h3 className="text-lg font-bold mt-0.5">{slip.employeeName}</h3>
-            <p className="text-sm opacity-80">{monthLabel}</p>
+        {/* Company branded header */}
+        <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2563eb] text-white px-6 py-4 rounded-t-2xl flex-shrink-0">
+          <div className="flex items-center gap-3 mb-3">
+            <img
+              src="/images/logo/logo-icon-dark.png"
+              alt={company.name}
+              className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold tracking-widest opacity-75 uppercase">{company.name}</p>
+              {company.tagline && <p className="text-[10px] opacity-60 italic">{company.tagline}</p>}
+            </div>
+            <button onClick={onClose} className="text-white opacity-70 hover:opacity-100 text-2xl leading-none ml-2">×</button>
           </div>
-          <button onClick={onClose} className="text-white opacity-70 hover:opacity-100 text-2xl leading-none ml-4">×</button>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs opacity-65 uppercase tracking-wide mb-0.5">Salary Slip</p>
+              <h3 className="text-lg font-bold">{slip.employeeName}</h3>
+              <p className="text-sm opacity-80">{monthLabel}</p>
+            </div>
+            <div className="text-right text-xs opacity-60 mt-1">
+              <p>ID: {slip.id.toUpperCase()}</p>
+            </div>
+          </div>
         </div>
 
         <div className="overflow-y-auto flex-1 p-6 space-y-4">
@@ -101,30 +120,27 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <div><span className="text-xs text-gray-400 block">Email</span><span className="font-medium text-xs">{slip.employeeEmail}</span></div>
           </div>
 
-          {/* Earnings */}
+          {/* Earnings — display-only breakdown, does not affect stored payroll data */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Earnings</p>
-            <Row label="Basic Salary" value={fmtRs(slip.basicSalary)} />
-            {slip.allowances.map(a => <Row key={a.label} label={a.label} value={fmtRs(a.amount)} />)}
-            {slip.bonuses.map(b => <Row key={b.label} label={b.label} value={`+${fmtRs(b.amount)}`} accent="text-green-600 dark:text-green-400" />)}
-            {slip.overtime > 0 && <Row label="Overtime" value={`+${fmtRs(slip.overtime)}`} accent="text-green-600 dark:text-green-400" />}
+            <Row label="Basic Salary (50%)"          value={fmtRs(bd.basic)} />
+            <Row label="House Rent Allowance (20%)"  value={fmtRs(bd.hra)} />
+            <Row label="Transport Allowance (15%)"   value={fmtRs(bd.transport)} />
+            <Row label="Medical Allowance (15%)"     value={fmtRs(bd.medical)} />
             <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
-              <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Gross Salary</span>
-              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(slip.grossSalary)}</span>
+              <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Total Earnings</span>
+              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(slip.basicSalary)}</span>
             </div>
           </div>
 
-          {/* Deductions */}
-          {(slip.deductions.length > 0 || slip.advanceSalaryDeduction > 0) && (
+          {/* Deductions — only advance salary recovery is shown per policy */}
+          {slip.advanceSalaryDeduction > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Deductions</p>
-              {slip.deductions.map(d => <Row key={d.label} label={d.label} value={`−${fmtRs(d.amount)}`} accent="text-red-600 dark:text-red-400" />)}
-              {slip.advanceSalaryDeduction > 0 && (
-                <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />
-              )}
+              <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />
               <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
                 <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Total Deductions</span>
-                <span className="font-bold text-sm text-red-600">−{fmtRs(slip.totalDeductions)}</span>
+                <span className="font-bold text-sm text-red-600">−{fmtRs(slip.advanceSalaryDeduction)}</span>
               </div>
             </div>
           )}
@@ -132,7 +148,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
           {/* Net */}
           <div className="rounded-xl bg-brand-600 text-white px-5 py-4 flex justify-between items-center">
             <span className="text-sm font-semibold">NET SALARY</span>
-            <span className="text-xl font-bold">{fmtRs(slip.netSalary)}</span>
+            <span className="text-xl font-bold">{fmtRs(slip.basicSalary - computeDeductions(slip))}</span>
           </div>
 
           {slip.notes && (
@@ -167,28 +183,49 @@ function GenerateSlipModal({
   const [empId, setEmpId] = useState("");
   const [month, setMonth] = useState(MONTHS[MONTHS.length - 1]?.value ?? "");
   const [basicSalary, setBasicSalary] = useState("");
-  const [allowances, setAllowances] = useState<PayrollItem[]>([
-    { label: "House Rent Allowance", amount: 0 },
-    { label: "Transport Allowance", amount: 0 },
-  ]);
+  const [allowances, setAllowances] = useState<PayrollItem[]>([]);
   const [bonuses, setBonuses] = useState<PayrollItem[]>([]);
   const [overtime, setOvertime] = useState("0");
-  const [deductions, setDeductions] = useState<PayrollItem[]>([
-    { label: "Income Tax", amount: 0 },
-    { label: "Provident Fund", amount: 0 },
-  ]);
-  const [advanceDeduction, setAdvanceDeduction] = useState("0");
   const [designation, setDesignation] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (empId) {
+      try {
+        const stored = localStorage.getItem("optivax_employee_extra");
+        if (stored) {
+          const extraData = JSON.parse(stored);
+          const empExtra = extraData[empId];
+          if (empExtra && typeof empExtra.salary === "number") {
+            setBasicSalary(empExtra.salary.toString());
+          } else {
+            setBasicSalary("");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to parse employee extra data", err);
+      }
+    } else {
+      setBasicSalary("");
+    }
+  }, [empId]);
+
   const selectedEmp = employees.find(e => e.id === empId);
   const basic = parseFloat(basicSalary) || 0;
   const ot    = parseFloat(overtime) || 0;
-  const adv   = parseFloat(advanceDeduction) || 0;
-  const grossCalc = basic + allowances.reduce((s, i) => s + i.amount, 0) + bonuses.reduce((s, i) => s + i.amount, 0) + ot;
-  const dedCalc   = deductions.reduce((s, i) => s + i.amount, 0) + adv;
-  const netCalc   = grossCalc - dedCalc;
+
+  // Auto-calculated deductions based on strict rules
+  const strictDeductions = useMemo(() => {
+    if (!empId || !month || basic <= 0) {
+      return { advanceSalaryDeduction: 0, unpaidLeaveDays: 0, unpaidLeaveDeduction: 0, lateCount: 0, lateAttendanceDeduction: 0 };
+    }
+    return computeStrictDeductions(empId, month, basic);
+  }, [empId, month, basic]);
+
+  const adv = strictDeductions.advanceSalaryDeduction;
+  const dedCalc = adv;
+  const netCalc = basic - dedCalc;
 
   const getDeptFromRole = (role: string) => {
     if (role.startsWith("sales")) return "Sales";
@@ -219,11 +256,11 @@ function GenerateSlipModal({
       allowances: allowances.filter(i => i.label && i.amount > 0),
       bonuses: bonuses.filter(i => i.label && i.amount > 0),
       overtime: ot,
-      deductions: deductions.filter(i => i.label && i.amount > 0),
+      deductions: [],
       advanceSalaryDeduction: adv,
-      grossSalary: grossCalc,
-      totalDeductions: dedCalc,
-      netSalary: Math.max(0, netCalc),
+      grossSalary: basic,
+      totalDeductions: adv,
+      netSalary: Math.max(0, basic - adv),
       generatedAt: new Date().toISOString(),
       generatedById: user?.id ?? "",
       generatedByName: user?.name ?? "",
@@ -261,8 +298,8 @@ function GenerateSlipModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Basic Salary (Rs.) *</label>
-              <input type="number" min="0" className={inputCls} placeholder="e.g. 45000" value={basicSalary}
-                onChange={e => setBasicSalary(e.target.value)} />
+              <input type="number" min="0" className={`${inputCls} bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-80`} placeholder="Auto-fetched" value={basicSalary}
+                readOnly />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Designation</label>
@@ -284,15 +321,16 @@ function GenerateSlipModal({
               onChange={e => setOvertime(e.target.value)} />
           </div>
 
-          {/* Deductions */}
-          <ItemList items={deductions} onChange={setDeductions} label="Deductions" />
-
-          {/* Advance Salary Deduction */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Advance Salary Recovery (Rs.)</label>
-            <input type="number" min="0" className={inputCls} value={advanceDeduction}
-              onChange={e => setAdvanceDeduction(e.target.value)} />
-          </div>
+          {/* Advance Salary Recovery (auto-detected) */}
+          {adv > 0 && (
+            <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900/30">
+              <h4 className="text-sm font-semibold text-red-800 dark:text-red-400 mb-2">Auto-Detected Deduction</h4>
+              <div className="flex justify-between text-sm text-red-700 dark:text-red-300">
+                <span>Advance Salary Recovery</span>
+                <span>−{fmtRs(adv)}</span>
+              </div>
+            </div>
+          )}
 
           {/* Notes */}
           <div>
@@ -302,9 +340,9 @@ function GenerateSlipModal({
 
           {/* Live preview totals */}
           <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 grid grid-cols-3 gap-3 text-center">
-            <div><p className="text-xs text-gray-400">Gross</p><p className="text-lg font-bold text-gray-900 dark:text-white">{fmtRs(grossCalc)}</p></div>
+            <div><p className="text-xs text-gray-400">Basic / Gross</p><p className="text-lg font-bold text-gray-900 dark:text-white">{fmtRs(basic)}</p></div>
             <div><p className="text-xs text-gray-400">Deductions</p><p className="text-lg font-bold text-red-600">−{fmtRs(dedCalc)}</p></div>
-            <div><p className="text-xs text-gray-400">Net Salary</p><p className="text-lg font-bold text-brand-600 dark:text-brand-400">{fmtRs(Math.max(0, netCalc))}</p></div>
+            <div><p className="text-xs text-gray-400">Net Salary</p><p className="text-lg font-bold text-brand-600 dark:text-brand-400">{fmtRs(Math.max(0, basic - dedCalc))}</p></div>
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -459,8 +497,8 @@ export default function SalarySlips() {
                 <tr>
                   {[
                     "Employee", "Department", "Month",
-                    "Basic", "Gross", "Deductions", "Net Salary",
-                    "Generated", "Actions",
+                    "Basic Salary", "Deductions", "Net Salary",
+                    "Actions",
                   ].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
@@ -468,7 +506,7 @@ export default function SalarySlips() {
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {visibleSlips.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">
+                  <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
                     {isAdminView ? "No salary slips found." : "No salary slips have been generated for you yet."}
                   </td></tr>
                 ) : visibleSlips.map(slip => (
@@ -486,14 +524,9 @@ export default function SalarySlips() {
                       {new Date(slip.salaryMonth + "-01").toLocaleString("default", { month: "short", year: "numeric" })}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{fmtRs(slip.basicSalary)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-blue-600 dark:text-blue-400">{fmtRs(computeGross(slip))}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-red-600 dark:text-red-400">−{fmtRs(computeDeductions(slip))}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="text-sm font-bold text-brand-600 dark:text-brand-400">{fmtRs(computeNet(slip))}</span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-400">
-                      <p>{new Date(slip.generatedAt).toLocaleDateString()}</p>
-                      {isAdminView && <p>{slip.generatedByName}</p>}
+                      <span className="text-sm font-bold text-brand-600 dark:text-brand-400">{fmtRs(slip.basicSalary - computeDeductions(slip))}</span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex gap-2">

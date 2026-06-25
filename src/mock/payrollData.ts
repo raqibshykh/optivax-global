@@ -503,7 +503,9 @@ function _slipHtml(slip: SalarySlip, co: _CompanyBranding): string {
 <style>
 *{box-sizing:border-box;}
 body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:28px;background:#f4f6f9;color:#1a2733;}
-.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);}
+.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);position:relative;isolation:isolate;}
+.wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(35deg);width:55%;opacity:0.08;pointer-events:none;z-index:-1;}
+.wm img{width:100%;height:auto;display:block;}
 /* Header */
 .hdr{display:flex;align-items:center;gap:18px;padding:22px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}
 .co-block{flex:1;min-width:0;}
@@ -542,9 +544,10 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:28px;background:#f4
 .ftr{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 28px 16px;border-top:1px solid #e8edf3;background:#f9fafb;margin-top:0;}
 .ft{font-size:9.5px;color:#9aabb7;line-height:1.55;}
 .ft strong{color:#7b8fa6;}
-@media print{body{background:#fff;padding:0;}.wrap{box-shadow:none;border-radius:0;}@page{margin:12mm;size:A4 portrait;}}
+@media print{body{background:#fff;padding:0;}.wrap{box-shadow:none;border-radius:0;}.wm{width:105mm;}@page{margin:12mm;size:A4 portrait;}}
 </style></head><body>
 <div class="wrap">
+  <div class="wm"><img src="${logoSrc}" alt="" /></div>
   <div class="hdr">
     <div style="flex-shrink:0;">${logoHtml}</div>
     <div class="co-block">
@@ -625,7 +628,9 @@ export function printSalarySlipsBulk(slips: SalarySlip[]) {
 <style>
 *{box-sizing:border-box;}
 body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:24px;background:#f4f6f9;}
-.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);}
+.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);position:relative;isolation:isolate;}
+.wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(35deg);width:55%;opacity:0.08;pointer-events:none;z-index:-1;}
+.wm img{width:100%;height:auto;display:block;}
 .hdr{display:flex;align-items:center;gap:18px;padding:22px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}
 .co-block{flex:1;min-width:0;}.co-name{font-size:19px;font-weight:800;margin:0 0 2px;}.co-tag{font-size:11px;opacity:.72;margin:0 0 5px;font-style:italic;}.co-det{font-size:10.5px;opacity:.70;line-height:1.65;}
 .slip-box{text-align:right;flex-shrink:0;}.slip-badge{display:inline-block;border:1px solid rgba(255,255,255,0.45);background:rgba(255,255,255,0.15);border-radius:5px;padding:4px 11px;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:5px;}.slip-mo{font-size:14px;font-weight:600;}.slip-id{font-size:9.5px;opacity:.60;margin-top:3px;}
@@ -636,7 +641,7 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:24px;background:#f4
 .net{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}.net-lbl{font-size:13px;font-weight:700;letter-spacing:1.5px;opacity:.9;}.net-amt{font-size:26px;font-weight:800;}
 .notes{margin:14px 18px 0;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:11px;color:#92400e;}
 .ftr{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 28px 16px;border-top:1px solid #e8edf3;background:#f9fafb;}.ft{font-size:9.5px;color:#9aabb7;line-height:1.55;}.ft strong{color:#7b8fa6;}
-@media print{body{background:#fff;padding:0;}.wrap{page-break-after:always;box-shadow:none;border-radius:0;}@page{margin:12mm;size:A4 portrait;}}
+@media print{body{background:#fff;padding:0;}.wrap{page-break-after:always;box-shadow:none;border-radius:0;}.wm{width:105mm;}@page{margin:12mm;size:A4 portrait;}}
 </style></head><body>
 ${pages.join("\n")}
 </body></html>`;

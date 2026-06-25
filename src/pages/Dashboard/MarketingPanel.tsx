@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { safeParse } from "../../lib/storage";
 import type { MockTask } from "../Common/Tasks";
+import {
+  getContentEntries, todayStr, weekRange, upcomingRange, monthRange,
+  STATUS_DOT, STATUS_BADGE, PLATFORM_ABBR,
+  type ContentEntry,
+} from "../../mock/contentCalendarData";
 
 // ── Types ────────────────────────────────────────────────────────────────
 interface MarketingCampaign {
@@ -128,6 +134,38 @@ export default function MarketingPanel() {
     setAllTasks(updated);
   };
 
+  // ── Content Calendar widgets ─────────────────────────────────────────
+  const [calEntries, setCalEntries] = useState<ContentEntry[]>([]);
+  useEffect(() => { setCalEntries(getContentEntries()); }, []);
+
+  const today      = todayStr();
+  const wk         = weekRange();
+  const upcoming   = upcomingRange();
+  const mth        = monthRange();
+
+  const todayContent    = calEntries.filter(e => e.scheduledDate === today)
+    .sort((a,b) => a.scheduledTime.localeCompare(b.scheduledTime));
+  const weekContent     = calEntries.filter(e => e.scheduledDate >= wk.start && e.scheduledDate <= wk.end)
+    .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime));
+  const upcomingContent = calEntries.filter(e => e.scheduledDate >= upcoming.start && e.scheduledDate <= upcoming.end)
+    .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate));
+  const monthContent    = calEntries.filter(e => e.scheduledDate >= mth.start && e.scheduledDate <= mth.end);
+  const monthSummary    = {
+    total:     monthContent.length,
+    planned:   monthContent.filter(e => e.status === "Planned").length,
+    ready:     monthContent.filter(e => e.status === "Ready").length,
+    published: monthContent.filter(e => e.status === "Published").length,
+    cancelled: monthContent.filter(e => e.status === "Cancelled").length,
+  };
+
+  function fmtTime(t: string): string {
+    const [h, m] = t.split(":").map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h < 12 ? "AM" : "PM"}`;
+  }
+  function fmtDateShort(d: string): string {
+    return new Date(d + "T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" });
+  }
+
   // ── Render ────────────────────────────────────────────────────────────
   const tabs = isMember
     ? ["tasks", "campaigns", "content", "analytics"]
@@ -190,6 +228,125 @@ export default function MarketingPanel() {
         )}
       </div>
 
+
+      {/* ── Content Calendar Widgets ──────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+
+        {/* Today's Content */}
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-white">Today's Content</h4>
+            <span className="text-xs text-gray-400">{todayContent.length} item{todayContent.length !== 1 ? "s" : ""}</span>
+          </div>
+          {todayContent.length === 0 ? (
+            <p className="text-xs text-gray-400 py-2 text-center">Nothing scheduled today</p>
+          ) : (
+            <div className="space-y-2">
+              {todayContent.slice(0, 3).map(e => (
+                <div key={e.id} className={`flex items-start gap-2 p-2 rounded-lg border-l-2 ${STATUS_DOT[e.status].replace("bg-","border-l-")} bg-gray-50 dark:bg-gray-800/50`}>
+                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${STATUS_DOT[e.status]}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{e.title}</p>
+                    <p className="text-[10px] text-gray-400">{fmtTime(e.scheduledTime)} · {PLATFORM_ABBR[e.platform]}</p>
+                  </div>
+                </div>
+              ))}
+              {todayContent.length > 3 && <p className="text-[10px] text-gray-400 pl-1">+{todayContent.length - 3} more</p>}
+            </div>
+          )}
+          <Link to="/marketing/content-calendar" className="mt-3 block text-center text-[10px] text-brand-600 dark:text-brand-400 hover:underline">
+            Open Calendar →
+          </Link>
+        </div>
+
+        {/* This Week's Content */}
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-white">This Week</h4>
+            <span className="text-xs text-gray-400">{weekContent.length} item{weekContent.length !== 1 ? "s" : ""}</span>
+          </div>
+          {weekContent.length === 0 ? (
+            <p className="text-xs text-gray-400 py-2 text-center">Nothing this week</p>
+          ) : (
+            <div className="space-y-2">
+              {weekContent.slice(0, 4).map(e => (
+                <div key={e.id} className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[e.status]}`} />
+                  <span className="text-[10px] text-gray-400 w-10 flex-shrink-0">{fmtDateShort(e.scheduledDate)}</span>
+                  <span className="text-xs text-gray-700 dark:text-gray-300 truncate flex-1">{e.title}</span>
+                </div>
+              ))}
+              {weekContent.length > 4 && <p className="text-[10px] text-gray-400">+{weekContent.length - 4} more</p>}
+            </div>
+          )}
+          <Link to="/marketing/content-calendar" className="mt-3 block text-center text-[10px] text-brand-600 dark:text-brand-400 hover:underline">
+            View Week →
+          </Link>
+        </div>
+
+        {/* Upcoming Content */}
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-white">Upcoming (7 days)</h4>
+            <span className="text-xs text-gray-400">{upcomingContent.length}</span>
+          </div>
+          {upcomingContent.length === 0 ? (
+            <p className="text-xs text-gray-400 py-2 text-center">Nothing in the next 7 days</p>
+          ) : (
+            <div className="space-y-2">
+              {upcomingContent.slice(0, 4).map(e => (
+                <div key={e.id} className="flex items-start gap-2">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${STATUS_DOT[e.status]}`} />
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-700 dark:text-gray-300 truncate">{e.title}</p>
+                    <p className="text-[10px] text-gray-400">{fmtDateShort(e.scheduledDate)} · {e.platform}</p>
+                  </div>
+                </div>
+              ))}
+              {upcomingContent.length > 4 && <p className="text-[10px] text-gray-400">+{upcomingContent.length - 4} more</p>}
+            </div>
+          )}
+          <Link to="/marketing/content-calendar" className="mt-3 block text-center text-[10px] text-brand-600 dark:text-brand-400 hover:underline">
+            Plan Content →
+          </Link>
+        </div>
+
+        {/* Monthly Summary */}
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-white">Monthly Summary</h4>
+            <span className="text-xs font-bold text-gray-700 dark:text-white">{monthSummary.total}</span>
+          </div>
+          <div className="space-y-2">
+            {(["published","ready","planned","cancelled"] as const).map(s => {
+              const count = monthSummary[s];
+              const pct   = monthSummary.total > 0 ? Math.round((count / monthSummary.total) * 100) : 0;
+              const label = s.charAt(0).toUpperCase() + s.slice(1);
+              const dotCls: Record<string, string> = {
+                published: "bg-green-500", ready: "bg-yellow-400", planned: "bg-blue-500", cancelled: "bg-red-500",
+              };
+              return (
+                <div key={s}>
+                  <div className="flex justify-between text-[10px] mb-0.5">
+                    <span className="flex items-center gap-1">
+                      <span className={`w-1.5 h-1.5 rounded-full ${dotCls[s]}`} />
+                      <span className="text-gray-600 dark:text-gray-400">{label}</span>
+                    </span>
+                    <span className="text-gray-700 dark:text-gray-300 font-medium">{count}</span>
+                  </div>
+                  <div className="w-full h-1 bg-gray-100 dark:bg-gray-800 rounded-full">
+                    <div className={`h-1 rounded-full ${dotCls[s]}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <Link to="/marketing/content-calendar" className="mt-3 block text-center text-[10px] text-brand-600 dark:text-brand-400 hover:underline">
+            Full Calendar →
+          </Link>
+        </div>
+
+      </div>
 
       {/* ── Tabs ──────────────────────────────────────────────────── */}
       <div className="mb-6 border-b border-gray-200 dark:border-gray-800">

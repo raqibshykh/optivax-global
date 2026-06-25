@@ -13,6 +13,10 @@ import type { LeaveRequest } from "../Client/Profile";
 import { seedAllMockData } from "../../lib/devSeed";
 import { getCampaigns, getTargets, getSalesTasks } from "../../mock/salesData";
 import { AuditLogService } from "../../services/auditLogService";
+import {
+  getContentEntries, STATUS_BADGE, STATUS_DOT, PROD_STATUS_BADGE, PROD_STATUS_DOT, PLATFORM_ABBR,
+  type ContentEntry,
+} from "../../mock/contentCalendarData";
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 interface Organization    { id: string; name: string; owner_id: string; created_at: string; }
@@ -248,6 +252,7 @@ export default function SuperAdminPanel() {
   const [deliverables,  setDeliverables]  = useState<Deliverable[]>(() =>
     safeParse<Deliverable[]>(localStorage.getItem("optivax_deliverables"), [])
   );
+  const [calEntries,    setCalEntries]    = useState<ContentEntry[]>(() => getContentEntries());
 
   // ── Modal / form state ────────────────────────────────────────────────────
   const [showCreateUser, setShowCreateUser] = useState(false);
@@ -318,6 +323,7 @@ export default function SuperAdminPanel() {
       if (e.key === "sales_tasks")          setSalesTasks(getSalesTasks() as SalesTask[]);
       if (e.key === "sales_campaigns")      setSalesCampaigns(getCampaigns() as SalesCampaign[]);
       if (e.key === "sales_targets")        setSalesTargets(getTargets() as SalesTarget[]);
+      if (e.key === "mkt_content_calendar_v1") setCalEntries(getContentEntries());
     };
     window.addEventListener("storage", handler);
     return () => window.removeEventListener("storage", handler);
@@ -337,6 +343,37 @@ export default function SuperAdminPanel() {
     employees.forEach(u => { const d = getDept(u.role); if (map[d]) map[d].push(u); });
     return map;
   }, [employees]);
+
+  // ── Content Calendar derived data ────────────────────────────────────────
+  const calStats = useMemo(() => {
+    const today      = new Date().toISOString().slice(0, 10);
+    const in7        = new Date(); in7.setDate(in7.getDate() + 7);
+    const in7str     = in7.toISOString().slice(0, 10);
+    const monthPrefix = today.slice(0, 7);
+    const monthLastDay = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)
+      .toISOString().slice(0, 10);
+
+    const todayItems    = calEntries.filter(e => e.scheduledDate === today && e.status !== "Cancelled");
+    const upcomingItems = calEntries
+      .filter(e => e.scheduledDate > today && e.scheduledDate <= in7str && e.status !== "Cancelled")
+      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
+      .slice(0, 5);
+    const pendingProd   = calEntries.filter(e => e.productionSupportRequired && (e.productionStatus ?? "Pending") === "Pending");
+    const readyForMkt   = calEntries.filter(e => e.productionStatus === "Ready For Marketing");
+    const monthItems    = calEntries.filter(e =>
+      e.scheduledDate >= monthPrefix + "-01" && e.scheduledDate <= monthLastDay
+    );
+    const monthByStatus = {
+      Published: monthItems.filter(e => e.status === "Published").length,
+      Ready:     monthItems.filter(e => e.status === "Ready").length,
+      Planned:   monthItems.filter(e => e.status === "Planned").length,
+      Cancelled: monthItems.filter(e => e.status === "Cancelled").length,
+    };
+    const prodCount    = calEntries.filter(e => e.productionSupportRequired).length;
+    const selfCount    = calEntries.filter(e => !e.productionSupportRequired).length;
+    const total        = calEntries.length;
+    return { todayItems, upcomingItems, pendingProd, readyForMkt, monthItems, monthByStatus, prodCount, selfCount, total };
+  }, [calEntries]);
 
   // ── Revenue chart ─────────────────────────────────────────────────────────
   const chartData = useMemo(() => {
@@ -697,6 +734,180 @@ export default function SuperAdminPanel() {
                 ))
               }
             </Card>
+          </div>
+
+          {/* ── Content Calendar ──────────────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Content Calendar</h2>
+              <Link to="/marketing/content-calendar" className="text-xs text-brand-500 hover:underline">Open Calendar →</Link>
+            </div>
+
+            {/* 4 stat cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+              <Link to="/marketing/content-calendar" className="rounded-xl border-l-4 border-blue-500 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 shadow-sm hover:shadow-md transition-shadow block">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Today's Content</p>
+                <h4 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{calStats.todayItems.length}</h4>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">scheduled for today</p>
+              </Link>
+              <Link to="/marketing/content-calendar" className="rounded-xl border-l-4 border-indigo-500 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 shadow-sm hover:shadow-md transition-shadow block">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Upcoming (7 days)</p>
+                <h4 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{calStats.upcomingItems.length}</h4>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">content items ahead</p>
+              </Link>
+              <Link to="/production/content-requests" className="rounded-xl border-l-4 border-orange-500 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 shadow-sm hover:shadow-md transition-shadow block">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pending Prod. Requests</p>
+                <h4 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{calStats.pendingProd.length}</h4>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">awaiting production</p>
+              </Link>
+              <Link to="/production/content-requests" className="rounded-xl border-l-4 border-green-500 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 shadow-sm hover:shadow-md transition-shadow block">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ready For Marketing</p>
+                <h4 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{calStats.readyForMkt.length}</h4>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">items ready to publish</p>
+              </Link>
+            </div>
+
+            {/* 2 detail cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-5">
+              {/* Monthly Content Summary */}
+              <Card>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Monthly Content Summary
+                    <span className="ml-2 text-xs font-normal text-gray-400">({new Date().toLocaleString("default",{month:"long",year:"numeric"})})</span>
+                  </h3>
+                  <span className="text-xs text-gray-400">{calStats.monthItems.length} total</span>
+                </div>
+                {(["Published","Ready","Planned","Cancelled"] as const).map(st => {
+                  const count = calStats.monthByStatus[st];
+                  const pct   = calStats.monthItems.length > 0 ? Math.round(count / calStats.monthItems.length * 100) : 0;
+                  return (
+                    <div key={st} className="mb-3 last:mb-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${STATUS_DOT[st]}`} />
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{st}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">{count}</span>
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[st]}`}>{pct}%</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
+                        <div className={`h-1.5 rounded-full ${STATUS_DOT[st]}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </Card>
+
+              {/* Marketing vs Production Activity Summary */}
+              <Card>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Marketing vs Production Activity</h3>
+                  <span className="text-xs text-gray-400">{calStats.total} entries total</span>
+                </div>
+                <div className="flex gap-3 mb-4">
+                  <div className="flex-1 rounded-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-100 dark:border-pink-900/40 p-3 text-center">
+                    <p className="text-2xl font-bold text-pink-600 dark:text-pink-400">{calStats.selfCount}</p>
+                    <p className="text-xs text-pink-500 dark:text-pink-400 mt-0.5">Self-Managed</p>
+                    <p className="text-xs text-gray-400">{calStats.total > 0 ? Math.round(calStats.selfCount / calStats.total * 100) : 0}%</p>
+                  </div>
+                  <div className="flex-1 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-900/40 p-3 text-center">
+                    <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{calStats.prodCount}</p>
+                    <p className="text-xs text-orange-500 dark:text-orange-400 mt-0.5">Production-Dependent</p>
+                    <p className="text-xs text-gray-400">{calStats.total > 0 ? Math.round(calStats.prodCount / calStats.total * 100) : 0}%</p>
+                  </div>
+                </div>
+                {calStats.total > 0 && (
+                  <div className="w-full h-2 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 flex">
+                    <div className="h-2 bg-pink-400 transition-all" style={{ width: `${Math.round(calStats.selfCount / calStats.total * 100)}%` }} />
+                    <div className="h-2 bg-orange-400 transition-all" style={{ width: `${Math.round(calStats.prodCount / calStats.total * 100)}%` }} />
+                  </div>
+                )}
+                <div className="mt-4 space-y-1.5">
+                  {[
+                    { label: "Pending Production", count: calStats.pendingProd.length, cls: PROD_STATUS_BADGE["Pending"], dot: PROD_STATUS_DOT["Pending"] },
+                    { label: "In Progress",         count: calEntries.filter(e => e.productionStatus === "In Progress").length, cls: PROD_STATUS_BADGE["In Progress"], dot: PROD_STATUS_DOT["In Progress"] },
+                    { label: "Ready For Marketing", count: calStats.readyForMkt.length, cls: PROD_STATUS_BADGE["Ready For Marketing"], dot: PROD_STATUS_DOT["Ready For Marketing"] },
+                    { label: "Delivered",            count: calEntries.filter(e => e.productionStatus === "Delivered").length, cls: PROD_STATUS_BADGE["Delivered"], dot: PROD_STATUS_DOT["Delivered"] },
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${row.dot}`} />
+                        <span className="text-xs text-gray-600 dark:text-gray-400">{row.label}</span>
+                      </div>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${row.cls}`}>{row.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+
+            {/* Today + Upcoming lists */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Today's Scheduled Content</h3>
+                  <Link to="/marketing/content-calendar" className="text-xs text-brand-500 hover:underline">Calendar →</Link>
+                </div>
+                {calStats.todayItems.length === 0
+                  ? <p className="text-xs text-gray-400 text-center py-4">Nothing scheduled for today.</p>
+                  : calStats.todayItems.map(e => (
+                    <div key={e.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-xs font-bold text-gray-500 dark:text-gray-400 shrink-0">
+                            {PLATFORM_ABBR[e.platform]}
+                          </span>
+                          <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{e.title}</p>
+                        </div>
+                        <p className="text-xs text-gray-400">{e.scheduledTime} · {e.contentType}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {e.productionSupportRequired && e.productionStatus && (
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${PROD_STATUS_BADGE[e.productionStatus]}`}>
+                            {e.productionStatus}
+                          </span>
+                        )}
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${STATUS_BADGE[e.status]}`}>{e.status}</span>
+                      </div>
+                    </div>
+                  ))
+                }
+              </Card>
+
+              <Card>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Upcoming Content (Next 7 Days)</h3>
+                  <Link to="/marketing/content-calendar" className="text-xs text-brand-500 hover:underline">Calendar →</Link>
+                </div>
+                {calStats.upcomingItems.length === 0
+                  ? <p className="text-xs text-gray-400 text-center py-4">No upcoming content in 7 days.</p>
+                  : calStats.upcomingItems.map(e => (
+                    <div key={e.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-xs font-bold text-gray-500 dark:text-gray-400 shrink-0">
+                            {PLATFORM_ABBR[e.platform]}
+                          </span>
+                          <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{e.title}</p>
+                        </div>
+                        <p className="text-xs text-gray-400">{e.scheduledDate} · {e.scheduledTime}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {e.productionSupportRequired && e.productionStatus && (
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${PROD_STATUS_BADGE[e.productionStatus]}`}>
+                            {e.productionStatus}
+                          </span>
+                        )}
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${STATUS_BADGE[e.status]}`}>{e.status}</span>
+                      </div>
+                    </div>
+                  ))
+                }
+              </Card>
+            </div>
           </div>
         </div>
       )}

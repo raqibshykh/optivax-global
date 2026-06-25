@@ -65,6 +65,7 @@ import Deliverables from "./pages/Production/Deliverables";
 // ── Marketing pages ───────────────────────────────────────────────────────
 import SocialTracking from "./pages/Marketing/SocialTracking";
 import MarketingLeads from "./pages/Marketing/Leads";
+import ContentCalendar from "./pages/Marketing/ContentCalendar";
 
 // ── Client Communication pages ────────────────────────────────────────────
 import ClientConversations from "./pages/Conversations/ClientConversations";
@@ -178,8 +179,9 @@ export default function App() {
 
           {/* ── PRODUCTION ────────────────────────────────────────── */}
           <Route element={<ProtectedRoute allowedDomain="production" allowedRoles={["production_admin", "production_member"]} />}>
-            <Route path="/production"               element={<Navigate to="/production/dashboard" replace />} />
-            <Route path="/production/dashboard"     element={<ProductionPanel />} />
+            <Route path="/production"                    element={<Navigate to="/production/dashboard" replace />} />
+            <Route path="/production/dashboard"          element={<ProductionPanel />} />
+            <Route path="/production/content-requests"   element={<ContentCalendar />} />
             <Route path="/production/projects"      element={<Projects />} />
             <Route path="/production/tasks"         element={<Tasks />} />
             <Route path="/production/deliverables"  element={<Deliverables />} />
@@ -199,6 +201,7 @@ export default function App() {
             <Route path="/marketing"                       element={<Navigate to="/marketing/dashboard" replace />} />
             <Route path="/marketing/dashboard"             element={<MarketingPanel />} />
             <Route path="/marketing/leads"                 element={<MarketingLeads />} />
+            <Route path="/marketing/content-calendar"      element={<ContentCalendar />} />
             <Route path="/marketing/tasks"                 element={<Tasks />} />
             <Route path="/marketing/social"               element={<SocialTracking />} />
             <Route path="/marketing/reports"               element={<Reports />} />

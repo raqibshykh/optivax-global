@@ -81,8 +81,9 @@ export const MENU_CONFIG: MenuConfig = {
       label: "Production",
       icon: "folder",
       subItems: [
-        { key: "sa-prod-dashboard",    label: "Dashboard",    path: "/production/dashboard" },
-        { key: "sa-prod-deliverables", label: "Deliverables", path: "/production/deliverables" },
+        { key: "sa-prod-dashboard",    label: "Dashboard",         path: "/production/dashboard" },
+        { key: "sa-prod-mkt-requests", label: "Marketing Requests", path: "/production/content-requests" },
+        { key: "sa-prod-deliverables", label: "Deliverables",       path: "/production/deliverables" },
         { key: "sa-prod-projects",     label: "Projects",     path: "/production/projects" },
         { key: "sa-prod-tasks",        label: "Tasks",        path: "/production/tasks" },
         { key: "sa-prod-employees",    label: "Employees",    path: "/production/users" },
@@ -94,12 +95,13 @@ export const MENU_CONFIG: MenuConfig = {
       label: "Marketing",
       icon: "chart",
       subItems: [
-        { key: "sa-mkt-dashboard", label: "Dashboard",       path: "/marketing/dashboard" },
-        { key: "sa-mkt-leads",     label: "Lead Attribution",path: "/marketing/leads" },
-        { key: "sa-mkt-social",    label: "Social Tracking", path: "/marketing/social" },
-        { key: "sa-mkt-employees", label: "Employees",       path: "/marketing/users" },
-        { key: "sa-mkt-tasks",     label: "Tasks",           path: "/marketing/tasks" },
-        { key: "sa-mkt-reports",   label: "Reports",         path: "/marketing/reports" },
+        { key: "sa-mkt-dashboard", label: "Dashboard",        path: "/marketing/dashboard" },
+        { key: "sa-mkt-calendar",  label: "Content Calendar", path: "/marketing/content-calendar" },
+        { key: "sa-mkt-leads",     label: "Lead Attribution", path: "/marketing/leads" },
+        { key: "sa-mkt-social",    label: "Social Tracking",  path: "/marketing/social" },
+        { key: "sa-mkt-employees", label: "Employees",        path: "/marketing/users" },
+        { key: "sa-mkt-tasks",     label: "Tasks",            path: "/marketing/tasks" },
+        { key: "sa-mkt-reports",   label: "Reports",          path: "/marketing/reports" },
       ],
     },
     {
@@ -207,8 +209,9 @@ export const MENU_CONFIG: MenuConfig = {
 
   // ── Production Admin ──────────────────────────────────────────────────
   production_admin: [
-    { key: "dashboard",     label: "Dashboard",     icon: "grid",        path: "/production/dashboard" },
-    { key: "deliverables",  label: "Deliverables",  icon: "folder",      path: "/production/deliverables" },
+    { key: "dashboard",        label: "Dashboard",         icon: "grid",        path: "/production/dashboard" },
+    { key: "content-requests", label: "Marketing Requests", icon: "task",        path: "/production/content-requests" },
+    { key: "deliverables",     label: "Deliverables",       icon: "folder",      path: "/production/deliverables" },
     { key: "projects",      label: "Projects",      icon: "task",        path: "/production/projects" },
     { key: "tasks",         label: "Tasks",         icon: "task",        path: "/production/tasks" },
     { key: "files",         label: "Files",         icon: "folder",      path: "/production/files" },
@@ -227,8 +230,9 @@ export const MENU_CONFIG: MenuConfig = {
 
   // ── Production Member ─────────────────────────────────────────────────
   production_member: [
-    { key: "dashboard",        label: "Dashboard",       icon: "grid",        path: "/production/dashboard" },
-    { key: "deliverables",     label: "Deliverables",    icon: "folder",      path: "/production/deliverables" },
+    { key: "dashboard",        label: "Dashboard",         icon: "grid",        path: "/production/dashboard" },
+    { key: "content-requests", label: "Marketing Requests", icon: "task",        path: "/production/content-requests" },
+    { key: "deliverables",     label: "Deliverables",       icon: "folder",      path: "/production/deliverables" },
     { key: "tasks",            label: "Tasks",           icon: "task",        path: "/production/tasks" },
     { key: "files",            label: "Files",           icon: "folder",      path: "/production/files" },
     { key: "revisions",        label: "Revisions",       icon: "task",        path: "/production/revisions" },
@@ -244,6 +248,7 @@ export const MENU_CONFIG: MenuConfig = {
   // ── Marketing Admin ───────────────────────────────────────────────────
   marketing_admin: [
     { key: "dashboard",        label: "Dashboard",        icon: "grid",        path: "/marketing/dashboard" },
+    { key: "content-calendar", label: "Content Calendar", icon: "task",        path: "/marketing/content-calendar" },
     { key: "leads",            label: "Lead Attribution", icon: "chart",       path: "/marketing/leads" },
     {
       key: "email-marketing",
@@ -275,6 +280,7 @@ export const MENU_CONFIG: MenuConfig = {
   // ── Marketing Member ──────────────────────────────────────────────────
   marketing_member: [
     { key: "dashboard",        label: "Dashboard",        icon: "grid",        path: "/marketing/dashboard" },
+    { key: "content-calendar", label: "Content Calendar", icon: "task",        path: "/marketing/content-calendar" },
     { key: "my-tasks",         label: "My Tasks",         icon: "task",        path: "/marketing/tasks" },
     { key: "social-tracking",  label: "Social Tracking",  icon: "chart",       path: "/marketing/social" },
     {

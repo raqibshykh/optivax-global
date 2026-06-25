@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { RequirePermission } from "../../components/auth/RequirePermission";
@@ -10,6 +10,7 @@ import { safeParse } from "../../lib/storage";
 import { StoredClient } from "../../types";
 import type { MockTask } from "../Common/Tasks";
 import { getConversations, getVisibleConversations, getConvStats } from "../../mock/conversationsData";
+import { getContentEntries, PROD_STATUS_DOT, PROD_STATUS_BADGE, type ContentEntry } from "../../mock/contentCalendarData";
 
 const PROJECTS_KEY = "mock_projects";
 
@@ -123,6 +124,27 @@ export default function ProductionPanel() {
     return { open: s.open, awaitingTeam: s.awaitingTeam, unreadByTeam: s.unreadByTeam };
   })();
 
+  // ── Marketing production requests ─────────────────────────────────────────
+  const [prodRequests, setProdRequests] = useState<ContentEntry[]>([]);
+  useEffect(() => {
+    setProdRequests(getContentEntries().filter(e => e.productionSupportRequired));
+  }, []);
+
+  const prodStats = useMemo(() => {
+    const today = new Date().toISOString().slice(0,10);
+    const in14  = new Date(); in14.setDate(new Date().getDate() + 14);
+    const in14str = in14.toISOString().slice(0,10);
+    return {
+      pending:    prodRequests.filter(e => (e.productionStatus ?? "Pending") === "Pending").length,
+      inProgress: prodRequests.filter(e => e.productionStatus === "In Progress").length,
+      ready:      prodRequests.filter(e => e.productionStatus === "Ready For Marketing").length,
+      upcoming:   prodRequests.filter(e =>
+        e.productionStatus !== "Delivered" &&
+        e.scheduledDate >= today && e.scheduledDate <= in14str
+      ).sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate)).slice(0,5),
+    };
+  }, [prodRequests]);
+
   // ── Assignment helpers ───────────────────────────────────────────────────
   const toggleAssignment = async (clientId: string, memberId: string) => {
     const existing = assignments[memberId] ?? [];
@@ -228,6 +250,79 @@ export default function ProductionPanel() {
           )}
           <p className="text-xs text-brand-500 mt-1 group-hover:underline">View all →</p>
         </button>
+      </div>
+
+      {/* ── Marketing Production Request Widgets ──────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+
+        {/* Pending */}
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-white">Pending Requests</h4>
+            <span className={`w-2.5 h-2.5 rounded-full ${PROD_STATUS_DOT["Pending"]}`} />
+          </div>
+          <p className="text-3xl font-bold text-gray-500 dark:text-gray-400 mb-3">{prodStats.pending}</p>
+          <Link to="/production/content-requests" className="text-[10px] text-brand-600 dark:text-brand-400 hover:underline">
+            View requests →
+          </Link>
+        </div>
+
+        {/* In Progress */}
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-white">In Progress</h4>
+            <span className={`w-2.5 h-2.5 rounded-full ${PROD_STATUS_DOT["In Progress"]}`} />
+          </div>
+          <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-3">{prodStats.inProgress}</p>
+          <Link to="/production/content-requests" className="text-[10px] text-brand-600 dark:text-brand-400 hover:underline">
+            View requests →
+          </Link>
+        </div>
+
+        {/* Ready For Delivery */}
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-white">Ready For Delivery</h4>
+            <span className={`w-2.5 h-2.5 rounded-full ${PROD_STATUS_DOT["Ready For Marketing"]}`} />
+          </div>
+          <p className="text-3xl font-bold text-green-600 dark:text-green-400 mb-3">{prodStats.ready}</p>
+          <Link to="/production/content-requests" className="text-[10px] text-brand-600 dark:text-brand-400 hover:underline">
+            Mark as delivered →
+          </Link>
+        </div>
+
+        {/* Upcoming Deadlines */}
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-white">Upcoming (14 days)</h4>
+            <span className="text-xs text-gray-400">{prodStats.upcoming.length}</span>
+          </div>
+          {prodStats.upcoming.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-2">No upcoming deadlines</p>
+          ) : (
+            <div className="space-y-2">
+              {prodStats.upcoming.map(e => (
+                <div key={e.id} className="flex items-start gap-2">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${PROD_STATUS_DOT[e.productionStatus ?? "Pending"]}`} />
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-700 dark:text-gray-300 truncate leading-tight">{e.title}</p>
+                    <p className="text-[10px] text-gray-400">
+                      {new Date(e.scheduledDate + "T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                      {" · "}{e.productionRequirementType}
+                    </p>
+                  </div>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${PROD_STATUS_BADGE[e.productionStatus ?? "Pending"]}`}>
+                    {e.productionStatus ?? "Pending"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <Link to="/production/content-requests" className="mt-3 block text-[10px] text-brand-600 dark:text-brand-400 hover:underline">
+            All requests →
+          </Link>
+        </div>
+
       </div>
 
       {/* Tabs */}

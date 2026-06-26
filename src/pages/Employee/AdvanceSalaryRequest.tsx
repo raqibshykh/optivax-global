@@ -3,10 +3,11 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import {
-  getAdvanceRequests, saveAdvanceRequests,
+  getAdvanceRequests, saveAdvanceRequests, appendAdvanceAuditEntry,
   type AdvanceSalaryRequest, type AdvanceStatus,
 } from "../../mock/payrollData";
 import { useToast } from "../../context/ToastContext";
+import { notifyAdvanceSalaryRequested } from "../../services/notificationHelpers";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -175,6 +176,23 @@ export default function AdvanceSalaryRequest() {
 
     const all = getAdvanceRequests();
     saveAdvanceRequests([...all, newReq]);
+    appendAdvanceAuditEntry({
+      action: "REQUEST_CREATED",
+      requestId: newReq.id,
+      employeeId: newReq.employeeId,
+      employeeName: newReq.employeeName,
+      employeeRole: newReq.employeeRole,
+      department: newReq.department,
+      amount: newReq.requestedAmount,
+      performedById: user?.id ?? "",
+      performedByName: user?.name ?? "",
+      performedByRole: user?.role ?? "",
+      notes: `Request created: ${reason.slice(0, 100)}`,
+    });
+    notifyAdvanceSalaryRequested(
+      newReq.employeeId, newReq.employeeName, newReq.employeeRole,
+      newReq.department, newReq.requestedAmount, newReq.id
+    );
     setRequests(prev => [newReq, ...prev]);
     setShowNew(false);
     showToast("Advance salary request submitted. HR will review it shortly.", "success");

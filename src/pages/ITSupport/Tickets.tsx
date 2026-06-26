@@ -8,6 +8,7 @@ import {
   type ITTicket, type TicketCategory, type TicketPriority, type TicketStatus,
 } from "../../mock/itSupportData";
 import { mockUsers } from "../../mock/users";
+import { notifyTicketCreated, notifyTicketAssigned, notifyTicketStatusChanged } from "../../services/notificationHelpers";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -128,6 +129,9 @@ export default function Tickets() {
       slaDeadline: addDays(now, SLA_DAYS[form.priority]),
     };
     persist([newTicket, ...tickets]);
+    if (user) {
+      notifyTicketCreated(user.id, user.name, user.role, newTicket.id, newTicket.title, newTicket.priority);
+    }
     setIsCreateOpen(false);
     setForm(EMPTY_FORM);
     showToast("Ticket submitted to IT Support.", "success");
@@ -141,6 +145,9 @@ export default function Tickets() {
       assignedToName: member?.name,
       status: detailTicket.status === "open" ? "in-progress" : detailTicket.status,
     });
+    if (user && member) {
+      notifyTicketAssigned(user.id, user.name, user.role, member.id, member.name, detailTicket.id, detailTicket.title);
+    }
     setAssignTo("");
     showToast(`Ticket assigned to ${member?.name}.`, "success");
   };
@@ -161,22 +168,30 @@ export default function Tickets() {
   };
 
   const handleResolve = (id: string) => {
+    const t = tickets.find(tk => tk.id === id);
     updateTicket(id, { status: "resolved", resolvedAt: new Date().toISOString() });
+    if (user && t) notifyTicketStatusChanged(user.id, user.name, user.role, t.requestedBy, id, t.title, "resolved");
     showToast("Ticket resolved.", "success");
   };
 
   const handleEscalate = (id: string) => {
+    const t = tickets.find(tk => tk.id === id);
     updateTicket(id, { status: "escalated" });
+    if (user && t) notifyTicketStatusChanged(user.id, user.name, user.role, t.requestedBy, id, t.title, "escalated");
     showToast("Ticket escalated.", "success");
   };
 
   const handleClose = (id: string) => {
+    const t = tickets.find(tk => tk.id === id);
     updateTicket(id, { status: "closed" });
+    if (user && t) notifyTicketStatusChanged(user.id, user.name, user.role, t.requestedBy, id, t.title, "closed");
     showToast("Ticket closed.", "success");
   };
 
   const handleReopen = (id: string) => {
+    const t = tickets.find(tk => tk.id === id);
     updateTicket(id, { status: "open", resolvedAt: undefined });
+    if (user && t) notifyTicketStatusChanged(user.id, user.name, user.role, t.requestedBy, id, t.title, "open");
     showToast("Ticket reopened.", "success");
   };
 

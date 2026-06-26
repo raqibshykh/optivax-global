@@ -6,6 +6,7 @@ import {
   getConversations, saveConversations,
   type Conversation, type ConvMessage, type ConvStatus,
 } from "../../mock/conversationsData";
+import { notifyClientPortalMessageSent } from "../../services/notificationHelpers";
 
 const STATUS_LABEL: Record<ConvStatus, string> = {
   open: "Open",
@@ -113,6 +114,8 @@ export default function ClientMessages() {
       };
     });
     saveConversations(updated);
+    // Notify assigned team member & super_admin/management
+    notifyClientPortalMessageSent(user.id, user.name, selected.assignedUserId, selected.assignedDept, selected.subject, selected.id);
     const mine = updated.filter(c => c.clientId === user.id).sort(
       (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
     );

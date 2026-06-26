@@ -6,6 +6,7 @@ import { useToast } from "../../context/ToastContext";
 import { api } from "../../lib/client";
 import type { Lead } from "../../types";
 import { PlusIcon, PencilIcon, TrashBinIcon } from "../../icons";
+import { notifyLeadCreated, notifyLeadUpdated, notifyLeadDeleted, notifyLeadConverted } from "../../services/notificationHelpers";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type LeadStatus = "new" | "contacted" | "qualified" | "lost" | "converted";
@@ -128,9 +129,12 @@ export default function Leads() {
       };
       if (editId) {
         await api.put("/saas/v1/leads", { id: editId, ...payload });
+        if (user) notifyLeadUpdated(user.id, user.name, user.role, form.name, editId);
         showToast("Lead updated", "success");
       } else {
-        await api.post("/saas/v1/leads", payload);
+        const res = await api.post<{ id?: string }>("/saas/v1/leads", payload);
+        const newId = res?.id ?? `lead-${Date.now()}`;
+        if (user) notifyLeadCreated(user.id, user.name, user.role, form.name, newId);
         showToast("Lead created", "success");
       }
       setModalOpen(false);
@@ -144,8 +148,10 @@ export default function Leads() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
+    const leadToDelete = leads.find(l => l.id === deleteId);
     try {
       await api.delete("/saas/v1/leads", { id: deleteId });
+      if (leadToDelete && user) notifyLeadDeleted(user.id, user.name, user.role, leadToDelete.name, deleteId);
       showToast("Lead deleted", "success");
       setDeleteId(null);
       fetchLeads();
@@ -167,6 +173,7 @@ export default function Leads() {
         convertedBy: user?.id,
         convertedByName: user?.name,
       });
+      if (user) notifyLeadConverted(user.id, user.name, user.role, lead.name, lead.id);
       showToast(`"${lead.name}" converted to client successfully.`, "success");
       fetchLeads();
     } catch (err: unknown) {

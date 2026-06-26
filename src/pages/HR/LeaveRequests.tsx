@@ -3,6 +3,7 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
+import { notifyLeaveRequestSubmitted, notifyLeaveDecision } from "../../services/notificationHelpers";
 
 const STORAGE_KEY = "mock_leave_requests";
 
@@ -154,6 +155,7 @@ export default function LeaveRequests() {
     setLeaves(updated);
     setIsModalOpen(false);
     setForm({ ...EMPTY_FORM });
+    notifyLeaveRequestSubmitted(user.id, user.name, user.role, form.type, req.id);
     showToast("Leave request submitted — will be deducted from payroll if approved", "success");
   };
 
@@ -166,6 +168,12 @@ export default function LeaveRequests() {
     );
     saveLeaves(updated);
     setLeaves(updated);
+    notifyLeaveDecision(
+      user.id, user.name,
+      reviewModal.request.userId, reviewModal.request.userName,
+      reviewModal.action === "approved",
+      reviewModal.request.type, reviewModal.request.id
+    );
     showToast(`Request ${reviewModal.action}`, "success");
     setReviewModal(null);
     setReviewNote("");

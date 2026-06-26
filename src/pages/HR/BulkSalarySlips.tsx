@@ -5,12 +5,13 @@ import { useAuth } from "../../context/AuthContext";
 import { UserService, type UserProfile } from "../../services/userService";
 import {
   getSalarySlips, saveSalarySlips, printSalarySlip, printSalarySlipsBulk,
-  computeSlipBreakdown, computeDeductions, computeStrictDeductions,
+  computeGross, computeNet, computeSlipBreakdown, computeDeductions, computeStrictDeductions,
   type SalarySlip, type PayrollItem,
 } from "../../mock/payrollData";
 import { AuditLogService } from "../../services/auditLogService";
 import { getCompanySettings } from "../../services/companySettingsService";
 import { useToast } from "../../context/ToastContext";
+import { notifySalarySlipGenerated } from "../../services/notificationHelpers";
 import { safeParse } from "../../lib/storage";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ interface EmployeeRow {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 // Roles that never get salary slips
-const EXCLUDED_ROLES = new Set(["client", "it_admin", "it_member"]);
+const EXCLUDED_ROLES = new Set(["client"]);
 
 const MONTHS: { value: string; label: string }[] = (() => {
   const out: { value: string; label: string }[] = [];
@@ -49,11 +50,12 @@ const MONTHS: { value: string; label: string }[] = (() => {
 })();
 
 const DEPT_COLOR: Record<string, string> = {
-  Sales:      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  Marketing:  "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
-  Production: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-  HR:         "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
-  Management: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  Sales:        "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  Marketing:    "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
+  Production:   "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  HR:           "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+  Management:   "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  "IT Support": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
 };
 
 const selectCls = "rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent";
@@ -67,6 +69,7 @@ function getDeptFromRole(role: string): string {
   if (role.startsWith("production")) return "Production";
   if (role.startsWith("marketing"))  return "Marketing";
   if (role.startsWith("hr"))         return "HR";
+  if (role.startsWith("it"))         return "IT Support";
   if (role === "management")         return "Management";
   if (role === "super_admin")        return "Management";
   return "General";
@@ -83,14 +86,16 @@ function buildSlip(
 
   const allowances: PayrollItem[] = [];  // breakdown is display-only, not stored
   const bonuses: PayrollItem[]    = template?.bonuses?.map(b => ({ ...b })) ?? [];
-
-  // Only advance salary recovery is deducted per policy
-  const strictDeductions       = computeStrictDeductions(emp.id, month, basicSalary);
   const deductions: PayrollItem[] = [];
-  const advanceSalaryDeduction = strictDeductions.advanceSalaryDeduction;
 
-  const grossSalary     = basicSalary;
-  const totalDeductions = advanceSalaryDeduction;
+  const strictDeductions       = computeStrictDeductions(emp.id, month, basicSalary);
+  const advanceSalaryDeduction = strictDeductions.advanceSalaryDeduction;
+  const bonusTotal             = bonuses.reduce((s, b) => s + b.amount, 0);
+  const grossSalary            = basicSalary + bonusTotal;
+  const totalDeductions        = advanceSalaryDeduction
+    + strictDeductions.unpaidLeaveDeduction
+    + strictDeductions.halfDayDeduction
+    + strictDeductions.lateAttendanceDeduction;
 
   return {
     id: `slip-bulk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -105,6 +110,12 @@ function buildSlip(
     bonuses,
     deductions,
     advanceSalaryDeduction,
+    unpaidLeaveDays:       strictDeductions.unpaidLeaveDays,
+    unpaidLeaveDeduction:  strictDeductions.unpaidLeaveDeduction,
+    halfDayDeduction:      strictDeductions.halfDayDeduction,
+    latePenaltyCount:      strictDeductions.lateCount,
+    latePenaltyDays:       Math.floor(strictDeductions.lateCount / 3),
+    latePenaltyDeduction:  strictDeductions.lateAttendanceDeduction,
     grossSalary,
     totalDeductions,
     netSalary:    Math.max(0, grossSalary - totalDeductions),
@@ -182,24 +193,27 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <Row label="Medical Allowance (15%)"     value={fmtRs(bd.medical)} />
             <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
               <span className="font-semibold text-sm">Total Earnings</span>
-              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(slip.basicSalary)}</span>
+              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(computeGross(slip))}</span>
             </div>
           </div>
 
-          {slip.advanceSalaryDeduction > 0 && (
+          {computeDeductions(slip) > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Deductions</p>
-              <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />
+              {slip.advanceSalaryDeduction > 0 && <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />}
+              {(slip.unpaidLeaveDeduction ?? 0) > 0 && <Row label={`Unpaid Leave (${slip.unpaidLeaveDays ?? 0} days)`} value={`−${fmtRs(slip.unpaidLeaveDeduction ?? 0)}`} accent="text-red-600 dark:text-red-400" />}
+              {(slip.halfDayDeduction ?? 0) > 0 && <Row label="Half Day Deduction" value={`−${fmtRs(slip.halfDayDeduction ?? 0)}`} accent="text-red-600 dark:text-red-400" />}
+              {(slip.latePenaltyDeduction ?? 0) > 0 && <Row label={`Late Penalty (${slip.latePenaltyCount ?? 0} late arrivals)`} value={`−${fmtRs(slip.latePenaltyDeduction ?? 0)}`} accent="text-red-600 dark:text-red-400" />}
               <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
                 <span className="font-semibold text-sm">Total Deductions</span>
-                <span className="font-bold text-sm text-red-600">−{fmtRs(slip.advanceSalaryDeduction)}</span>
+                <span className="font-bold text-sm text-red-600">−{fmtRs(computeDeductions(slip))}</span>
               </div>
             </div>
           )}
 
           <div className="rounded-xl bg-brand-600 text-white px-5 py-4 flex justify-between items-center">
             <span className="text-sm font-semibold">NET SALARY</span>
-            <span className="text-xl font-bold">{fmtRs(slip.basicSalary - computeDeductions(slip))}</span>
+            <span className="text-xl font-bold">{fmtRs(computeNet(slip))}</span>
           </div>
 
           <p className="text-xs text-gray-400 text-center">Generated by {slip.generatedByName} on {new Date(slip.generatedAt).toLocaleDateString()}</p>
@@ -417,6 +431,13 @@ export default function BulkSalarySlips() {
           department:  deptLabel,
           employeeIds: newSlips.map(s => s.employeeId),
         },
+      });
+
+      newSlips.forEach(slip => {
+        notifySalarySlipGenerated(
+          user?.id ?? "", user?.name ?? "", user?.role ?? "",
+          slip.employeeId, slip.employeeName, monthLabel
+        );
       });
 
       showToast(

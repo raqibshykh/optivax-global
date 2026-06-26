@@ -8,11 +8,13 @@ import { Project } from "../../types";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 
+import { notifyProjectCreated, notifyProjectUpdated, notifyProjectDeleted } from "../../services/notificationHelpers";
+
 export default function Projects() {
   const { projects, isLoading, addProject, updateProject, deleteProject } = useProjects();
   const { clients } = useClients();
   const { showToast } = useToast();
-  const { canCreate, canEdit, canDelete } = useAuth();
+  const { user, canCreate, canEdit, canDelete } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -35,7 +37,11 @@ export default function Projects() {
     }
     setConfirmDeleteId(null);
     try {
+      const projectToDelete = projects.find(p => p.id === id);
       await deleteProject(id);
+      if (projectToDelete && user) {
+        notifyProjectDeleted(user.id, user.name, user.role, projectToDelete.name, projectToDelete.id);
+      }
       showToast("Project deleted successfully", "success");
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Failed to delete project", "error");
@@ -46,13 +52,19 @@ export default function Projects() {
     try {
       if (editingProject) {
         await updateProject(editingProject.id, projectData);
+        if (user) {
+          notifyProjectUpdated(user.id, user.name, user.role, projectData.name, editingProject.id, "Project details updated");
+        }
         showToast("Project updated successfully", "success");
       } else {
-        await addProject({
+        const newProject = await addProject({
           ...projectData,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
+        if (user && newProject) {
+          notifyProjectCreated(user.id, user.name, user.role, newProject.name, newProject.id);
+        }
         showToast("Project created successfully", "success");
       }
     } catch (err: unknown) {

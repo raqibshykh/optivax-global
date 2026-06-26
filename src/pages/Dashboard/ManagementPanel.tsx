@@ -53,7 +53,12 @@ function SectionCard({ title, children }: { title: string; children: React.React
 
 const DEPT_COLORS: Record<string, string> = {
   sales: "bg-green-500", marketing: "bg-pink-500",
-  production: "bg-orange-500", hr: "bg-indigo-500",
+  production: "bg-orange-500", hr: "bg-indigo-500", it: "bg-cyan-500",
+};
+
+const DEPT_LABELS: Record<string, string> = {
+  sales: "Sales", marketing: "Marketing",
+  production: "Production", hr: "HR", it: "IT Support",
 };
 
 export default function ManagementPanel() {
@@ -69,6 +74,8 @@ export default function ManagementPanel() {
   const [payments, setPayments] = useState<{ amount: number }[]>([]);
   const [budgetStats, setBudgetStats] = useState({ total: 0, used: 0, remaining: 0, utilPct: 0, active: 0, overspent: 0, count: 0 });
   const [advancePending, setAdvancePending] = useState({ count: 0, total: 0 });
+  const [itTickets, setItTickets] = useState<{ status: string }[]>([]);
+  const [itDevices, setItDevices] = useState<{ status: string }[]>([]);
 
   useEffect(() => {
     UserService.getAll().then(setAllUsers).catch(() => {});
@@ -86,16 +93,18 @@ export default function ManagementPanel() {
     setCampaigns(safeParse<Campaign[]>(localStorage.getItem(CAMPAIGNS_KEY), []));
     setProjects(safeParse<MockProject[]>(localStorage.getItem(PROJECTS_KEY), []));
     setPayments(safeParse<{ amount: number }[]>(localStorage.getItem(PAYMENTS_KEY), []));
+    setItTickets(safeParse<{ status: string }[]>(localStorage.getItem("mock_it_tickets"), []));
+    setItDevices(safeParse<{ status: string }[]>(localStorage.getItem("mock_biometric_devices"), []));
   }, []);
 
   const employees = allUsers.filter((u) => u.role !== "client");
   const totalEmployees = employees.length;
 
   // Dept breakdown
-  const depts = ["sales", "marketing", "production", "hr"];
+  const depts = ["sales", "marketing", "production", "hr", "it"];
   const deptCounts = depts.map((d) => ({
     dept: d,
-    count: employees.filter((u) => u.role.startsWith(d)).length,
+    count: employees.filter((u) => u.role.startsWith(d + "_") || u.role === d).length,
   }));
 
   // Task metrics
@@ -164,7 +173,7 @@ export default function ManagementPanel() {
         <div className="space-y-6">
           {/* Top KPIs */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <KPI title="Total Employees" value={totalEmployees} sub={`${deptCounts.map((d) => `${d.dept}: ${d.count}`).join(" · ")}`} color="blue" />
+            <KPI title="Total Employees" value={totalEmployees} sub={`${deptCounts.map((d) => `${DEPT_LABELS[d.dept] ?? d.dept}: ${d.count}`).join(" · ")}`} color="blue" />
             <KPI title="Active Clients" value={clients.filter((c) => c.status === "active").length} sub={`${clients.length} total`} color="green" />
             <KPI title="Tasks Completed" value={doneTasks} sub={`${inProgTasks} in progress · ${pendingTasks} pending`} color="purple" />
             <KPI title="Deliverables" value={deliverables.length} sub={`${delivByStatus("Approved")} approved · ${delivByStatus("Delivered")} delivered`} color="orange" />
@@ -177,7 +186,7 @@ export default function ManagementPanel() {
                 {deptCounts.map(({ dept, count }) => (
                   <div key={dept}>
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="capitalize text-gray-700 dark:text-gray-300">{dept}</span>
+                      <span className="text-gray-700 dark:text-gray-300">{DEPT_LABELS[dept] ?? dept}</span>
                       <span className="font-medium text-gray-900 dark:text-white">{count}</span>
                     </div>
                     <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
@@ -563,6 +572,32 @@ export default function ManagementPanel() {
               <div className="flex justify-between py-2">
                 <span className="text-gray-600 dark:text-gray-400">Monthly Payroll</span>
                 <span className="font-semibold text-gray-900 dark:text-white">Rs. {totalPayroll.toLocaleString()}</span>
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* IT Analytics */}
+          <SectionCard title="IT Analytics">
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">IT Team Size</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{employees.filter((u) => u.role.startsWith("it_") || u.role === "it").length}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">IT Admins</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{employees.filter((u) => u.role === "it_admin").length}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">IT Members</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{employees.filter((u) => u.role === "it_member").length}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">Open / In-Progress Tickets</span>
+                <span className="font-semibold text-yellow-600">{itTickets.filter((t) => t.status === "open" || t.status === "in-progress").length}</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-gray-600 dark:text-gray-400">Online Devices</span>
+                <span className="font-semibold text-green-600">{itDevices.filter((d) => d.status === "online").length}</span>
               </div>
             </div>
           </SectionCard>

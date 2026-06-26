@@ -6,17 +6,20 @@ import { useLocation } from "react-router-dom";
 
 // ── Mock report data ───────────────────────────────────────────────────────
 const MOCK_REPORTS = [
-  { id: "r1", name: "Q2 Revenue Summary",       category: "Finance",    date: "2026-06-01", status: "ready",   downloads: 42 },
-  { id: "r2", name: "Lead Conversion Rate",     category: "Sales",      date: "2026-06-05", status: "ready",   downloads: 18 },
-  { id: "r3", name: "Project Delivery KPIs",    category: "Production", date: "2026-06-08", status: "ready",   downloads: 31 },
-  { id: "r4", name: "Campaign Performance",     category: "Marketing",  date: "2026-06-10", status: "ready",   downloads: 27 },
-  { id: "r5", name: "Employee Headcount",       category: "HR",         date: "2026-06-12", status: "pending", downloads: 0  },
-  { id: "r6", name: "Accounts Receivable",      category: "Finance",    date: "2026-06-13", status: "ready",   downloads: 9  },
-  { id: "r7", name: "Client Satisfaction",      category: "Sales",      date: "2026-06-14", status: "pending", downloads: 0  },
-  { id: "r8", name: "Server Uptime Report",     category: "System",     date: "2026-06-14", status: "ready",   downloads: 5  },
+  { id: "r1",  name: "Q2 Revenue Summary",        category: "Finance",    date: "2026-06-01", status: "ready",   downloads: 42 },
+  { id: "r2",  name: "Lead Conversion Rate",      category: "Sales",      date: "2026-06-05", status: "ready",   downloads: 18 },
+  { id: "r3",  name: "Project Delivery KPIs",     category: "Production", date: "2026-06-08", status: "ready",   downloads: 31 },
+  { id: "r4",  name: "Campaign Performance",      category: "Marketing",  date: "2026-06-10", status: "ready",   downloads: 27 },
+  { id: "r5",  name: "Employee Headcount",        category: "HR",         date: "2026-06-12", status: "pending", downloads: 0  },
+  { id: "r6",  name: "Accounts Receivable",       category: "Finance",    date: "2026-06-13", status: "ready",   downloads: 9  },
+  { id: "r7",  name: "Client Satisfaction",       category: "Sales",      date: "2026-06-14", status: "pending", downloads: 0  },
+  { id: "r8",  name: "Server Uptime Report",      category: "System",     date: "2026-06-14", status: "ready",   downloads: 5  },
+  { id: "r9",  name: "IT Ticket Summary",         category: "IT Support", date: "2026-06-15", status: "ready",   downloads: 7  },
+  { id: "r10", name: "Biometric Device Status",   category: "IT Support", date: "2026-06-16", status: "pending", downloads: 0  },
+  { id: "r11", name: "IT Team Performance",       category: "IT Support", date: "2026-06-20", status: "ready",   downloads: 4  },
 ];
 
-const CATEGORIES = ["All", "Finance", "Sales", "Production", "Marketing", "HR", "System"];
+const CATEGORIES = ["All", "Finance", "Sales", "Production", "Marketing", "HR", "IT Support", "System"];
 
 const statusColor = (s: string) =>
   s === "ready" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700";
@@ -51,6 +54,7 @@ export default function Reports() {
     sales: "Sales",
     production: "Production",
     hr: "HR",
+    it: "IT Support",
     admin: null,
     "super-admin": null,
     management: null,

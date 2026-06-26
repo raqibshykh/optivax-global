@@ -13,6 +13,7 @@ import { User, UserRole } from "../types";
 import { useSSE } from "../hooks/useSSE";
 import { getRoleHome } from "../lib/roles";
 import { hasPermission, canView as rbacCanView, canCreate as rbacCanCreate, canEdit as rbacCanEdit, canDelete as rbacCanDelete, canExport as rbacCanExport, canApprove as rbacCanApprove, canAssign as rbacCanAssign } from "../utils/rbac";
+import { notifyLoginActivity } from "../services/notificationHelpers";
 
 // Convert MockUserSession to User
 const sessionToUser = (session: MockUserSession): User => ({
@@ -104,6 +105,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!session) throw new Error("Failed to retrieve user session");
     const profile = sessionToUser(session);
     setUser(profile);
+    notifyLoginActivity(profile.id, profile.name, profile.role);
     return getRoleHome(profile.role);
   };
 

@@ -4,9 +4,11 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import {
   getAdvanceRequests, saveAdvanceRequests, canViewRequest, canApproveRequest,
+  appendAdvanceAuditEntry,
   type AdvanceSalaryRequest, type AdvanceStatus,
 } from "../../mock/payrollData";
 import { useToast } from "../../context/ToastContext";
+import { notifyAdvanceSalaryDecision } from "../../services/notificationHelpers";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -171,6 +173,28 @@ export default function AdvanceSalary() {
   const approved = requests.filter(r => canViewRequest(viewerRole, viewerId, r) && r.status === "approved");
 
   const handleAction = (id: string, action: "approved" | "rejected" | "paid", note: string) => {
+    const req = requests.find(r => r.id === id);
+    if (!req) return;
+
+    // Self-approval security check — log attempt even if UI should have blocked it
+    if (user?.id === req.employeeId) {
+      appendAdvanceAuditEntry({
+        action:          "SELF_APPROVAL_ATTEMPT",
+        requestId:       req.id,
+        employeeId:      req.employeeId,
+        employeeName:    req.employeeName,
+        employeeRole:    req.employeeRole,
+        department:      req.department,
+        amount:          req.requestedAmount,
+        performedById:   user.id,
+        performedByName: user.name,
+        performedByRole: user.role,
+        notes:           `Self-approval attempt blocked. Attempted action: ${action}`,
+      });
+      showToast("You cannot approve your own advance salary request.", "error");
+      return;
+    }
+
     const now = new Date().toISOString();
     const updated = requests.map(r => {
       if (r.id !== id) return r;
@@ -186,6 +210,30 @@ export default function AdvanceSalary() {
     saveAdvanceRequests(updated);
     setRequests(updated);
     setSelected(null);
+
+    // Audit log
+    const auditAction = action === "approved" ? "APPROVED" : action === "rejected" ? "REJECTED" : "MARKED_PAID";
+    appendAdvanceAuditEntry({
+      action:          auditAction,
+      requestId:       req.id,
+      employeeId:      req.employeeId,
+      employeeName:    req.employeeName,
+      employeeRole:    req.employeeRole,
+      department:      req.department,
+      amount:          req.requestedAmount,
+      performedById:   user?.id ?? "",
+      performedByName: user?.name ?? "",
+      performedByRole: user?.role ?? "",
+      notes:           note || undefined,
+    });
+
+    notifyAdvanceSalaryDecision(
+      user?.id ?? "", user?.name ?? "", user?.role ?? "",
+      req.employeeId, req.employeeName,
+      action, req.requestedAmount, req.id,
+      action === "rejected" ? note : undefined
+    );
+
     const labels: Record<string, string> = { approved: "Approved", rejected: "Rejected", paid: "Marked as Paid" };
     showToast(`Request ${labels[action]}`, action === "rejected" ? "error" : "success");
   };

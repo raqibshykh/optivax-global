@@ -5,6 +5,7 @@ import { useProjects } from "../../hooks/useProjects";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../lib/client";
+import { notifyClientRevisionSubmitted } from "../../services/notificationHelpers";
 
 export default function MyProjects() {
   const { projects, isLoading } = useProjects();
@@ -37,6 +38,10 @@ export default function MyProjects() {
         comment: revisionComment,
       });
       showToast("Revision request sent to the team.", "success");
+      const proj = projects.find(p => p.id === selectedProjectId);
+      if (user) {
+        notifyClientRevisionSubmitted(user.id, user.name, selectedProjectId, proj?.name ?? selectedProjectId);
+      }
       setIsRevisionModalOpen(false);
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Failed to send revision request.", "error");

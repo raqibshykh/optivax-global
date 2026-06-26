@@ -6,6 +6,7 @@ import { useToast } from "../../context/ToastContext";
 import { getCampaigns, saveCampaigns, SALES_MEMBERS } from "../../mock/salesData";
 import { CampaignBudget } from "../../types";
 import { canManageBudget } from "../../utils/rbac";
+import { notifySalesBudgetCreated, notifySalesBudgetUpdated, notifySalesBudgetDeleted } from "../../services/notificationHelpers";
 
 const STATUS_COLORS: Record<string, string> = {
   active:    "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
@@ -80,6 +81,11 @@ export default function CampaignBudgets() {
     const all = getCampaigns();
     if (editing) {
       saveCampaigns(all.map(c => c.id === editing.id ? { ...c, ...form } : c));
+      if (typeof notifySalesBudgetUpdated === "function") {
+        notifySalesBudgetUpdated(user.id, user.name, user.role, form.campaignName, editing.id);
+      } else {
+        // fallback to generic if not defined
+      }
       showToast("Campaign updated", "success");
     } else {
       const next: CampaignBudget = {
@@ -89,6 +95,9 @@ export default function CampaignBudgets() {
         createdBy: user.id,
       };
       saveCampaigns([next, ...all]);
+      if (typeof notifySalesBudgetCreated === "function") {
+        notifySalesBudgetCreated(user.id, user.name, user.role, next.campaignName, next.id);
+      }
       showToast("Campaign created", "success");
     }
     setIsModalOpen(false);
@@ -97,7 +106,12 @@ export default function CampaignBudgets() {
 
   const handleDelete = (id: string) => {
     if (!window.confirm("Delete this campaign budget?")) return;
-    saveCampaigns(getCampaigns().filter(c => c.id !== id));
+    const all = getCampaigns();
+    const campaignToDelete = all.find(c => c.id === id);
+    saveCampaigns(all.filter(c => c.id !== id));
+    if (campaignToDelete && user && typeof notifySalesBudgetDeleted === "function") {
+      notifySalesBudgetDeleted(user.id, user.name, user.role, campaignToDelete.campaignName, id);
+    }
     showToast("Campaign deleted", "success");
     loadData();
   };

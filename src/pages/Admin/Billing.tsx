@@ -7,6 +7,7 @@ import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../lib/client";
 import InvoiceModal from "./InvoiceModal";
+import { notifyInvoiceCreated, notifyInvoiceUpdated } from "../../services/notificationHelpers";
 
 interface StripePayment {
   id: string;
@@ -27,7 +28,7 @@ export default function Billing() {
   const { invoices, isLoading, addInvoice, updateInvoice } = useInvoices();
   const { clients } = useClients();
   const { showToast } = useToast();
-  const { checkPermission } = useAuth();
+  const { user, checkPermission } = useAuth();
 
   const canEditInvoice   = checkPermission("billing", "EDIT");
   const canCreateInvoice = checkPermission("billing", "CREATE");
@@ -84,10 +85,16 @@ export default function Billing() {
   const handleSave = async (invoiceData: Omit<Invoice, "id" | "number">) => {
     try {
       if (editingInvoice) {
-        await updateInvoice(editingInvoice.id, invoiceData);
+        const updatedInvoice = await updateInvoice(editingInvoice.id, invoiceData);
+        if (user && updatedInvoice) {
+          notifyInvoiceUpdated(user.id, user.name, user.role, invoiceData.clientId, getClientName(invoiceData.clientId), editingInvoice.number);
+        }
         showToast("Invoice updated successfully", "success");
       } else {
-        await addInvoice(invoiceData);
+        const newInvoice = await addInvoice(invoiceData);
+        if (user && newInvoice) {
+          notifyInvoiceCreated(user.id, user.name, user.role, invoiceData.clientId, getClientName(invoiceData.clientId), newInvoice.number, invoiceData.amount);
+        }
         showToast("Invoice created successfully", "success");
       }
     } catch (err: unknown) {

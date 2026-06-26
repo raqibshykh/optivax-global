@@ -226,10 +226,10 @@ export default function AttendancePayroll() {
       {/* ── Breakdown cards ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
         {[
-          { label: "Absent Deduction",    value: fmtRs(totals.leaveDeduction),    color: "text-red-600 dark:text-red-400",    tip: "(Absent + Leave) × daily rate" },
-          { label: "Leave Deduction",     value: fmtRs(totals.totalLeaveDeduction - totals.halfDayDeduction), color: "text-red-500 dark:text-red-400", tip: "Leave only" },
-          { label: "Half Day Deduction",  value: fmtRs(totals.halfDayDeduction),  color: "text-orange-500",                   tip: "Half days × 0.5 × daily rate" },
-          { label: "Total Deductions",    value: fmtRs(totals.totalDeductions),   color: "text-red-700 dark:text-red-300",    tip: "Leave + Late penalty" },
+          { label: "Unpaid Leave Deduction", value: fmtRs(totals.leaveDeduction),   color: "text-red-600 dark:text-red-400",    tip: "(Leave + Absent days) × daily rate — every day unpaid" },
+          { label: "Half Day Deduction",     value: fmtRs(totals.halfDayDeduction), color: "text-orange-500",                   tip: "Half days × 0.5 × daily rate" },
+          { label: "Late Penalties (÷3=1d)", value: fmtRs(totals.latePenalty),      color: "text-orange-600 dark:text-orange-400", tip: "Every 3 late arrivals = 1 full day deduction" },
+          { label: "Total Deductions",       value: fmtRs(totals.totalDeductions),  color: "text-red-700 dark:text-red-300",    tip: "Leave + Half-day + Late penalty" },
         ].map((c) => (
           <div key={c.label} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-800 dark:bg-gray-900" title={c.tip}>
             <p className="text-xs text-gray-500 dark:text-gray-400">{c.label}</p>
@@ -264,7 +264,7 @@ export default function AttendancePayroll() {
                     { label: "Employee",          key: "userName" as SortKey },
                     { label: "Base Salary",        key: "baseSalary" as SortKey },
                     { label: "Daily Rate",         key: "dailyRate" as SortKey },
-                    { label: "Leave Ded.",         key: "leaveDeduction" as SortKey },
+                    { label: "Unpaid Leave Ded.",  key: "leaveDeduction" as SortKey },
                     { label: "Half Day Ded.",      key: "halfDayDeduction" as SortKey },
                     { label: "Late (×3=1d)",       key: "lateArrivals" as SortKey },
                     { label: "Late Penalty",       key: "latePenalty" as SortKey },

@@ -4,6 +4,7 @@ import PageMeta from "../../components/common/PageMeta";
 import AuthLayout from "./AuthPageLayout";
 import { ChevronLeftIcon } from "../../icons";
 import { mockUsers } from "../../mock/users";
+import { notifySecurityEvent } from "../../services/notificationHelpers";
 
 type Step = "request" | "reset" | "done";
 
@@ -69,6 +70,15 @@ export default function ResetPassword() {
     );
     localStorage.setItem("mock_profiles", JSON.stringify(updated));
     localStorage.removeItem("mock_reset_token");
+
+    const resetUser = mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    notifySecurityEvent(
+      "Password Reset",
+      `Password was reset for account: ${email}.`,
+      resetUser?.id ?? email,
+      resetUser?.name ?? email,
+      "system"
+    );
 
     setStep("done");
   };

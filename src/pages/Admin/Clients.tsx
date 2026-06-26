@@ -7,7 +7,7 @@ import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import { UserService } from "../../services/userService";
 import { storeMockPassword } from "../../lib/client";
-import { notifyClientCreated } from "../../services/notificationHelpers";
+import { notifyClientCreated, notifyClientUpdated, notifyClientDeleted } from "../../services/notificationHelpers";
 
 export default function Clients() {
   const { clients, isLoading, addClient, updateClient, deleteClient } = useClients();
@@ -39,7 +39,11 @@ export default function Clients() {
     }
     setConfirmDeleteId(null);
     try {
+      const clientToDelete = clients.find(c => c.id === id);
       await deleteClient(id);
+      if (clientToDelete && user) {
+        notifyClientDeleted(user.id, user.name, user.role, clientToDelete.name, id);
+      }
       showToast("Client deleted successfully", "success");
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Failed to delete client", "error");
@@ -50,6 +54,9 @@ export default function Clients() {
     try {
       if (editingClient) {
         await updateClient(editingClient.id, clientData);
+        if (user) {
+          notifyClientUpdated(user.id, user.name, user.role, clientData.name, editingClient.id);
+        }
         showToast("Client updated successfully", "success");
       } else {
         const newProfile = await UserService.create({

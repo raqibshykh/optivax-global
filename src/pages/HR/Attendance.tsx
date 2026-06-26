@@ -10,6 +10,7 @@ import {
   STATUS_COLORS,
   type AttendanceStatus,
 } from "../../mock/attendanceData";
+import { notifyAttendanceEdited, logAttendanceModified } from "../../services/notificationHelpers";
 
 const STORAGE_KEY = "mock_attendance";
 
@@ -160,6 +161,13 @@ export default function Attendance() {
           newCheckOut:      form.checkOut || undefined,
           reason:          form.reason,
         });
+        notifyAttendanceEdited(
+          user.id, user.name,
+          editingRecord.userId, editingRecord.userName,
+          editingRecord.date,
+          editingRecord.status, form.status,
+          form.reason
+        );
       }
       showToast("Attendance updated", "success");
     } else {
@@ -185,6 +193,7 @@ export default function Attendance() {
           newCheckOut:    form.checkOut || undefined,
           reason:         form.reason,
         });
+        logAttendanceModified(user.id, user.name, form.userName, form.userId, form.date, form.status);
       }
       showToast("Attendance recorded", "success");
     }

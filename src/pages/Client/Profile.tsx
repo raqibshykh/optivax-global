@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useClients } from "../../hooks/useClients";
 import { useToast } from "../../context/ToastContext";
 import { safeParse } from "../../lib/storage";
-import { notifyLeaveRequestSubmitted } from "../../services/notificationHelpers";
+import { notifyLeaveRequestSubmitted, notifyClientProfileUpdated } from "../../services/notificationHelpers";
 import { getConversations } from "../../mock/conversationsData";
 
 // ── Leave Request types (shared with HRPanel) ─────────────────────────────
@@ -110,6 +110,7 @@ export default function Profile() {
         city: profile.city,
       });
       showToast("Profile updated successfully", "success");
+      if (user) notifyClientProfileUpdated(user.id, profile.contactPerson || user.name);
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Failed to update profile", "error");
     } finally {

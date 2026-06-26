@@ -78,6 +78,7 @@ import BudgetManagement from "./pages/Budget/BudgetManagement";
 import SalarySlips from "./pages/HR/SalarySlips";
 import BulkSalarySlips from "./pages/HR/BulkSalarySlips";
 import AdvanceSalary from "./pages/HR/AdvanceSalary";
+import AdvanceSalaryAuditLog from "./pages/HR/AdvanceSalaryAuditLog";
 import MySalarySlips from "./pages/Employee/MySalarySlips";
 import MyBudget from "./pages/Employee/MyBudget";
 import AdvanceSalaryRequest from "./pages/Employee/AdvanceSalaryRequest";
@@ -280,7 +281,7 @@ export default function App() {
           </Route>
 
           {/* ── MY BUDGET — member-level personal budget view ─────────────── */}
-          <Route element={<ProtectedRoute allowedRoles={["sales_member", "production_member", "marketing_member", "hr_member"]} />}>
+          <Route element={<ProtectedRoute allowedRoles={["sales_member", "production_member", "marketing_member", "hr_member", "it_member"]} />}>
             <Route path="/my-budget" element={<MyBudget />} />
           </Route>
 
@@ -288,6 +289,11 @@ export default function App() {
           <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "hr_admin"]} />}>
             <Route path="/hr/salary-slips"    element={<SalarySlips />} />
             <Route path="/hr/advance-salary"  element={<AdvanceSalary />} />
+          </Route>
+
+          {/* ── ADVANCE SALARY AUDIT LOG — Super Admin & HR Admin only ─────── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "hr_admin"]} />}>
+            <Route path="/hr/advance-salary/audit" element={<AdvanceSalaryAuditLog />} />
           </Route>
 
           {/* ── BULK SALARY SLIP GENERATION — Super Admin & HR Admin only ── */}

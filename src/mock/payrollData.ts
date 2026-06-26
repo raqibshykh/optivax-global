@@ -1,3 +1,5 @@
+import { loadYearData, computeMonthlyReport, STAFF_USERS } from "./attendanceData";
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface PayrollItem {
@@ -12,15 +14,22 @@ export interface SalarySlip {
   employeeEmail: string;
   department: string;
   designation: string;
-  salaryMonth: string;       // "YYYY-MM"
+  salaryMonth: string;             // "YYYY-MM"
   basicSalary: number;
   allowances: PayrollItem[];
   bonuses: PayrollItem[];
   deductions: PayrollItem[];
   advanceSalaryDeduction: number;
-  grossSalary: number;       // basic + allowances + bonuses
-  totalDeductions: number;   // deductions + advanceSalaryDeduction
-  netSalary: number;         // grossSalary - totalDeductions
+  // Attendance-based deductions (policy: all leaves unpaid, every 3 lates = 1 day deduction)
+  unpaidLeaveDays?: number;        // leave + absent days for the month
+  unpaidLeaveDeduction?: number;   // unpaidLeaveDays × dailyRate
+  halfDayDeduction?: number;       // halfDays × dailyRate × 0.5
+  latePenaltyCount?: number;       // total late arrivals
+  latePenaltyDays?: number;        // floor(lateArrivals / 3)
+  latePenaltyDeduction?: number;   // latePenaltyDays × dailyRate
+  grossSalary: number;             // basic + allowances + bonuses
+  totalDeductions: number;         // all deductions combined
+  netSalary: number;               // grossSalary - totalDeductions
   generatedAt: string;
   generatedById: string;
   generatedByName: string;
@@ -60,7 +69,11 @@ export const computeGross = (s: SalarySlip) =>
   s.bonuses.reduce((a, i) => a + i.amount, 0);
 
 export const computeDeductions = (s: SalarySlip) =>
-  s.advanceSalaryDeduction;
+  s.advanceSalaryDeduction +
+  (s.unpaidLeaveDeduction ?? 0) +
+  (s.halfDayDeduction ?? 0) +
+  (s.latePenaltyDeduction ?? 0) +
+  s.deductions.reduce((a, i) => a + i.amount, 0);
 
 export const computeNet = (s: SalarySlip) => computeGross(s) - computeDeductions(s);
 
@@ -86,9 +99,9 @@ const SEED_SLIPS: SalarySlip[] = [
     ],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 65000,
+    grossSalary: 99250,
     totalDeductions: 0,
-    netSalary: 65000,
+    netSalary: 99250,
     generatedAt: "2026-04-30T10:00:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -111,9 +124,9 @@ const SEED_SLIPS: SalarySlip[] = [
     bonuses: [],
     deductions: [],
     advanceSalaryDeduction: 15000,
-    grossSalary: 55000,
+    grossSalary: 75250,
     totalDeductions: 15000,
-    netSalary: 40000,
+    netSalary: 60250,
     generatedAt: "2026-04-30T10:15:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -138,9 +151,9 @@ const SEED_SLIPS: SalarySlip[] = [
     ],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 48000,
+    grossSalary: 70500,
     totalDeductions: 0,
-    netSalary: 48000,
+    netSalary: 70500,
     generatedAt: "2026-04-30T10:30:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -165,9 +178,9 @@ const SEED_SLIPS: SalarySlip[] = [
     ],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 65000,
+    grossSalary: 109250,
     totalDeductions: 0,
-    netSalary: 65000,
+    netSalary: 109250,
     generatedAt: "2026-05-31T10:00:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -189,9 +202,9 @@ const SEED_SLIPS: SalarySlip[] = [
     bonuses: [],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 42000,
+    grossSalary: 55500,
     totalDeductions: 0,
-    netSalary: 42000,
+    netSalary: 55500,
     generatedAt: "2026-05-31T11:00:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -216,9 +229,9 @@ const SEED_SLIPS: SalarySlip[] = [
     ],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 55000,
+    grossSalary: 83250,
     totalDeductions: 0,
-    netSalary: 55000,
+    netSalary: 83250,
     generatedAt: "2026-05-31T11:30:00.000Z",
     generatedById: "user-hr-01",
     generatedByName: "HR Admin",
@@ -337,12 +350,65 @@ export const getAdvanceRequests = (): AdvanceSalaryRequest[] =>
 export const saveAdvanceRequests = (reqs: AdvanceSalaryRequest[]) =>
   localStorage.setItem(ADVANCE_REQUESTS_KEY, JSON.stringify(reqs));
 
+// ── Advance Salary Audit Log ──────────────────────────────────────────────────
+
+export type AdvanceAuditAction =
+  | "REQUEST_CREATED"
+  | "APPROVED"
+  | "REJECTED"
+  | "MARKED_PAID"
+  | "CANCELLED"
+  | "SELF_APPROVAL_ATTEMPT";
+
+export interface AdvanceSalaryAuditEntry {
+  id: string;
+  action: AdvanceAuditAction;
+  requestId: string;
+  employeeId: string;
+  employeeName: string;
+  employeeRole: string;
+  department: string;
+  amount: number;
+  performedById: string;
+  performedByName: string;
+  performedByRole: string;
+  timestamp: string;
+  notes?: string;
+}
+
+export const ADVANCE_AUDIT_KEY = "mock_advance_salary_audit";
+
+export function getAdvanceAuditLog(): AdvanceSalaryAuditEntry[] {
+  try {
+    const raw = localStorage.getItem(ADVANCE_AUDIT_KEY);
+    return raw ? (JSON.parse(raw) as AdvanceSalaryAuditEntry[]) : [];
+  } catch { return []; }
+}
+
+export function appendAdvanceAuditEntry(entry: Omit<AdvanceSalaryAuditEntry, "id" | "timestamp">): void {
+  const log = getAdvanceAuditLog();
+  const full: AdvanceSalaryAuditEntry = {
+    ...entry,
+    id: `adv-audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: new Date().toISOString(),
+  };
+  // Cap at 1000 most recent entries
+  const updated = [full, ...log].slice(0, 1000);
+  try { localStorage.setItem(ADVANCE_AUDIT_KEY, JSON.stringify(updated)); } catch { /* storage full */ }
+}
+
 // ── Visibility logic ──────────────────────────────────────────────────────────
 
-const HR_ROLES    = new Set(["hr_admin", "hr_member"]);
-const MGMT_ROLES  = new Set(["management"]);
-const SA_ROLES    = new Set(["super_admin"]);
-const APPROVER_ROLES = new Set(["super_admin", "management", "hr_admin"]);
+const HR_ROLES       = new Set(["hr_admin", "hr_member"]);
+const MGMT_ROLES     = new Set(["management"]);
+const SA_ROLES       = new Set(["super_admin"]);
+// Dept admins (non-HR) who can approve their own dept's member requests
+const DEPT_ADMIN_ROLES = new Set(["sales_admin", "production_admin", "marketing_admin", "it_admin"]);
+
+function _deptPrefix(role: string): string {
+  const idx = role.indexOf("_");
+  return idx > 0 ? role.slice(0, idx) : role;
+}
 
 export function canViewRequest(
   viewerRole: string,
@@ -352,26 +418,40 @@ export function canViewRequest(
   // Always see own request
   if (viewerId === req.employeeId) return true;
 
-  // Only designated approvers see others' requests
-  if (!APPROVER_ROLES.has(viewerRole)) return false;
+  const isSA   = SA_ROLES.has(viewerRole);
+  const isMgmt = MGMT_ROLES.has(viewerRole);
+  const isHR   = HR_ROLES.has(viewerRole);
+  const isDeptAdmin = DEPT_ADMIN_ROLES.has(viewerRole);
 
-  // HR roles' requests are hidden from other HR — only management/super_admin see them
-  if (HR_ROLES.has(req.employeeRole)) {
-    return MGMT_ROLES.has(viewerRole) || SA_ROLES.has(viewerRole);
-  }
-
-  // Management's requests hidden from management — hr_admin/super_admin only
-  if (MGMT_ROLES.has(req.employeeRole)) {
-    return HR_ROLES.has(viewerRole) || SA_ROLES.has(viewerRole);
-  }
-
-  // Super admin requests — management / hr_admin see them
+  // Super admin requests → Management only (per approval matrix)
   if (SA_ROLES.has(req.employeeRole)) {
-    return MGMT_ROLES.has(viewerRole) || HR_ROLES.has(viewerRole);
+    return isMgmt;
   }
 
-  // Normal employee request → all approvers see it
-  return true;
+  // Management requests → HR or Super Admin
+  if (MGMT_ROLES.has(req.employeeRole)) {
+    return isHR || isSA;
+  }
+
+  // HR requests → Management or Super Admin
+  if (HR_ROLES.has(req.employeeRole)) {
+    return isMgmt || isSA;
+  }
+
+  // Dept admin requests → HR, Management, or Super Admin
+  if (DEPT_ADMIN_ROLES.has(req.employeeRole)) {
+    return isHR || isMgmt || isSA;
+  }
+
+  // Member/employee requests → same-dept admin, HR, Management, Super Admin
+  if (req.employeeRole.endsWith("_member")) {
+    const empDept = _deptPrefix(req.employeeRole);
+    if (isDeptAdmin && _deptPrefix(viewerRole) === empDept) return true;
+    return isHR || isMgmt || isSA;
+  }
+
+  // Fallback — management and super admin see everything else
+  return isMgmt || isSA;
 }
 
 export function canApproveRequest(
@@ -379,8 +459,8 @@ export function canApproveRequest(
   viewerId: string,
   req: AdvanceSalaryRequest
 ): boolean {
-  if (viewerId === req.employeeId) return false; // never approve own
-  if (!APPROVER_ROLES.has(viewerRole)) return false;
+  // Block and surface self-approval at logic level
+  if (viewerId === req.employeeId) return false;
   return canViewRequest(viewerRole, viewerId, req);
 }
 
@@ -427,30 +507,55 @@ export function computeSlipBreakdown(grossSalary: number): SlipBreakdown {
 
 export interface StrictDeductions {
   advanceSalaryDeduction: number;
-  unpaidLeaveDays: number;
-  unpaidLeaveDeduction: number;
-  lateCount: number;
-  lateAttendanceDeduction: number;
+  unpaidLeaveDays: number;       // leave + absent days
+  unpaidLeaveDeduction: number;  // unpaidLeaveDays × dailyRate
+  halfDayDeduction: number;      // halfDays × dailyRate × 0.5
+  lateCount: number;             // total late arrivals
+  lateAttendanceDeduction: number; // floor(lateCount/3) × dailyRate
 }
 
-export function computeStrictDeductions(employeeId: string, _salaryMonth: string, _basicSalary: number): StrictDeductions {
-  // Per policy: only advance salary recovery is deducted in salary slips.
+export function computeStrictDeductions(employeeId: string, salaryMonth: string, basicSalary: number): StrictDeductions {
+  // Advance salary recovery
   const advances = getAdvanceRequests().filter(
     (r) => r.employeeId === employeeId && (r.status === "approved" || r.status === "paid")
   );
   const totalApprovedAdvance = advances.reduce((s, r) => s + r.requestedAmount, 0);
-
   const pastSlips = getSalarySlips().filter((s) => s.employeeId === employeeId);
   const totalRecovered = pastSlips.reduce((s, sl) => s + sl.advanceSalaryDeduction, 0);
-
   const outstandingAdvance = Math.max(0, totalApprovedAdvance - totalRecovered);
+
+  // Attendance-based deductions — read live from attendance records
+  let unpaidLeaveDays = 0;
+  let halfDaysCount = 0;
+  let lateCount = 0;
+  try {
+    const parts = salaryMonth.split("-");
+    const year  = parseInt(parts[0]);
+    const month = parseInt(parts[1]);
+    if (!isNaN(year) && !isNaN(month)) {
+      const staff = STAFF_USERS.find(u => u.id === employeeId);
+      if (staff) {
+        const allRecords = loadYearData(year);
+        const report = computeMonthlyReport(staff.id, staff.name, staff.role, month, year, allRecords);
+        unpaidLeaveDays = report.leaveDays + report.absentDays;
+        halfDaysCount   = report.halfDays;
+        lateCount       = report.lateArrivals;
+      }
+    }
+  } catch { /* attendance data unavailable — deductions default to 0 */ }
+
+  const dailyRate             = basicSalary > 0 ? basicSalary / 30 : 0;
+  const unpaidLeaveDeduction  = Math.round(unpaidLeaveDays * dailyRate);
+  const halfDayDeduction      = Math.round(halfDaysCount * dailyRate * 0.5);
+  const lateAttendanceDeduction = Math.round(Math.floor(lateCount / 3) * dailyRate);
 
   return {
     advanceSalaryDeduction: outstandingAdvance,
-    unpaidLeaveDays: 0,
-    unpaidLeaveDeduction: 0,
-    lateCount: 0,
-    lateAttendanceDeduction: 0,
+    unpaidLeaveDays,
+    unpaidLeaveDeduction,
+    halfDayDeduction,
+    lateCount,
+    lateAttendanceDeduction,
   };
 }
 
@@ -480,7 +585,7 @@ function _slipHtml(slip: SalarySlip, co: _CompanyBranding): string {
   const fmtR = (n: number) => `Rs. ${Math.round(n).toLocaleString()}`;
   const ml   = new Date(slip.salaryMonth + "-01").toLocaleString("default", { month: "long", year: "numeric" });
   const bd         = computeSlipBreakdown(slip.basicSalary);
-  const displayNet = slip.basicSalary - slip.totalDeductions;
+  const displayNet = computeNet(slip);
 
   const lineRows = (items: PayrollItem[], cls = "earn", prefix = "") =>
     items.map(i =>
@@ -579,13 +684,16 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:28px;background:#f4
   <div class="lr"><span class="ll">House Rent Allowance (20%)</span><span class="lv earn">${fmtR(bd.hra)}</span></div>
   <div class="lr"><span class="ll">Transport Allowance (15%)</span><span class="lv earn">${fmtR(bd.transport)}</span></div>
   <div class="lr"><span class="ll">Medical Allowance (15%)</span><span class="lv earn">${fmtR(bd.medical)}</span></div>
-  <div class="sub"><span>Total Earnings</span><span>${fmtR(slip.basicSalary)}</span></div>
+  <div class="sub"><span>Total Earnings</span><span>${fmtR(computeGross(slip))}</span></div>
 
-  ${slip.deductions.length > 0 || slip.advanceSalaryDeduction > 0 ? `
+  ${computeDeductions(slip) > 0 ? `
   <div class="sh">Deductions</div>
   ${lineRows(slip.deductions, "ded", "−")}
   ${slip.advanceSalaryDeduction > 0 ? `<div class="lr"><span class="ll">Advance Salary Recovery</span><span class="lv ded">−${fmtR(slip.advanceSalaryDeduction)}</span></div>` : ""}
-  <div class="sub ded"><span>Total Deductions</span><span>−${fmtR(slip.totalDeductions)}</span></div>
+  ${(slip.unpaidLeaveDeduction ?? 0) > 0 ? `<div class="lr"><span class="ll">Unpaid Leave — ${slip.unpaidLeaveDays ?? 0} day${(slip.unpaidLeaveDays ?? 0) !== 1 ? "s" : ""} (all leaves unpaid)</span><span class="lv ded">−${fmtR(slip.unpaidLeaveDeduction ?? 0)}</span></div>` : ""}
+  ${(slip.halfDayDeduction ?? 0) > 0 ? `<div class="lr"><span class="ll">Half Day Deduction</span><span class="lv ded">−${fmtR(slip.halfDayDeduction ?? 0)}</span></div>` : ""}
+  ${(slip.latePenaltyDeduction ?? 0) > 0 ? `<div class="lr"><span class="ll">Late Penalty — ${slip.latePenaltyCount ?? 0} late arrivals → ${slip.latePenaltyDays ?? 0} day${(slip.latePenaltyDays ?? 0) !== 1 ? "s" : ""}</span><span class="lv ded">−${fmtR(slip.latePenaltyDeduction ?? 0)}</span></div>` : ""}
+  <div class="sub ded"><span>Total Deductions</span><span>−${fmtR(computeDeductions(slip))}</span></div>
   ` : ""}
 
   <div class="net">

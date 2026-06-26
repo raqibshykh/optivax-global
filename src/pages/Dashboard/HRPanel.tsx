@@ -6,7 +6,7 @@ import { RequirePermission } from "../../components/auth/RequirePermission";
 import { safeParse } from "../../lib/storage";
 import type { LeaveRequest } from "../Client/Profile";
 import { UserService, UserProfile } from "../../services/userService";
-import { notifyUserCreated } from "../../services/notificationHelpers";
+import { notifyUserCreated, logAttendanceModified } from "../../services/notificationHelpers";
 import { useAuth } from "../../context/AuthContext";
 import { storeMockPassword } from "../../lib/client";
 import { getAdvanceRequests } from "../../mock/payrollData";
@@ -158,6 +158,10 @@ export default function HRPanel() {
     const dateRecord = { ...(allAttendance[attendanceDate] ?? {}) };
     dateRecord[userId] = status;
     saveAttendance({ ...allAttendance, [attendanceDate]: dateRecord });
+    if (currentUser) {
+      const emp = employees.find(e => e.id === userId);
+      logAttendanceModified(currentUser.id, currentUser.name, emp?.full_name ?? userId, userId, attendanceDate, status);
+    }
   };
 
   // ── Derived ───────────────────────────────────────────────────────────
@@ -206,7 +210,7 @@ export default function HRPanel() {
       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
         <thead>
           <tr className="bg-gray-50 dark:bg-gray-800/60">
-            {["Employee", "Role", "Leaves (Taken / Left)", "Salary", "Deduction", "Salary Status", "Work Mode"].map((h) => (
+            {["Employee", "Role", "Leaves Taken", "Salary", "Deduction", "Salary Status", "Work Mode"].map((h) => (
               <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
                 {h}
               </th>
@@ -216,9 +220,8 @@ export default function HRPanel() {
         <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
           {emps.map((emp) => {
             const ex = extraData[emp.id] ?? { leavesTaken: 0, salary: 45000, salaryStatus: "Unpaid", workMode: "Onsite" };
-            const leavesLeft = Math.max(0, 24 - ex.leavesTaken);
-            const deduction = ex.leavesTaken > 10
-              ? Math.round((ex.leavesTaken - 10) * (ex.salary / 30))
+            const deduction = ex.leavesTaken > 0
+              ? Math.round(ex.leavesTaken * (ex.salary / 30))
               : 0;
 
             return (
@@ -234,9 +237,7 @@ export default function HRPanel() {
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-gray-700 dark:text-gray-300">
                   <span className="font-semibold text-gray-900 dark:text-white">{ex.leavesTaken}</span>
-                  {" taken / "}
-                  <span className="font-semibold text-green-600 dark:text-green-400">{leavesLeft}</span>
-                  {" left"}
+                  {" taken"}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap font-semibold text-gray-900 dark:text-white">
                   Rs. {ex.salary.toLocaleString()}

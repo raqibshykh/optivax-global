@@ -6,6 +6,7 @@ import { useToast } from "../../context/ToastContext";
 import { useRef, useState, useEffect } from "react";
 import { safeParse } from "../../lib/storage";
 import { FileVisibility } from "../../types";
+import { notifyDeliverableUploaded } from "../../services/notificationHelpers";
 
 interface SimpleClient {
   id: string;
@@ -140,6 +141,15 @@ export default function Files() {
         visibleTo:    visibility === "specific" ? visibleTo : undefined,
       } as any);
       showToast("File uploaded successfully", "success");
+      if (user) {
+        const clientName = selectedClient ? clientLabel(selectedClient) : "";
+        notifyDeliverableUploaded(
+          user.id, user.name, user.role,
+          selectedFile.name,
+          `file-${Date.now()}`,
+          clientName || "Internal"
+        );
+      }
       setShowUploadModal(false);
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Failed to upload file", "error");

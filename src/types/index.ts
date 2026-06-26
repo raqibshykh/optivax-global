@@ -73,7 +73,6 @@ export interface Employee {
   departmentId: string;
   position: string;
   salary?: number;
-  annualLeaveBalance: number;
   workMode: "onsite" | "remote" | "hybrid";
   joinDate: string;
   status: "active" | "inactive" | "on-leave";
@@ -210,10 +209,17 @@ export interface FileRecord {
   visibleTo?: string[];
 }
 
+export type NotificationType = "invoice" | "project" | "payment" | "system" | "profile";
+export type NotificationModule =
+  | "attendance" | "leave" | "payroll" | "advance" | "budget"
+  | "employee" | "project" | "task" | "campaign" | "security"
+  | "login" | "production" | "client" | "general" | "sales" | "message" | "ticket";
+
 export interface Notification {
   id: string;
   userId: string;
-  type: "invoice" | "project" | "payment" | "system" | "profile";
+  type: NotificationType;
+  module?: NotificationModule;
   title: string;
   message: string;
   read: boolean;

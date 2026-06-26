@@ -5,11 +5,12 @@ import { useAuth } from "../../context/AuthContext";
 import { UserService, type UserProfile } from "../../services/userService";
 import {
   getSalarySlips, saveSalarySlips, appendSalarySlip, printSalarySlip,
-  computeDeductions, computeSlipBreakdown, computeStrictDeductions,
+  computeGross, computeNet, computeDeductions, computeSlipBreakdown, computeStrictDeductions,
   type SalarySlip, type PayrollItem,
 } from "../../mock/payrollData";
 import { getCompanySettings } from "../../services/companySettingsService";
 import { useToast } from "../../context/ToastContext";
+import { notifySalarySlipDeleted, notifySalarySlipGenerated } from "../../services/notificationHelpers";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -136,18 +137,40 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <Row label="Medical Allowance (15%)"     value={fmtRs(bd.medical)} />
             <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
               <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Total Earnings</span>
-              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(slip.basicSalary)}</span>
+              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(computeGross(slip))}</span>
             </div>
           </div>
 
-          {/* Deductions — only advance salary recovery is shown per policy */}
-          {slip.advanceSalaryDeduction > 0 && (
+          {/* Deductions — advance salary + unpaid leave + late penalty */}
+          {computeDeductions(slip) > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Deductions</p>
-              <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />
+              {slip.advanceSalaryDeduction > 0 && (
+                <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />
+              )}
+              {(slip.unpaidLeaveDeduction ?? 0) > 0 && (
+                <Row
+                  label={`Unpaid Leave — ${slip.unpaidLeaveDays ?? 0} day${(slip.unpaidLeaveDays ?? 0) !== 1 ? "s" : ""} (all leaves unpaid)`}
+                  value={`−${fmtRs(slip.unpaidLeaveDeduction ?? 0)}`}
+                  accent="text-red-600 dark:text-red-400"
+                />
+              )}
+              {(slip.halfDayDeduction ?? 0) > 0 && (
+                <Row label="Half Day Deduction" value={`−${fmtRs(slip.halfDayDeduction ?? 0)}`} accent="text-orange-500" />
+              )}
+              {(slip.latePenaltyDeduction ?? 0) > 0 && (
+                <Row
+                  label={`Late Penalty — ${slip.latePenaltyCount ?? 0} late arrivals → ${slip.latePenaltyDays ?? 0} day${(slip.latePenaltyDays ?? 0) !== 1 ? "s" : ""}`}
+                  value={`−${fmtRs(slip.latePenaltyDeduction ?? 0)}`}
+                  accent="text-orange-500"
+                />
+              )}
+              {slip.deductions.map((d, i) => (
+                <Row key={i} label={d.label} value={`−${fmtRs(d.amount)}`} accent="text-red-500" />
+              ))}
               <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
                 <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Total Deductions</span>
-                <span className="font-bold text-sm text-red-600">−{fmtRs(slip.advanceSalaryDeduction)}</span>
+                <span className="font-bold text-sm text-red-600">−{fmtRs(computeDeductions(slip))}</span>
               </div>
             </div>
           )}
@@ -155,7 +178,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
           {/* Net */}
           <div className="rounded-xl bg-brand-600 text-white px-5 py-4 flex justify-between items-center">
             <span className="text-sm font-semibold">NET SALARY</span>
-            <span className="text-xl font-bold">{fmtRs(slip.basicSalary - computeDeductions(slip))}</span>
+            <span className="text-xl font-bold">{fmtRs(computeNet(slip))}</span>
           </div>
 
           {slip.notes && (
@@ -223,14 +246,17 @@ function GenerateSlipModal({
   // Auto-calculated deductions based on strict rules
   const strictDeductions = useMemo(() => {
     if (!empId || !month || basic <= 0) {
-      return { advanceSalaryDeduction: 0, unpaidLeaveDays: 0, unpaidLeaveDeduction: 0, lateCount: 0, lateAttendanceDeduction: 0 };
+      return { advanceSalaryDeduction: 0, unpaidLeaveDays: 0, unpaidLeaveDeduction: 0, halfDayDeduction: 0, lateCount: 0, lateAttendanceDeduction: 0 };
     }
     return computeStrictDeductions(empId, month, basic);
   }, [empId, month, basic]);
 
-  const adv = strictDeductions.advanceSalaryDeduction;
-  const dedCalc = adv;
-  const netCalc = basic - dedCalc;
+  const adv      = strictDeductions.advanceSalaryDeduction;
+  const dedCalc  = adv + strictDeductions.unpaidLeaveDeduction + strictDeductions.halfDayDeduction + strictDeductions.lateAttendanceDeduction;
+  const grossCalc = basic
+    + allowances.filter(i => i.amount > 0).reduce((s, i) => s + i.amount, 0)
+    + bonuses.filter(i => i.amount > 0).reduce((s, i) => s + i.amount, 0);
+  const netCalc  = Math.max(0, grossCalc - dedCalc);
 
   const getDeptFromRole = (role: string) => {
     if (role.startsWith("sales")) return "Sales";
@@ -248,7 +274,13 @@ function GenerateSlipModal({
     if (basic <= 0) { setError("Basic salary must be greater than zero."); return; }
     if (!selectedEmp) { setError("Employee not found."); return; }
 
-    const dept = getDeptFromRole(selectedEmp.role ?? "");
+    const dept              = getDeptFromRole(selectedEmp.role ?? "");
+    const filteredAllowances = allowances.filter(i => i.label && i.amount > 0);
+    const filteredBonuses    = bonuses.filter(i => i.label && i.amount > 0);
+    const gross    = basic
+      + filteredAllowances.reduce((s, i) => s + i.amount, 0)
+      + filteredBonuses.reduce((s, i) => s + i.amount, 0);
+    const totalDed = dedCalc;
     const slip: SalarySlip = {
       id: `slip-${Date.now()}`,
       employeeId: empId,
@@ -258,13 +290,19 @@ function GenerateSlipModal({
       designation: designation.trim() || (selectedEmp.role ?? "Employee"),
       salaryMonth: month,
       basicSalary: basic,
-      allowances: allowances.filter(i => i.label && i.amount > 0),
-      bonuses: bonuses.filter(i => i.label && i.amount > 0),
+      allowances: filteredAllowances,
+      bonuses: filteredBonuses,
       deductions: [],
       advanceSalaryDeduction: adv,
-      grossSalary: basic,
-      totalDeductions: adv,
-      netSalary: Math.max(0, basic - adv),
+      unpaidLeaveDays:       strictDeductions.unpaidLeaveDays,
+      unpaidLeaveDeduction:  strictDeductions.unpaidLeaveDeduction,
+      halfDayDeduction:      strictDeductions.halfDayDeduction,
+      latePenaltyCount:      strictDeductions.lateCount,
+      latePenaltyDays:       Math.floor(strictDeductions.lateCount / 3),
+      latePenaltyDeduction:  strictDeductions.lateAttendanceDeduction,
+      grossSalary: gross,
+      totalDeductions: totalDed,
+      netSalary: Math.max(0, gross - totalDed),
       generatedAt: new Date().toISOString(),
       generatedById: user?.id ?? "",
       generatedByName: user?.name ?? "",
@@ -318,14 +356,34 @@ function GenerateSlipModal({
           {/* Bonuses */}
           <ItemList items={bonuses} onChange={setBonuses} label="Bonuses" />
 
-          {/* Advance Salary Recovery (auto-detected) */}
-          {adv > 0 && (
-            <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900/30">
-              <h4 className="text-sm font-semibold text-red-800 dark:text-red-400 mb-2">Auto-Detected Deduction</h4>
-              <div className="flex justify-between text-sm text-red-700 dark:text-red-300">
-                <span>Advance Salary Recovery</span>
-                <span>−{fmtRs(adv)}</span>
-              </div>
+          {/* Auto-detected deductions from attendance + advance */}
+          {dedCalc > 0 && (
+            <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900/30 space-y-1.5">
+              <h4 className="text-sm font-semibold text-red-800 dark:text-red-400 mb-2">Auto-Calculated Deductions</h4>
+              {adv > 0 && (
+                <div className="flex justify-between text-sm text-red-700 dark:text-red-300">
+                  <span>Advance Salary Recovery</span>
+                  <span>−{fmtRs(adv)}</span>
+                </div>
+              )}
+              {(strictDeductions.unpaidLeaveDeduction ?? 0) > 0 && (
+                <div className="flex justify-between text-sm text-red-700 dark:text-red-300">
+                  <span>Unpaid Leave ({strictDeductions.unpaidLeaveDays} day{strictDeductions.unpaidLeaveDays !== 1 ? "s" : ""})</span>
+                  <span>−{fmtRs(strictDeductions.unpaidLeaveDeduction)}</span>
+                </div>
+              )}
+              {(strictDeductions.halfDayDeduction ?? 0) > 0 && (
+                <div className="flex justify-between text-sm text-orange-700 dark:text-orange-300">
+                  <span>Half Day Deduction</span>
+                  <span>−{fmtRs(strictDeductions.halfDayDeduction)}</span>
+                </div>
+              )}
+              {(strictDeductions.lateAttendanceDeduction ?? 0) > 0 && (
+                <div className="flex justify-between text-sm text-orange-700 dark:text-orange-300">
+                  <span>Late Penalty ({strictDeductions.lateCount} late → {Math.floor(strictDeductions.lateCount / 3)}d)</span>
+                  <span>−{fmtRs(strictDeductions.lateAttendanceDeduction)}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -337,9 +395,9 @@ function GenerateSlipModal({
 
           {/* Live preview totals */}
           <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 grid grid-cols-3 gap-3 text-center">
-            <div><p className="text-xs text-gray-400">Basic / Gross</p><p className="text-lg font-bold text-gray-900 dark:text-white">{fmtRs(basic)}</p></div>
+            <div><p className="text-xs text-gray-400">Gross Salary</p><p className="text-lg font-bold text-gray-900 dark:text-white">{fmtRs(grossCalc)}</p></div>
             <div><p className="text-xs text-gray-400">Deductions</p><p className="text-lg font-bold text-red-600">−{fmtRs(dedCalc)}</p></div>
-            <div><p className="text-xs text-gray-400">Net Salary</p><p className="text-lg font-bold text-brand-600 dark:text-brand-400">{fmtRs(Math.max(0, basic - dedCalc))}</p></div>
+            <div><p className="text-xs text-gray-400">Net Salary</p><p className="text-lg font-bold text-brand-600 dark:text-brand-400">{fmtRs(netCalc)}</p></div>
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -409,14 +467,21 @@ export default function SalarySlips() {
     appendSalarySlip(slip);
     setSlips(getSalarySlips());
     setGenerating(false);
+    if (user) {
+      notifySalarySlipGenerated(user.id, user.name, user.role, slip.employeeId, slip.employeeName, slip.salaryMonth);
+    }
     showToast(`Salary slip generated for ${slip.employeeName}`, "success");
   };
 
   const handleDelete = (id: string) => {
     if (!confirm("Delete this salary slip? This cannot be undone.")) return;
+    const slipToDelete = slips.find(s => s.id === id);
     const updated = slips.filter(s => s.id !== id);
     saveSalarySlips(updated);
     setSlips(updated);
+    if (slipToDelete && user) {
+      notifySalarySlipDeleted(user.id, user.name, user.role, slipToDelete.employeeId, slipToDelete.employeeName, slipToDelete.salaryMonth);
+    }
     showToast("Salary slip deleted", "info");
   };
 

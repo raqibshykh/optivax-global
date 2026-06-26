@@ -208,7 +208,7 @@ export default function Employees() {
           <tr>
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Employee</th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Designation</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Leaves</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Leaves Taken</th>
             {canSeeSalary && (
               <>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Salary</th>
@@ -223,8 +223,7 @@ export default function Employees() {
         <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
           {emps.map((emp) => {
             const extra = extraData[emp.id] || { leavesTaken: 0, salary: 30000, salaryStatus: "Unpaid", workMode: "Onsite" };
-            const leavesLeft = Math.max(0, 24 - extra.leavesTaken);
-            const deduction = extra.leavesTaken > 10 ? Math.round((extra.leavesTaken - 10) * (extra.salary / 30)) : 0;
+            const deduction = extra.leavesTaken > 0 ? Math.round(extra.leavesTaken * (extra.salary / 30)) : 0;
             const designation = (emp as any).designation as string | undefined;
             return (
               <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
@@ -243,7 +242,7 @@ export default function Employees() {
                   )}
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-semibold text-gray-900 dark:text-white">{extra.leavesTaken}</span> / <span className="font-semibold text-green-600">{leavesLeft}</span> left
+                  <span className="font-semibold text-gray-900 dark:text-white">{extra.leavesTaken}</span> taken
                 </td>
                 {canSeeSalary && (
                   <>
@@ -457,7 +456,7 @@ export default function Employees() {
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Leaves Taken</label>
-                          <input type="number" min="0" max="24" value={formLeavesTaken} onChange={(e) => setFormLeavesTaken(parseInt(e.target.value) || 0)}
+                          <input type="number" min="0" value={formLeavesTaken} onChange={(e) => setFormLeavesTaken(parseInt(e.target.value) || 0)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
                         </div>
                       </div>

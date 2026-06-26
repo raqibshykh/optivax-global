@@ -6,6 +6,7 @@ import { useAuth } from "../../context/AuthContext";
 import { UserService, UserProfile } from "../../services/userService";
 import { useToast } from "../../context/ToastContext";
 import { NotificationService } from "../../services/notificationService";
+import { notifyTaskCreated, notifyTaskUpdated, notifyTaskDeleted, notifyTaskReassigned, notifyTaskStatusChanged } from "../../services/notificationHelpers";
 import { useNavigate, useLocation } from "react-router-dom";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -153,6 +154,9 @@ export default function Tasks() {
         createdBy: user?.id,
       });
       setTasks((prev) => [saved, ...prev]);
+      if (user) {
+        notifyTaskCreated(user.id, user.name, user.role, saved.title, saved.id, saved.assigneeId);
+      }
     } catch { showToast("Failed to create task", "error"); return; }
     setNewTitle(""); setNewDescription(""); setNewCategory("general");
     setNewBudget(0); setNewDueDate(""); setNewProjectId(""); setShowForm(false);
@@ -186,9 +190,16 @@ export default function Tasks() {
     try {
       await api.put(`/saas/v1/tasks/${id}`, { status: newStatus });
       setTasks((prev) => prev.map((x) => (x.id === id ? { ...x, status: newStatus } : x)));
+      if (prevStatus !== newStatus && user) {
+        notifyTaskStatusChanged(user.id, user.name, user.role, t.title, t.id, newStatus);
+      }
       if (newStatus === "done" && prevStatus !== "done") {
-        notifyAdminsOfCompletion(t);
+        if (typeof (window as any).notifyAdminsOfCompletion === "function") {
+          // fallback if it was defined somewhere else, but we use the new helper now
+        }
         showToast((isMember || isHRAdmin) ? "Task complete — admins notified" : "Task marked complete", "success");
+      } else {
+        showToast("Task status updated", "success");
       }
     } catch { showToast("Failed to update task", "error"); }
   };
@@ -196,8 +207,12 @@ export default function Tasks() {
   const deleteTask = async (id: string) => {
     if (!window.confirm("Delete this task permanently?")) return;
     try {
+      const taskToDelete = tasks.find(t => t.id === id);
       await api.delete(`/saas/v1/tasks/${id}`);
       setTasks((prev) => prev.filter((t) => t.id !== id));
+      if (taskToDelete && user) {
+        notifyTaskDeleted(user.id, user.name, user.role, taskToDelete.title, taskToDelete.id, taskToDelete.assigneeId);
+      }
       showToast("Task deleted", "success");
     } catch { showToast("Failed to delete task", "error"); }
   };
@@ -240,63 +255,35 @@ export default function Tasks() {
       setTasks((prev) => prev.map((t) => t.id === editingTask.id ? { ...t, ...taskUpdates } : t));
     } catch { showToast("Failed to update task", "error"); return; }
 
+    if (isReassignment && user) {
+      notifyTaskReassigned(
+        user.id, user.name, user.role, editingTask.title, editingTask.id,
+        oldAssigneeId || "", newAssigneeId || ""
+      );
+    } else if (user) {
+      notifyTaskUpdated(user.id, user.name, user.role, editingTask.title, editingTask.id, newAssigneeId);
+    }
+
+    // Write revision / audit log
+    try {
+      const revisions = JSON.parse(localStorage.getItem("mock_revisions") || "[]");
+      const rev = {
+        id: `rev-task-reassign-${Date.now()}`,
+        type: "task_reassign",
+        status: "completed",
+        projectId: editingTask.projectId || editForm.projectId || "",
+        comment: `Task "${editingTask.title}" reassigned from ${
+          oldAssigneeId ? usersById[oldAssigneeId]?.full_name || "unassigned" : "unassigned"
+        } to ${newAssigneeId ? usersById[newAssigneeId]?.full_name || "unassigned" : "unassigned"} by ${user?.name || "admin"}.`,
+        updatedBy: user?.id || "",
+        created_at: new Date().toISOString(),
+      };
+      localStorage.setItem("mock_revisions", JSON.stringify([rev, ...revisions]));
+    } catch {}
+
     if (isReassignment) {
-      const now = new Date().toISOString();
-      const oldAssigneeProfile = oldAssigneeId ? usersById[oldAssigneeId] : undefined;
-
-      // Notify old assignee
-      if (oldAssigneeId) {
-        try {
-          await NotificationService.create({
-            userId: oldAssigneeId,
-            type: "system",
-            title: "Task Reassigned",
-            message: `Task "${editingTask.title}" has been reassigned from you to ${
-              newAssigneeProfile?.full_name || "another user"
-            }.`,
-            read: false,
-            createdAt: now,
-            actionUrl: "/tasks",
-          });
-        } catch {}
-      }
-
-      // Notify new assignee
-      if (newAssigneeId) {
-        try {
-          await NotificationService.create({
-            userId: newAssigneeId,
-            type: "system",
-            title: "Task Assigned to You",
-            message: `Task "${editingTask.title}" has been assigned to you${
-              editForm.dueDate ? ` (due ${editForm.dueDate})` : ""
-            }.`,
-            read: false,
-            createdAt: now,
-            actionUrl: "/tasks",
-          });
-        } catch {}
-      }
-
-      // Write revision / audit log
-      try {
-        const revisions = JSON.parse(localStorage.getItem("mock_revisions") || "[]");
-        const rev = {
-          id: `rev-task-reassign-${Date.now()}`,
-          type: "task_reassign",
-          status: "completed",
-          projectId: editingTask.projectId || editForm.projectId || "",
-          comment: `Task "${editingTask.title}" reassigned from ${
-            oldAssigneeProfile?.full_name || "unassigned"
-          } to ${newAssigneeProfile?.full_name || "unassigned"} by ${user?.name || "admin"}.`,
-          updatedBy: user?.id || "",
-          created_at: now,
-        };
-        localStorage.setItem("mock_revisions", JSON.stringify([rev, ...revisions]));
-      } catch {}
-
       showToast(
-        `Task reassigned to ${newAssigneeProfile?.full_name || "new assignee"}. Both parties notified.`,
+        `Task reassigned to ${newAssigneeId ? usersById[newAssigneeId]?.full_name || "new assignee" : "new assignee"}. Both parties notified.`,
         "success"
       );
     } else {

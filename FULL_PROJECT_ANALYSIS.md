@@ -1,7 +1,9 @@
 # FULL PROJECT ANALYSIS — OptiVax Global Admin Dashboard
-**Last Updated:** 2026-06-25  
+**Last Updated:** 2026-07-03  
 **Version:** 2.3.0  
 **Framework:** React 19 + TypeScript 5.7 + Vite 6 + Tailwind CSS v4
+
+> **2026-07-03 update:** Added the Employee Activity & Break Tracking module (login/logout session tracking, Dinner Break + Casual Break Balance Rule, live employee status dashboard, historical activity reports). See §13. All other sections below reflect the state as of 2026-06-25 except where explicitly annotated.
 
 ---
 
@@ -33,13 +35,14 @@
     - [11.13 Conversations / Messaging](#1113-conversations--messaging)
     - [11.14 IT Tickets (Cross-Dept)](#1114-it-tickets-cross-dept)
 12. [Attendance Module (Full Detail)](#12-attendance-module-full-detail)
-13. [Services Layer](#13-services-layer)
-14. [Hooks Catalogue](#14-hooks-catalogue)
-15. [Component Library](#15-component-library)
-16. [Data Flow Diagram](#16-data-flow-diagram)
-17. [LocalStorage Keys Reference](#17-localstorage-keys-reference)
-18. [Permission Matrix (Full)](#18-permission-matrix-full)
-19. [Known Limitations & Production Notes](#19-known-limitations--production-notes)
+13. [Activity & Break Tracking Module (Full Detail)](#13-activity--break-tracking-module-full-detail)
+14. [Services Layer](#14-services-layer)
+15. [Hooks Catalogue](#15-hooks-catalogue)
+16. [Component Library](#16-component-library)
+17. [Data Flow Diagram](#17-data-flow-diagram)
+18. [LocalStorage Keys Reference](#18-localstorage-keys-reference)
+19. [Permission Matrix (Full)](#19-permission-matrix-full)
+20. [Known Limitations & Production Notes](#20-known-limitations--production-notes)
 
 ---
 
@@ -51,6 +54,7 @@
 - Client lifecycle management (leads → projects → billing → revisions)
 - Employee management across 5 departments
 - Attendance tracking with calendar, analytics, and payroll impact
+- **Employee Activity & Break Tracking — login/logout sessions, Dinner Break + Casual Break time-balance policy, live employee status dashboard, historical compliance reports (new, 2026-07-03 — see §13)**
 - Payroll + salary slip generation
 - Budget management per department
 - Email marketing (campaigns, audiences, automation)
@@ -124,6 +128,7 @@ src/
 │
 ├── context/
 │   ├── AuthContext.tsx        # Authentication state + RBAC helpers
+│   ├── ActivityContext.tsx    # Break/session state + audit+notification wiring (§13)
 │   ├── SidebarContext.tsx     # Sidebar open/close state
 │   ├── ThemeContext.tsx       # Dark/light mode toggle
 │   └── ToastContext.tsx       # Global toast notifications
@@ -147,6 +152,7 @@ src/
 ├── mock/
 │   ├── users.ts               # mockUsers array — 20+ seeded accounts
 │   ├── attendanceData.ts      # Attendance types, generator, calculators, payroll engine
+│   ├── activityData.ts        # Activity & Break Tracking data layer + business rules (§13)
 │   ├── payrollData.ts         # SalarySlip + AdvanceSalaryRequest types + seed data
 │   ├── budgetData.ts          # Budget categories, line items, audit log seed data
 │   ├── salesData.ts           # Leads, targets, commission, team performance data
@@ -206,7 +212,7 @@ src/
 │   ├── dashboard/            # MetricCard, ActivityFeed, EmployeeHierarchy
 │   ├── charts/               # BarChartOne, LineChartOne wrappers
 │   ├── form/                 # Input, Select, Checkbox, Radio, MultiSelect, etc.
-│   ├── header/               # NotificationDropdown, UserDropdown
+│   ├── header/               # NotificationDropdown, UserDropdown, BreakWidget (§13.1)
 │   ├── tables/               # BasicTableOne
 │   ├── ui/                   # Alert, Avatar, Badge, Button, Dropdown, Modal, Table
 │   ├── UserProfile/          # UserInfoCard, UserMetaCard, UserAddressCard
@@ -226,7 +232,7 @@ src/
     ├── Conversations/         # Client messaging (staff side)
     ├── Budget/                # Budget management
     ├── Employee/              # Employee self-service (salary slips, advance)
-    ├── Common/                # Shared pages (Reports, Tasks)
+    ├── Common/                # Shared pages (Reports, Tasks, ActivityReports, LiveActivityDashboard — §13)
     └── OtherPage/             # NotFound (404)
 ```
 
@@ -380,6 +386,7 @@ All routing uses `HashRouter` (no server-side routing needed). Routes live entir
 | Client | /client/* | client | Dashboard, projects, billing, messages |
 | Cross-dept | /budget, /conversations, /it/tickets | varies | Shared features |
 | Employee Self | /salary-slips, /advance-salary, /my-budget | all internal staff | Personal finance |
+| Activity Tracking | /activity/live, /activity/reports | varies (§13.3, §13.4) | Live status + historical reports |
 
 ### Nested Protected Routes (Sub-Permission)
 ```
@@ -419,31 +426,31 @@ interface MenuItem {
 
 ### Sidebar Per Role Summary
 
-**super_admin** — Full cross-dept megamenu: SA panel, Admin Panel, All Employees, Departments, Clients, Projects, Billing, Commissions, Files, Email Marketing, Reports, Notifications, Revisions, Client Messages, Budget, Salary Slips, Advance Salary, Audit Logs, Settings + sub-groups for SA-Sales, SA-Production, SA-Marketing, SA-HR (with full 7-item Attendance suite), SA-IT Support
+**super_admin** — Full cross-dept megamenu: SA panel, Admin Panel, All Employees, Departments, Clients, Projects, Billing, Commissions, Files, Email Marketing, Reports, **Live Activity, Activity Reports**, Notifications, Revisions, Client Messages, Budget, Salary Slips, Advance Salary, Audit Logs, Settings + sub-groups for SA-Sales, SA-Production, SA-Marketing, SA-HR (with full 7-item Attendance suite), SA-IT Support
 
-**hr_admin** — Dashboard, Employees, Payroll, Leave Requests, Attendance (7 sub-items: Daily/Monthly/Yearly/Analytics/Calendar/Payroll Impact/Corrections), Tasks, Files, Reports, IT Tickets, Budget, Salary Slips, Bulk Salary Slips, Advance Salary, Notifications, Settings, Profile
+**hr_admin** — Dashboard, Employees, Payroll, Leave Requests, Attendance (7 sub-items: Daily/Monthly/Yearly/Analytics/Calendar/Payroll Impact/Corrections), Tasks, Files, Reports, **Live Activity, Activity Reports**, IT Tickets, Budget, Salary Slips, Bulk Salary Slips, Advance Salary, Notifications, Settings, Profile
 
-**hr_member** — Dashboard, My Leaves, Attendance (5 sub-items: Daily/Monthly/Yearly/Analytics/Calendar), Tasks, Files, IT Tickets, My Budget, My Salary Slip, Advance Salary
+**hr_member** — Dashboard, My Leaves, Attendance (5 sub-items: Daily/Monthly/Yearly/Analytics/Calendar), Tasks, Files, **My Activity**, IT Tickets, My Budget, My Salary Slip, Advance Salary
 
-**sales_admin** — Dashboard, Leads, Clients, Tasks, Sales Targets, Campaigns, Team Performance, Commissions, Reports, Files, Billing, Notifications, Settings, Profile
+**sales_admin** — Dashboard, Leads, Clients, Tasks, Sales Targets, Campaigns, Team Performance, Commissions, Reports, **Live Activity, Activity Reports**, Files, Billing, Notifications, Settings, Profile
 
-**sales_member** — Dashboard, Leads, Clients, Tasks, Files, Notifications, My Salary Slip, Advance Salary
+**sales_member** — Dashboard, Leads, Clients, Tasks, **My Activity**, Files, Notifications, My Salary Slip, Advance Salary
 
-**production_admin** — Dashboard, Projects, Tasks, Deliverables, Files, Reports, Revisions, Notifications, Settings, Profile
+**production_admin** — Dashboard, Projects, Tasks, Deliverables, Files, Reports, **Live Activity, Activity Reports**, Revisions, Notifications, Settings, Profile
 
-**production_member** — Dashboard, Projects, Tasks, Deliverables, Files, Notifications
+**production_member** — Dashboard, Projects, Tasks, Deliverables, Files, **My Activity**, Notifications
 
-**marketing_admin** — Dashboard, Leads, Tasks, Social Tracking, Reports, Files, Email Marketing (Campaigns/Templates/Audience/Analytics/Automation), Notifications, Settings, Profile
+**marketing_admin** — Dashboard, Leads, Tasks, Social Tracking, Reports, **Live Activity, Activity Reports**, Files, Email Marketing (Campaigns/Templates/Audience/Analytics/Automation), Notifications, Settings, Profile
 
-**marketing_member** — Dashboard, Leads, Tasks, Social Tracking, Files, Notifications, Email Marketing (Campaigns/Templates/Audience only)
+**marketing_member** — Dashboard, Leads, Tasks, Social Tracking, Files, **My Activity**, Notifications, Email Marketing (Campaigns/Templates/Audience only)
 
-**management** — Dashboard, Projects, Clients, Billing, Reports, Tasks, Notifications, Audit Logs, Deliverables, Revisions, Files, Profile
+**management** — Dashboard, Projects, Clients, Billing, Reports, **Live Activity, Activity Reports**, Tasks, Notifications, Audit Logs, Deliverables, Revisions, Files, Profile
 
-**it_admin** — Dashboard, Attendance Overview, IT Tickets, Biometric Devices, Sync Logs, Attendance Exceptions, Reports, Notifications, Profile
+**it_admin** — Dashboard, Attendance Overview, IT Tickets, Biometric Devices, Sync Logs, Attendance Exceptions, Reports, **Live Activity, Activity Reports**, Notifications, Profile
 
-**it_member** — Dashboard, IT Tickets, Attendance, Devices, Sync Logs, Exceptions, My Salary Slip, Advance Salary
+**it_member** — Dashboard, IT Tickets, Attendance, Devices, Sync Logs, Exceptions, **My Activity**, My Salary Slip, Advance Salary
 
-**client** — Dashboard, My Projects, Billing, Files, Notifications, Messages, Revisions, Profile
+**client** — Dashboard, My Projects, Billing, Files, Notifications, Messages, Revisions, Profile (no Activity Tracking access — client role is excluded entirely)
 
 ---
 
@@ -480,7 +487,13 @@ AppLayout (root authenticated wrapper)
 ### AuthContext (`src/context/AuthContext.tsx`)
 **State:** `user: User | null`, `isLoading: boolean`  
 **Provides:** `login()`, `logout()`, `register()`, `updateProfile()`, `canView()`, `canCreate()`, `canEdit()`, `canDelete()`, `canExport()`, `canApprove()`, `canAssign()`  
-**Also starts:** `useSSE()` hook when user is authenticated
+**Also starts:** `useSSE()` hook when user is authenticated  
+`login()` calls `POST /saas/v1/activity/login`; `logout()` calls `POST /saas/v1/activity/logout` and writes a `USER_LOGOUT` audit entry (§13.6, §13.8)
+
+### ActivityContext (`src/context/ActivityContext.tsx`) — added 2026-07-03
+**State:** `activeSession: ActivitySession | null`, `activeBreak: ActiveBreak | null`, `isLoading: boolean`  
+**Provides:** `startBreak(type)`, `endBreak()`  
+Polls `GET /saas/v1/activity/current` every 30s while authenticated. Wraps `startBreak`/`endBreak` with `BREAK_STARTED`/`BREAK_REJECTED`/`BREAK_ENDED` audit logging and fires `notifyBreakWarning()` when a break ends with `status === "warning"` (§13.8). Consumed by `BreakWidget.tsx`.
 
 ### SidebarContext (`src/context/SidebarContext.tsx`)
 **State:** `isOpen: boolean`, `toggleSidebar()`, `closeSidebar()`  
@@ -508,6 +521,7 @@ Overrides `window.fetch`. Intercepts requests to `/saas/v1/*` pathnames. Routes 
 - `GET /saas/v1/auth/session` → reads current session
 - `GET /saas/v1/users` → returns filtered user list
 - `PUT /saas/v1/profiles/update` → updates user metadata
+- `POST /saas/v1/activity/login|logout`, `break/start|end`, `GET /saas/v1/activity/current|sessions` → Activity & Break Tracking (§13.6) — the one module whose reads/writes go through the mock server's role-scoping logic rather than being queried unscoped straight from a data file
 - Various entity routes for projects, clients, invoices, notifications, etc.
 
 **2. Direct localStorage access (most modules)**  
@@ -522,6 +536,7 @@ Called once on app start (`seedAllMockData()`). Writes initial data for all modu
 |---|---|
 | `mock/users.ts` | 20+ user accounts across all roles |
 | `mock/attendanceData.ts` | Attendance types, deterministic generator, calculators |
+| `mock/activityData.ts` | Activity session/break types, business rules, optional `seedActivitySessions()` (§13) |
 | `mock/payrollData.ts` | SalarySlip + AdvanceSalaryRequest types + 6 seed slips |
 | `mock/budgetData.ts` | Budget categories, line items, audit entries |
 | `mock/salesData.ts` | Leads, targets, commission rates, team performance |
@@ -1114,7 +1129,152 @@ Weekends → `weekly-off`; company holidays → `holiday`
 
 ---
 
-## 13. SERVICES LAYER
+## 13. ACTIVITY & BREAK TRACKING MODULE (FULL DETAIL)
+
+Added 2026-07-03. Tracks login/logout sessions and break-taking for every internal role. **Monitoring/reporting only — has no effect on payroll, salary deductions, attendance calculations, or budget calculations** (enforced by keeping this module's data model and computations fully separate from `attendanceData.ts`/`payrollData.ts`; nothing here feeds into either).
+
+**Core files:** `src/mock/activityData.ts` (data layer + business rules), `src/mock/server.ts` (`/saas/v1/activity/*` routes), `src/context/ActivityContext.tsx` (break state + audit/notification wiring), `src/components/header/BreakWidget.tsx` (header widget), `src/pages/Common/LiveActivityDashboard.tsx`, `src/pages/Common/ActivityReports.tsx`.
+
+---
+
+### 13.1 Break-Taking Widget (Header)
+
+**File:** `BreakWidget.tsx` — mounted in `AppHeader.tsx` for every authenticated non-`client` role.
+
+- No active break → **"Take a Break"** button opens a dropdown with the two available break types.
+- Active break → button itself becomes a live countdown (`MM:SS`), turning red with an "Overdue" tag once elapsed time exceeds the break's `allowedMinutes`. The countdown is a pure display re-render (`setInterval` tick) — the authoritative elapsed/exceeded/status values always come from the server response, never from client-held state.
+- A page refresh mid-break restores the countdown correctly because `ActivityContext` re-fetches `/activity/current` on mount.
+
+---
+
+### 13.2 Break Types & Business Rules
+
+**Only two break types exist** (Lunch Break and the 10-minute Casual Break were removed entirely on 2026-07-03 — not just hidden in the UI, the `BreakType` union itself only has two members):
+
+| Type | Label | Rule |
+|---|---|---|
+| `meal_dinner` | Dinner Break | Once per working day. Fixed 60-minute allowance. Cannot be split, paused, or carried over. |
+| `casual_5` | Casual Break (5 min) | **Casual Break Balance Rule** — see below. |
+
+**Casual Break Balance Rule** (replaces a simple "3 breaks/day" count):
+- Each employee has a **15-minute pool of Casual Break time per working day** (nominally "3 × 5-minute breaks", but tracked as a time balance, not a count).
+- Returning before the 5-minute timer expires banks the unused minutes for later use the same day (e.g. use 4 of 5 → 1 minute saved, 11 remaining).
+- A new Casual Break's allowance is `min(5, remainingBalance)` — once the balance drops below 5 minutes, the next break's timer is capped to whatever is left.
+- Starting a new break when the balance is already 0 is rejected server-side.
+- The balance is never persisted separately — it's recomputed every time from that day's completed `BreakRecord.actualMinutes`, so it automatically expires at day-end and never carries forward.
+
+**Concurrency / crash-safety guarantees (server is the sole authority — the frontend only displays what it returns):**
+- `startBreak()` rejects with `ALREADY_ACTIVE` if the user already has an open break — prevents two browser tabs from creating duplicate break records.
+- If a user logs in again without a clean prior logout, the stale session's auto-close logic also finalizes any dangling open break on it (instead of leaving it "in progress" forever).
+- `startBreak()` returns a discriminated result — `{ ok: true, session, breakRecord }` or `{ ok: false, reason }` where `reason` is one of `NO_ACTIVE_SESSION | ALREADY_ACTIVE | MEAL_ALREADY_TAKEN | CASUAL_BALANCE_EXHAUSTED`.
+
+---
+
+### 13.3 Live Activity Dashboard
+
+**Route:** `/activity/live` · **Page:** `LiveActivityDashboard.tsx` · **Access:** every internal (non-`client`) role, including `*_member` (self-only).
+
+- Polls `GET /saas/v1/activity/sessions` every 5 seconds (no manual refresh needed) — scoped server-side per role (see §13.7).
+- Per-employee live status derived (display-only) from the day's session/break records:
+
+| Status | Condition |
+|---|---|
+| 🟢 Working | Open session, no in-progress break |
+| 🟠 Dinner Break | Open session, in-progress `meal_dinner` break |
+| 🔵 Casual Break | Open session, in-progress `casual_5` break |
+| ⚫ Offline | No session today, or session closed |
+
+- Columns: Name, Department, Designation, Status, Login Time, Session Duration (live), Break Duration (live, if on break).
+- KPI cards show a live count per status across the visible roster.
+
+---
+
+### 13.4 Activity Reports (Historical / Compliance)
+
+**Route:** `/activity/reports` · **Page:** `ActivityReports.tsx` · **Access:** `super_admin`, `management`, `hr_admin` (all data); `sales_admin`/`production_admin`/`marketing_admin`/`it_admin` (own department only, server-scoped). `*_member` roles do **not** get this page — they only get §13.3's self-view.
+
+Seven report tabs, all derived from the same `/activity/sessions` response:
+
+| Tab | Content |
+|---|---|
+| Login History | User, date, login time |
+| Logout History | User, date, logout time (or "Active") |
+| Working Hours | Session duration, active time (session − breaks) |
+| Meal Breaks | Dinner Break records: start/end/allowed/actual/exceeded/status |
+| Casual Breaks | Casual Break records, same columns (allowance varies per record per the Balance Rule) |
+| Late Returns / Warnings | Any break where `status === "warning"` |
+
+- KPI cards: total sessions, completed, avg session length, total breaks, total warnings.
+- Filters: date range; department filter shown only to cross-department roles.
+- Export: CSV, using the existing `exportCSV()` helper from `attendanceData.ts`.
+- **Optional sample data:** a "Generate Sample Data" button (super_admin only, shown only when no sessions exist yet) calls `seedActivitySessions()`. This is **never** auto-invoked — no `devSeed.ts`/`SEED_VERSION` wiring — so it can't silently overwrite real data.
+
+---
+
+### 13.5 Data Model
+
+```typescript
+type BreakType   = "meal_dinner" | "casual_5";
+type BreakStatus = "normal" | "warning";
+
+interface BreakRecord {
+  id, type, label, category: "meal" | "casual",
+  startTime,                 // ISO
+  endTime?,                  // ISO — set on return
+  allowedMinutes,            // fixed 60 for dinner; min(5, remainingBalance) for casual
+  actualMinutes?, exceededMinutes?, status?,   // all set on return
+}
+
+interface ActivitySession {
+  id, userId, userName, userRole, departmentId?,
+  date,                       // YYYY-MM-DD
+  loginTime, logoutTime?,
+  sessionMinutes?, totalBreakMinutes?, activeMinutes?,
+  warningCount,
+  breaks: BreakRecord[],
+}
+```
+
+**Storage:** `localStorage["optivax_activity_sessions"]` (capped at 5000 records) and `localStorage["optivax_active_breaks"]` (map of `userId → ActiveBreak` for whoever currently has a break open).
+
+---
+
+### 13.6 Mock API Endpoints (`src/mock/server.ts`)
+
+| Method | Path | Behaviour |
+|---|---|---|
+| POST | `/saas/v1/activity/login` | Starts a session (auto-closes + finalizes any stale prior session for this user) |
+| POST | `/saas/v1/activity/logout` | Ends the current session, computes duration/active time |
+| POST | `/saas/v1/activity/break/start` | Enforces all business rules in §13.2; 400 + `{error, reason}` on rejection |
+| POST | `/saas/v1/activity/break/end` | Ends the active break, computes actual/exceeded/status |
+| GET | `/saas/v1/activity/current` | Returns the caller's own current session + active break |
+| GET | `/saas/v1/activity/sessions` | Returns sessions scoped by role — `*_member` forced to self, dept `*_admin` filtered to their department, `hr_admin`/`management`/`super_admin` see all |
+
+`AuthContext.login()`/`logout()` call the login/logout endpoints automatically; `ActivityContext.startBreak()`/`endBreak()` call the break endpoints.
+
+---
+
+### 13.7 RBAC / Access
+
+No changes were made to `src/utils/rbac.ts` or `PermissionDomain` for this module — it reuses the pre-existing `reports` domain grants (already exactly `super_admin`/`management`/`hr_admin`/all `*_admin` roles with `VIEW+EXPORT`) to gate `/activity/reports`, and gates `/activity/live` at the route level to "any non-client role" since data scoping for that page is already fully enforced server-side per §13.6.
+
+---
+
+### 13.8 Audit Log & Notifications
+
+Audit entries and notifications are created **at the call site in `context/*.tsx`** (matching this codebase's existing convention — `server.ts` never calls `AuditLogService`/`NotificationService` directly):
+
+| Audit action | Fired from | When |
+|---|---|---|
+| `USER_LOGOUT` | `AuthContext.logout()` | Every logout (login already covered by the pre-existing `USER_LOGIN` via `notifyLoginActivity`) |
+| `BREAK_STARTED` | `ActivityContext.startBreak()` | Break successfully started |
+| `BREAK_REJECTED` | `ActivityContext.startBreak()` catch | Any rejected attempt, with the server's reason in the description |
+| `BREAK_ENDED` | `ActivityContext.endBreak()` | Every break end, with status + exceeded minutes |
+| `BREAK_WARNING` | `notifyBreakWarning()` (`notificationHelpers.ts`), via `endBreak()` | Break ends with `status === "warning"` — also notifies the employee + HR admins/management |
+
+---
+
+## 14. SERVICES LAYER
 
 All services in `src/services/` use localStorage as the database.
 
@@ -1136,7 +1296,7 @@ All services in `src/services/` use localStorage as the database.
 
 ---
 
-## 14. HOOKS CATALOGUE
+## 15. HOOKS CATALOGUE
 
 | Hook | State Managed | Notes |
 |---|---|---|
@@ -1161,7 +1321,7 @@ All services in `src/services/` use localStorage as the database.
 
 ---
 
-## 15. COMPONENT LIBRARY
+## 16. COMPONENT LIBRARY
 
 ### Auth Components
 - `ProtectedRoute` — role + domain guard, renders `<Outlet>` or redirects
@@ -1209,7 +1369,7 @@ All services in `src/services/` use localStorage as the database.
 
 ---
 
-## 16. DATA FLOW DIAGRAM
+## 17. DATA FLOW DIAGRAM
 
 ```
 User Action (click / form submit)
@@ -1246,7 +1406,7 @@ AuthContext
 
 ---
 
-## 17. LOCALSTORAGE KEYS REFERENCE
+## 18. LOCALSTORAGE KEYS REFERENCE
 
 | Key | Module | Content |
 |---|---|---|
@@ -1273,6 +1433,8 @@ AuthContext
 | `mock_att_year_2026` | Attendance | All records for 2026 |
 | `mock_attendance_corrections` | Attendance | Correction requests |
 | `mock_attendance_audit` | Attendance | Attendance change log |
+| `optivax_activity_sessions` | Activity Tracking | Login/logout sessions + break records, capped at 5000 (§13) |
+| `optivax_active_breaks` | Activity Tracking | Map of userId → currently-open break, if any (§13) |
 | `optivax_employee_extra` | Employees | Salary + extra fields per userId |
 | `mock_email_campaigns` | Email Marketing | Campaign records |
 | `mock_email_templates` | Email Marketing | Template records |
@@ -1284,7 +1446,7 @@ AuthContext
 
 ---
 
-## 18. PERMISSION MATRIX (FULL)
+## 19. PERMISSION MATRIX (FULL)
 
 | Domain | super_admin | management | sales_admin | sales_member | prod_admin | prod_member | mktg_admin | mktg_member | hr_admin | hr_member | it_admin | it_member | client |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -1310,7 +1472,7 @@ AuthContext
 
 ---
 
-## 19. KNOWN LIMITATIONS & PRODUCTION NOTES
+## 20. KNOWN LIMITATIONS & PRODUCTION NOTES
 
 ### Data Persistence
 - All data is in `localStorage` — cleared when browser data is cleared
@@ -1346,6 +1508,13 @@ AuthContext
 - Biometric device sync is simulated — no real hardware integration
 - 5 seed devices: Main Office Entrance + Exit, Branch B (offline), Warehouse Gate, Server Room (error)
 
+### Activity & Break Tracking (§13)
+- "Live" on the dashboard means 5-second polling, not a push channel — consistent with `useSSE()`'s own 30-second-poll simulation elsewhere in the app; no WebSocket/SSE work was added for this module
+- Multi-tab duplicate-break prevention and stale-session/dangling-break cleanup are both enforced server-side in `activityData.ts`, not just hidden client-side — verified with two concurrent browser contexts hitting the raw API
+- The Casual Break Balance Rule's remaining-balance figure is always recomputed from that day's records (never persisted as its own field), so it inherently cannot carry over to the next day
+- `seedActivitySessions()` is opt-in only (a super-admin-only button on the Reports page) — it is never wired into `devSeed.ts`/`SEED_VERSION`, so it can never silently overwrite real data on an existing profile
+- Explicitly does **not** feed into `attendanceData.ts`'s status/leave calculations or `payrollData.ts`'s deduction math — confirmed by keeping the two modules' storage keys, types, and computations fully separate
+
 ### Email Marketing
 - No actual emails sent — all campaign data stored locally
 - Stripe integration is UI-only — no real payment processing
@@ -1365,4 +1534,4 @@ When moving to production, replace:
 
 ---
 
-*Report generated: 2026-06-25 | OptiVax Global Admin Dashboard v2.3.0*
+*Report generated: 2026-06-25 | Updated: 2026-07-03 (§13 Activity & Break Tracking Module added) | OptiVax Global Admin Dashboard v2.3.0*

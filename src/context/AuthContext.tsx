@@ -14,6 +14,7 @@ import { useSSE } from "../hooks/useSSE";
 import { getRoleHome } from "../lib/roles";
 import { hasPermission, canView as rbacCanView, canCreate as rbacCanCreate, canEdit as rbacCanEdit, canDelete as rbacCanDelete, canExport as rbacCanExport, canApprove as rbacCanApprove, canAssign as rbacCanAssign } from "../utils/rbac";
 import { notifyLoginActivity } from "../services/notificationHelpers";
+import { AuditLogService } from "../services/auditLogService";
 
 // Convert MockUserSession to User
 const sessionToUser = (session: MockUserSession): User => ({
@@ -118,6 +119,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await api.post("/saas/v1/auth/logout", {});
     } catch {
       // ignore — still clear local state
+    }
+    if (user) {
+      AuditLogService.add({
+        action: "USER_LOGOUT",
+        entityType: "security",
+        entityId: user.id,
+        entityName: user.name,
+        performedBy: user.id,
+        performedByName: user.name,
+        performedByRole: user.role,
+        description: `${user.name} logged out`,
+      });
     }
     clearMockSession();
     setUser(null);

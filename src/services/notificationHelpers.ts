@@ -634,6 +634,28 @@ export function notifyLoginActivity(
   AuditLogService.add({ action: "USER_LOGIN", entityType: "security", entityId: userId, entityName: userName, performedBy: userId, performedByName: userName, performedByRole: role, description: `${userName} logged in${ip ? ` from ${ip}` : ""}` });
 }
 
+export function notifyBreakWarning(
+  userId: string,
+  userName: string,
+  role: string,
+  breakLabel: string,
+  exceededMinutes: number
+) {
+  notify(userId, "Break Time Exceeded",
+    `Your ${breakLabel} exceeded the allowed time by ${exceededMinutes} minute${exceededMinutes === 1 ? "" : "s"} — recorded as a Warning.`,
+    "system", "attendance", "/activity/reports", "View Activity");
+
+  const recipients = getUsersByRole("super_admin", "management", "hr_admin");
+  for (const r of recipients) {
+    if (r.id === userId) continue;
+    notify(r.id, "Employee Break Warning",
+      `${userName} (${role}) exceeded their ${breakLabel} by ${exceededMinutes} minute${exceededMinutes === 1 ? "" : "s"}.`,
+      "system", "attendance", "/activity/reports", "View Activity");
+  }
+
+  AuditLogService.add({ action: "BREAK_WARNING", entityType: "activity", entityId: userId, entityName: userName, performedBy: userId, performedByName: userName, performedByRole: role, description: `${userName} exceeded ${breakLabel} by ${exceededMinutes} minute(s)` });
+}
+
 export function notifySecurityEvent(
   eventType: string,
   description: string,

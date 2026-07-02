@@ -50,6 +50,8 @@ import Automation from "./pages/Admin/Email/Automation";
 // ── Common feature pages ──────────────────────────────────────────────────
 import Reports from "./pages/Common/Reports";
 import Tasks from "./pages/Common/Tasks";
+import ActivityReports from "./pages/Common/ActivityReports";
+import LiveActivityDashboard from "./pages/Common/LiveActivityDashboard";
 
 // ── Sales management pages ────────────────────────────────────────────────
 import CampaignBudgets from "./pages/Sales/CampaignBudgets";
@@ -324,6 +326,16 @@ export default function App() {
           {/* ── IT TICKETS — all internal staff (non-client) can submit ── */}
           <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "sales_member", "production_admin", "production_member", "marketing_admin", "marketing_member", "hr_admin", "hr_member", "it_admin", "it_member"]} />}>
             <Route path="/it/tickets" element={<ITTickets />} />
+          </Route>
+
+          {/* ── ACTIVITY REPORTS — Super Admin, Management, HR Admin (all), dept admins (own dept, server-scoped) ── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "hr_admin", "sales_admin", "production_admin", "marketing_admin", "it_admin"]} />}>
+            <Route path="/activity/reports" element={<ActivityReports />} />
+          </Route>
+
+          {/* ── LIVE ACTIVITY DASHBOARD — every internal (non-client) role; members see only themselves, server-scoped ── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "sales_member", "production_admin", "production_member", "marketing_admin", "marketing_member", "hr_admin", "hr_member", "it_admin", "it_member"]} />}>
+            <Route path="/activity/live" element={<LiveActivityDashboard />} />
           </Route>
 
           {/* ── IT SUPPORT ────────────────────────────────────────── */}

@@ -1264,13 +1264,11 @@ export function startMockServer() {
         }
 
         if (method === "POST" && p === "/saas/v1/activity/login") {
-          const userProfile = mockUsers.find(u => u.id === mockUserId) || readProfiles().find(u => u.id === mockUserId);
-          const session = ActivityData.startSession(
-            mockUserId, 
-            userProfile?.name || userProfile?.full_name || "Unknown User", 
-            mockUserRole, 
-            userProfile?.departmentId
-          );
+          const staticProfile  = mockUsers.find(u => u.id === mockUserId);
+          const dynamicProfile = readProfiles().find(u => u.id === mockUserId);
+          const userName = staticProfile?.name ?? (dynamicProfile as { full_name?: string } | undefined)?.full_name ?? "Unknown User";
+          const departmentId = staticProfile?.departmentId ?? (dynamicProfile as { departmentId?: string } | undefined)?.departmentId;
+          const session = ActivityData.startSession(mockUserId, userName, mockUserRole, departmentId);
           return ok({ session });
         }
 
@@ -1280,10 +1278,18 @@ export function startMockServer() {
         }
 
         if (method === "POST" && p === "/saas/v1/activity/break/start") {
-          const body = safeParseBody<{ type: ActivityData.BreakType }>(init?.body, { type: "casual_5" });
-          const res = ActivityData.startBreak(mockUserId, body.type);
-          if (!res) return new Response(JSON.stringify({ error: "No active session found or break already active" }), { status: 400 });
-          return ok(res);
+          const body   = safeParseBody<{ type: ActivityData.BreakType }>(init?.body, { type: "casual_5" });
+          const result = ActivityData.startBreak(mockUserId, body.type);
+          if (!result.ok) {
+            const messages: Record<ActivityData.BreakRejectionReason, string> = {
+              NO_ACTIVE_SESSION:        "No active session found. Please log in again.",
+              ALREADY_ACTIVE:           "A break is already in progress.",
+              MEAL_ALREADY_TAKEN:       "You have already taken this meal break today.",
+              CASUAL_BALANCE_EXHAUSTED: `You have used all ${ActivityData.CASUAL_DAILY_BALANCE_MINUTES} minutes of your daily Casual Break balance.`,
+            };
+            return new Response(JSON.stringify({ error: messages[result.reason], reason: result.reason }), { status: 400 });
+          }
+          return ok(result);
         }
 
         if (method === "POST" && p === "/saas/v1/activity/break/end") {

@@ -5,8 +5,8 @@ import { useAuth } from "../../context/AuthContext";
 import { UserService, type UserProfile } from "../../services/userService";
 import {
   getSalarySlips, saveSalarySlips, appendSalarySlip, printSalarySlip,
-  computeGross, computeNet, computeDeductions, computeSlipBreakdown, computeStrictDeductions,
-  type SalarySlip, type PayrollItem,
+  computeNet, computeDeductions, computeStrictDeductions, computeSlipBreakdown,
+  type SalarySlip,
 } from "../../mock/payrollData";
 import { getCompanySettings } from "../../services/companySettingsService";
 import { useToast } from "../../context/ToastContext";
@@ -35,39 +35,6 @@ const DEPT_COLOR: Record<string, string> = {
 };
 
 const inputCls = "w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent";
-
-// ── Item editor (used for allowances / bonuses / deductions) ──────────────────
-
-function ItemList({ items, onChange, label }: {
-  items: PayrollItem[]; onChange: (v: PayrollItem[]) => void; label: string;
-}) {
-  const add = () => onChange([...items, { label: "", amount: 0 }]);
-  const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
-  const update = (i: number, field: "label" | "amount", val: string) => {
-    const updated = items.map((item, idx) =>
-      idx !== i ? item : { ...item, [field]: field === "amount" ? (parseFloat(val) || 0) : val }
-    );
-    onChange(updated);
-  };
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{label}</span>
-        <button type="button" onClick={add} className="text-xs text-brand-600 dark:text-brand-400 hover:underline">+ Add</button>
-      </div>
-      {items.length === 0 && <p className="text-xs text-gray-400 italic">None</p>}
-      {items.map((item, i) => (
-        <div key={i} className="flex gap-2">
-          <input className={inputCls} placeholder="Label" value={item.label}
-            onChange={e => update(i, "label", e.target.value)} />
-          <input type="number" className={`${inputCls} w-28`} placeholder="Amount" value={item.amount || ""}
-            onChange={e => update(i, "amount", e.target.value)} />
-          <button type="button" onClick={() => remove(i)} className="text-red-400 hover:text-red-600 px-1 flex-shrink-0">×</button>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ── View modal ────────────────────────────────────────────────────────────────
 
@@ -128,16 +95,16 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <div><span className="text-xs text-gray-400 block">Email</span><span className="font-medium text-xs">{slip.employeeEmail}</span></div>
           </div>
 
-          {/* Earnings — display-only breakdown, does not affect stored payroll data */}
+          {/* Salary Breakdown */}
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Earnings</p>
-            <Row label="Basic Salary (50%)"          value={fmtRs(bd.basic)} />
-            <Row label="House Rent Allowance (20%)"  value={fmtRs(bd.hra)} />
-            <Row label="Transport Allowance (15%)"   value={fmtRs(bd.transport)} />
-            <Row label="Medical Allowance (15%)"     value={fmtRs(bd.medical)} />
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Salary Breakdown</p>
+            <Row label="Basic Salary" value={fmtRs(bd.basic)} />
+            <Row label="House Rent Allowance" value={fmtRs(bd.hra)} />
+            <Row label="Medical Allowance" value={fmtRs(bd.medical)} />
+            <Row label="Conveyance Allowance" value={fmtRs(bd.conveyance)} />
             <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
-              <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Total Earnings</span>
-              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(computeGross(slip))}</span>
+              <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Total Gross Salary</span>
+              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(slip.basicSalary)}</span>
             </div>
           </div>
 
@@ -213,8 +180,6 @@ function GenerateSlipModal({
   const [empId, setEmpId] = useState("");
   const [month, setMonth] = useState(MONTHS[MONTHS.length - 1]?.value ?? "");
   const [basicSalary, setBasicSalary] = useState("");
-  const [allowances, setAllowances] = useState<PayrollItem[]>([]);
-  const [bonuses, setBonuses] = useState<PayrollItem[]>([]);
   const [designation, setDesignation] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
@@ -253,9 +218,7 @@ function GenerateSlipModal({
 
   const adv      = strictDeductions.advanceSalaryDeduction;
   const dedCalc  = adv + strictDeductions.unpaidLeaveDeduction + strictDeductions.halfDayDeduction + strictDeductions.lateAttendanceDeduction;
-  const grossCalc = basic
-    + allowances.filter(i => i.amount > 0).reduce((s, i) => s + i.amount, 0)
-    + bonuses.filter(i => i.amount > 0).reduce((s, i) => s + i.amount, 0);
+  const grossCalc = basic;
   const netCalc  = Math.max(0, grossCalc - dedCalc);
 
   const getDeptFromRole = (role: string) => {
@@ -274,12 +237,7 @@ function GenerateSlipModal({
     if (basic <= 0) { setError("Basic salary must be greater than zero."); return; }
     if (!selectedEmp) { setError("Employee not found."); return; }
 
-    const dept              = getDeptFromRole(selectedEmp.role ?? "");
-    const filteredAllowances = allowances.filter(i => i.label && i.amount > 0);
-    const filteredBonuses    = bonuses.filter(i => i.label && i.amount > 0);
-    const gross    = basic
-      + filteredAllowances.reduce((s, i) => s + i.amount, 0)
-      + filteredBonuses.reduce((s, i) => s + i.amount, 0);
+    const dept     = getDeptFromRole(selectedEmp.role ?? "");
     const totalDed = dedCalc;
     const slip: SalarySlip = {
       id: `slip-${Date.now()}`,
@@ -290,8 +248,8 @@ function GenerateSlipModal({
       designation: designation.trim() || (selectedEmp.role ?? "Employee"),
       salaryMonth: month,
       basicSalary: basic,
-      allowances: filteredAllowances,
-      bonuses: filteredBonuses,
+      allowances: [],
+      bonuses: [],
       deductions: [],
       advanceSalaryDeduction: adv,
       unpaidLeaveDays:       strictDeductions.unpaidLeaveDays,
@@ -300,9 +258,9 @@ function GenerateSlipModal({
       latePenaltyCount:      strictDeductions.lateCount,
       latePenaltyDays:       Math.floor(strictDeductions.lateCount / 3),
       latePenaltyDeduction:  strictDeductions.lateAttendanceDeduction,
-      grossSalary: gross,
+      grossSalary: basic,
       totalDeductions: totalDed,
-      netSalary: Math.max(0, gross - totalDed),
+      netSalary: Math.max(0, basic - totalDed),
       generatedAt: new Date().toISOString(),
       generatedById: user?.id ?? "",
       generatedByName: user?.name ?? "",
@@ -349,12 +307,6 @@ function GenerateSlipModal({
                 onChange={e => setDesignation(e.target.value)} />
             </div>
           </div>
-
-          {/* Allowances */}
-          <ItemList items={allowances} onChange={setAllowances} label="Allowances" />
-
-          {/* Bonuses */}
-          <ItemList items={bonuses} onChange={setBonuses} label="Bonuses" />
 
           {/* Auto-detected deductions from attendance + advance */}
           {dedCalc > 0 && (
@@ -588,7 +540,7 @@ export default function SalarySlips() {
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{fmtRs(slip.basicSalary)}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-red-600 dark:text-red-400">−{fmtRs(computeDeductions(slip))}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="text-sm font-bold text-brand-600 dark:text-brand-400">{fmtRs(slip.basicSalary - computeDeductions(slip))}</span>
+                      <span className="text-sm font-bold text-brand-600 dark:text-brand-400">{fmtRs(computeNet(slip))}</span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex gap-2">

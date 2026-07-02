@@ -108,7 +108,7 @@ export default function Billing() {
   }, [invoices, isLoadingInvoices, fetchPayments]);
 
   const pendingInvoices = invoices.filter(
-    (inv) => inv.status === "pending" || inv.status === "overdue"
+    (inv) => inv.status === "pending" || inv.status === "overdue" || inv.status === "partially_paid"
   );
   const totalBilled = invoices.reduce((sum, inv) => sum + inv.amount, 0);
   const totalPaid = paymentHistory.reduce((sum, p) => sum + p.amount, 0);
@@ -134,6 +134,9 @@ export default function Billing() {
     }
   };
 
+  const getInvoicePayableAmount = (invoice: Invoice): number =>
+    invoice.remainingBalance != null ? invoice.remainingBalance : invoice.amount;
+
   const handleStripeConfirmSuccess = async (piId: string, chargeId: string) => {
     if (!checkoutInvoice) return;
     try {
@@ -141,7 +144,7 @@ export default function Billing() {
         invoiceId: checkoutInvoice.id,
         stripePaymentIntentId: piId,
         stripeChargeId: chargeId,
-        amount: checkoutInvoice.amount,
+        amount: getInvoicePayableAmount(checkoutInvoice),
         currency: "usd",
         paidByUserId: user?.id || "",
       });
@@ -225,11 +228,18 @@ export default function Billing() {
                               ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-400"
                               : invoice.status === "overdue"
                               ? "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-400"
+                              : invoice.status === "partially_paid"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-400"
                               : "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-400"
                           }`}
                         >
-                          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                          {invoice.status === "partially_paid" ? "Partial" : invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                         </span>
+                        {invoice.status === "partially_paid" && invoice.remainingBalance != null && (
+                          <span className="text-xs text-blue-600 dark:text-blue-400">
+                            ${invoice.remainingBalance.toLocaleString()} remaining
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                         {invoice.description}

@@ -1,4 +1,4 @@
-import PageMeta from "../../components/common/PageMeta";
+﻿import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { UserService, UserProfile } from "../../services/userService";
 import { useState, useEffect } from "react";
@@ -13,7 +13,6 @@ interface EmployeeExtraData {
   userId: string;
   leavesTaken: number;
   salary: number;
-  bonus: number;
   extraDeduction: number;
   salaryStatus: "Paid" | "Unpaid";
   workMode: "Onsite" | "Remote";
@@ -24,19 +23,19 @@ function calcLeaveDeduction(leavesTaken: number, salary: number): number {
 }
 
 function calcNetSalary(d: EmployeeExtraData): number {
-  return Math.max(0, d.salary + (d.bonus ?? 0) - calcLeaveDeduction(d.leavesTaken, d.salary) - (d.extraDeduction ?? 0));
+  return Math.max(0, d.salary - calcLeaveDeduction(d.leavesTaken, d.salary) - (d.extraDeduction ?? 0));
 }
 
 const fmtRs = (n: number) => `Rs. ${Math.round(n).toLocaleString()}`;
 
 const EMPTY_EDIT: Omit<EmployeeExtraData, "userId"> = {
-  leavesTaken: 0, salary: 0, bonus: 0, extraDeduction: 0,
+  leavesTaken: 0, salary: 0, extraDeduction: 0,
   salaryStatus: "Unpaid", workMode: "Onsite",
 };
 
-const LEAVE_KEY = "optivax_leave_requests";
+const LEAVE_KEY = "mock_leave_requests";
 
-interface LeaveRecord { employeeId?: string; status: string; days?: number; }
+interface LeaveRecord { userId?: string; status: string; days?: number; }
 
 function countApprovedLeaves(employeeId: string): number {
   try {
@@ -44,7 +43,7 @@ function countApprovedLeaves(employeeId: string): number {
     if (!raw) return 0;
     const leaves = JSON.parse(raw) as LeaveRecord[];
     return leaves
-      .filter(l => l.employeeId === employeeId && l.status === "Approved")
+      .filter(l => l.userId === employeeId && l.status === "approved")
       .reduce((sum, l) => sum + (l.days ?? 1), 0);
   } catch { return 0; }
 }
@@ -76,7 +75,7 @@ export default function Payroll() {
           staff.forEach((emp) => {
             if (!synced[emp.id]) {
               const autoLeaves = countApprovedLeaves(emp.id);
-              synced[emp.id] = { userId: emp.id, leavesTaken: autoLeaves, salary: 45000, bonus: 0, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
+              synced[emp.id] = { userId: emp.id, leavesTaken: autoLeaves, salary: 45000, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
             }
           });
           localStorage.setItem(EXTRA_KEY, JSON.stringify(synced));
@@ -85,7 +84,7 @@ export default function Payroll() {
           const defaults: Record<string, EmployeeExtraData> = {};
           staff.forEach((emp) => {
             const autoLeaves = countApprovedLeaves(emp.id);
-            defaults[emp.id] = { userId: emp.id, leavesTaken: autoLeaves || 2, salary: 45000, bonus: 0, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
+            defaults[emp.id] = { userId: emp.id, leavesTaken: autoLeaves || 2, salary: 45000, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
           });
           localStorage.setItem(EXTRA_KEY, JSON.stringify(defaults));
           setExtraData(defaults);
@@ -99,13 +98,13 @@ export default function Payroll() {
   }, []);
 
   const getExtra = (id: string): EmployeeExtraData =>
-    extraData[id] ?? { userId: id, leavesTaken: 0, salary: 30000, bonus: 0, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
+    extraData[id] ?? { userId: id, leavesTaken: 0, salary: 30000, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
 
   const handleEdit = (empId: string) => {
     const d = getExtra(empId);
     const autoLeaves = countApprovedLeaves(empId);
     setEditingId(empId);
-    setEditFields({ leavesTaken: d.leavesTaken, salary: d.salary, bonus: d.bonus ?? 0, extraDeduction: d.extraDeduction ?? 0, salaryStatus: d.salaryStatus, workMode: d.workMode, _autoLeaves: autoLeaves } as any);
+    setEditFields({ leavesTaken: d.leavesTaken, salary: d.salary, extraDeduction: d.extraDeduction ?? 0, salaryStatus: d.salaryStatus, workMode: d.workMode });
   };
 
   const syncLeavesFromRecords = (empId: string) => {
@@ -130,7 +129,7 @@ export default function Payroll() {
         performedBy: user.id,
         performedByName: user.name,
         performedByRole: user.role,
-        description: `Updated payroll for ${emp.full_name || emp.email}: salary Rs.${editFields.salary.toLocaleString()}, bonus Rs.${editFields.bonus}, status ${editFields.salaryStatus}`,
+        description: `Updated payroll for ${emp.full_name || emp.email}: salary Rs.${editFields.salary.toLocaleString()}, status ${editFields.salaryStatus}`,
       });
     }
   };
@@ -152,26 +151,24 @@ export default function Payroll() {
     return matchSearch && (filterStatus === "all" || d.salaryStatus === filterStatus);
   });
 
-  // â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const allData       = employees.map((e) => getExtra(e.id));
-  const totalPayroll  = allData.reduce((s, d) => s + calcNetSalary(d), 0);
-  const totalBonuses  = allData.reduce((s, d) => s + (d.bonus ?? 0), 0);
+  // ── Summary ────────────────────────────────────────────────────────────────────
+  const allData         = employees.map((e) => getExtra(e.id));
+  const totalPayroll    = allData.reduce((s, d) => s + calcNetSalary(d), 0);
   const totalDeductions = allData.reduce((s, d) => s + calcLeaveDeduction(d.leavesTaken, d.salary) + (d.extraDeduction ?? 0), 0);
-  const paidCount     = allData.filter((d) => d.salaryStatus === "Paid").length;
-  const unpaidCount   = allData.filter((d) => d.salaryStatus === "Unpaid").length;
+  const paidCount       = allData.filter((d) => d.salaryStatus === "Paid").length;
+  const unpaidCount     = allData.filter((d) => d.salaryStatus === "Unpaid").length;
 
   return (
     <>
       <PageMeta title="Payroll Management | Optivax Global" description="Manage payroll, bonuses, and deductions." />
       <PageBreadcrumb pageTitle="Payroll Management" />
 
-      {/* â”€â”€ KPI Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      {/* ── KPI Summary ────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
-          { label: "Total Net Payroll",  value: fmtRs(totalPayroll),   sub: `${employees.length} employees`,      accent: "border-brand-500" },
-          { label: "Total Bonuses",      value: fmtRs(totalBonuses),   sub: "Performance + bonus",                accent: "border-green-500" },
-          { label: "Total Deductions",   value: fmtRs(totalDeductions), sub: "Unpaid leave + manual deductions",  accent: "border-red-500"   },
-          { label: "Payment Status",     value: `${paidCount} Paid`,   sub: `${unpaidCount} still unpaid`,        accent: "border-purple-500" },
+          { label: "Total Net Payroll",  value: fmtRs(totalPayroll),    sub: `${employees.length} employees`,     accent: "border-brand-500"  },
+          { label: "Total Deductions",   value: fmtRs(totalDeductions),  sub: "Unpaid leave + manual deductions", accent: "border-red-500"    },
+          { label: "Payment Status",     value: `${paidCount} Paid`,    sub: `${unpaidCount} still unpaid`,       accent: "border-purple-500" },
         ].map((c) => (
           <div key={c.label} className={`rounded-xl border bg-white dark:bg-gray-900 dark:border-gray-800 p-4 shadow-sm border-l-4 ${c.accent}`}>
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{c.label}</p>
@@ -181,13 +178,12 @@ export default function Payroll() {
         ))}
       </div>
 
-      {/* â”€â”€ Policy Note â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* â"€â"€ Policy Note â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <div className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
-        <strong>Company Leave Policy:</strong> All leaves are unpaid. Every leave day deducts (Base Salary Ã· 30) from net pay.
-        Bonuses are added on top of base salary.
+        <strong>Company Payroll Policy:</strong> Net Salary = Basic Salary − Leave Deductions − Other Deductions. All leaves are unpaid. Every leave day deducts (Basic Salary ÷ 30) from net pay.
       </div>
 
-      {/* â”€â”€ Payroll Register Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* â"€â"€ Payroll Register Table â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Payroll Register</h3>
@@ -232,7 +228,7 @@ export default function Payroll() {
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800/50">
                   {[
-                    "Employee", "Leave Days Taken", "Base Salary", "Bonus",
+                    "Employee", "Leave Days Taken", "Base Salary",
                     "Leave Deduction", "Other Deduction", "Net Salary",
                     "Mode", "Status",
                     ...(canEdit("hr") ? ["Action"] : []),
@@ -252,7 +248,7 @@ export default function Payroll() {
                     <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                       {/* Employee */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <p className="font-medium text-gray-900 dark:text-white">{emp.full_name || "â€”"}</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{emp.full_name || "—"}</p>
                         <p className="text-xs text-gray-400">{emp.email}</p>
                         <p className="text-[10px] text-brand-600 dark:text-brand-400">{emp.role}</p>
                       </td>
@@ -291,19 +287,6 @@ export default function Payroll() {
                         )}
                       </td>
 
-                      {/* Bonus */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {isEditing ? (
-                          <input type="number" min="0" value={editFields.bonus}
-                            onChange={(e) => setEditFields((f) => ({ ...f, bonus: parseInt(e.target.value) || 0 }))}
-                            className="w-24 px-2 py-1 border rounded dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
-                        ) : (
-                          <span className={`font-medium ${(d.bonus ?? 0) > 0 ? "text-green-600 dark:text-green-400" : "text-gray-400"}`}>
-                            {(d.bonus ?? 0) > 0 ? `+${fmtRs(d.bonus ?? 0)}` : "â€”"}
-                          </span>
-                        )}
-                      </td>
-
                       {/* Leave Deduction (auto-calculated) */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         {leaveDeduction > 0 ? (
@@ -312,7 +295,7 @@ export default function Payroll() {
                             <p className="text-[10px] text-gray-400">{d.leavesTaken} unpaid day{d.leavesTaken !== 1 ? "s" : ""}</p>
                           </>
                         ) : (
-                          <span className="text-gray-400">â€”</span>
+                          <span className="text-gray-400">â€"</span>
                         )}
                       </td>
 
@@ -324,7 +307,7 @@ export default function Payroll() {
                             className="w-24 px-2 py-1 border rounded dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
                         ) : (
                           <span className={`font-medium ${(d.extraDeduction ?? 0) > 0 ? "text-red-500" : "text-gray-400"}`}>
-                            {(d.extraDeduction ?? 0) > 0 ? `-${fmtRs(d.extraDeduction ?? 0)}` : "â€”"}
+                            {(d.extraDeduction ?? 0) > 0 ? `-${fmtRs(d.extraDeduction ?? 0)}` : "—"}
                           </span>
                         )}
                       </td>

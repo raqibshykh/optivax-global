@@ -194,9 +194,7 @@ export default function Tasks() {
         notifyTaskStatusChanged(user.id, user.name, user.role, t.title, t.id, newStatus);
       }
       if (newStatus === "done" && prevStatus !== "done") {
-        if (typeof (window as any).notifyAdminsOfCompletion === "function") {
-          // fallback if it was defined somewhere else, but we use the new helper now
-        }
+        notifyAdminsOfCompletion(t);
         showToast((isMember || isHRAdmin) ? "Task complete — admins notified" : "Task marked complete", "success");
       } else {
         showToast("Task status updated", "success");

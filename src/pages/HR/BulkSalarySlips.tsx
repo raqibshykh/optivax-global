@@ -5,8 +5,8 @@ import { useAuth } from "../../context/AuthContext";
 import { UserService, type UserProfile } from "../../services/userService";
 import {
   getSalarySlips, saveSalarySlips, printSalarySlip, printSalarySlipsBulk,
-  computeGross, computeNet, computeSlipBreakdown, computeDeductions, computeStrictDeductions,
-  type SalarySlip, type PayrollItem,
+  computeNet, computeDeductions, computeStrictDeductions, computeSlipBreakdown,
+  type SalarySlip,
 } from "../../mock/payrollData";
 import { AuditLogService } from "../../services/auditLogService";
 import { getCompanySettings } from "../../services/companySettingsService";
@@ -20,7 +20,6 @@ const EXTRA_KEY = "optivax_employee_extra";
 
 interface EmployeeExtraData {
   salary?: number;
-  bonus?: number;
 }
 
 type BulkAction = "generate" | "regenerate" | "skip";
@@ -79,19 +78,13 @@ function buildSlip(
   emp: UserProfile,
   month: string,
   basicSalary: number,
-  template: SalarySlip | null,
   generator: { id: string; name: string; role: string }
 ): SalarySlip {
   const dept = getDeptFromRole(emp.role ?? "");
 
-  const allowances: PayrollItem[] = [];  // breakdown is display-only, not stored
-  const bonuses: PayrollItem[]    = template?.bonuses?.map(b => ({ ...b })) ?? [];
-  const deductions: PayrollItem[] = [];
-
   const strictDeductions       = computeStrictDeductions(emp.id, month, basicSalary);
   const advanceSalaryDeduction = strictDeductions.advanceSalaryDeduction;
-  const bonusTotal             = bonuses.reduce((s, b) => s + b.amount, 0);
-  const grossSalary            = basicSalary + bonusTotal;
+  const grossSalary            = basicSalary;
   const totalDeductions        = advanceSalaryDeduction
     + strictDeductions.unpaidLeaveDeduction
     + strictDeductions.halfDayDeduction
@@ -106,9 +99,9 @@ function buildSlip(
     designation:           emp.role ?? "Employee",
     salaryMonth:           month,
     basicSalary,
-    allowances,
-    bonuses,
-    deductions,
+    allowances:   [],
+    bonuses:      [],
+    deductions:   [],
     advanceSalaryDeduction,
     unpaidLeaveDays:       strictDeductions.unpaidLeaveDays,
     unpaidLeaveDeduction:  strictDeductions.unpaidLeaveDeduction,
@@ -184,16 +177,16 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <div><span className="text-xs text-gray-400 block">Salary Month</span><span className="font-medium">{monthLabel}</span></div>
           </div>
 
-          {/* Earnings — display-only breakdown, does not affect stored payroll data */}
+          {/* Salary Breakdown */}
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Earnings</p>
-            <Row label="Basic Salary (50%)"          value={fmtRs(bd.basic)} />
-            <Row label="House Rent Allowance (20%)"  value={fmtRs(bd.hra)} />
-            <Row label="Transport Allowance (15%)"   value={fmtRs(bd.transport)} />
-            <Row label="Medical Allowance (15%)"     value={fmtRs(bd.medical)} />
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Salary Breakdown</p>
+            <Row label="Basic Salary" value={fmtRs(bd.basic)} />
+            <Row label="House Rent Allowance" value={fmtRs(bd.hra)} />
+            <Row label="Medical Allowance" value={fmtRs(bd.medical)} />
+            <Row label="Conveyance Allowance" value={fmtRs(bd.conveyance)} />
             <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
-              <span className="font-semibold text-sm">Total Earnings</span>
-              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(computeGross(slip))}</span>
+              <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Total Gross Salary</span>
+              <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(slip.basicSalary)}</span>
             </div>
           </div>
 
@@ -389,13 +382,9 @@ export default function BulkSalarySlips() {
       const currentSlips = getSalarySlips();
       const generator = { id: user?.id ?? "", name: user?.name ?? "", role: user?.role ?? "" };
 
-      // Build new slips using most recent slip as template
-      const newSlips: SalarySlip[] = toProcess.map(row => {
-        const template = currentSlips
-          .filter(s => s.employeeId === row.emp.id)
-          .sort((a, b) => b.salaryMonth.localeCompare(a.salaryMonth))[0] ?? null;
-        return buildSlip(row.emp, selectedMonth, row.basicSalary, template, generator);
-      });
+      const newSlips: SalarySlip[] = toProcess.map(row =>
+        buildSlip(row.emp, selectedMonth, row.basicSalary, generator)
+      );
 
       // Remove old slips for employees being regenerated
       const toRegenerateIds = new Set(

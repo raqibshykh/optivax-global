@@ -3,6 +3,8 @@
 
 import { mockUsers } from "./users";
 import { safeParseBody, safeParse } from "../lib/storage";
+import { recordMemberSpend } from "./budgetData";
+import * as ActivityData from "./activityData";
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
 const PROFILES_KEY      = "mock_profiles";
@@ -591,7 +593,7 @@ export function startMockServer() {
           const today = new Date().toISOString().split("T")[0];
           let dirty = false;
           const refreshed = invoices.map((x: any) => {
-            if (x.status === "pending" && x.dueDate && x.dueDate < today) {
+            if ((x.status === "pending" || x.status === "partially_paid") && x.dueDate && x.dueDate < today) {
               dirty = true;
               return { ...x, status: "overdue" };
             }
@@ -606,6 +608,9 @@ export function startMockServer() {
 
         if (method === "POST" && p.endsWith("/generate")) {
           const body = safeParseBody<any>(init?.body, {});
+          if (!mockUserRole || !["super_admin", "management", "sales_admin"].includes(mockUserRole)) {
+            return new Response(JSON.stringify({ success: false, error: "Forbidden" }), { status: 403, headers: { "Content-Type": "application/json" } });
+          }
 
           if (!body.projectId) {
             return new Response(JSON.stringify({ success: false, error: "Project selection is required to generate an invoice." }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -614,7 +619,7 @@ export function startMockServer() {
           // Enforce: amount ≤ remaining billable for this project
           const allProjects = readStore<any>(PROJECTS_KEY, seedProjects);
           const proj = allProjects.find((x: any) => x.id === body.projectId);
-          if (proj?.budget) {
+          if (proj && proj.budget != null) {
             const projectInvoices = invoices.filter((x: any) => x.projectId === body.projectId);
             const totalInvoiced = projectInvoices.reduce((s: number, x: any) => s + Number(x.amount || 0), 0);
             const remainingBillable = Number(proj.budget) - totalInvoiced;
@@ -629,8 +634,9 @@ export function startMockServer() {
           const inv = {
             items: [], status: "pending",
             ...body,
-            id: `inv-${Date.now()}`,
-            number: nextInvoiceNumber(invoices),
+            id:          `inv-${Date.now()}`,
+            number:      nextInvoiceNumber(invoices),
+            createdById: mockUserId || "",
           };
           writeStore(INVOICES_KEY, [inv, ...invoices]);
           return ok(inv);
@@ -638,6 +644,10 @@ export function startMockServer() {
 
         if (method === "PUT" && p.endsWith("/update")) {
           const body    = safeParseBody<any>(init?.body, {});
+          const current = invoices.find((x: any) => x.id === body.id);
+          if (current?.status === "paid") {
+            return new Response(JSON.stringify({ success: false, error: "Cannot edit a paid invoice" }), { status: 403, headers: { "Content-Type": "application/json" } });
+          }
           const updated = invoices.map((x: any) => (x.id === body.id ? { ...x, ...body } : x));
           writeStore(INVOICES_KEY, updated);
           return ok(updated.find((x: any) => x.id === body.id) || null);
@@ -663,28 +673,27 @@ export function startMockServer() {
             return new Response(JSON.stringify({ success: false, error: "Invoice already paid" }), { status: 409, headers: { "Content-Type": "application/json" } });
           }
 
-          // Duplicate payment guard
           const existingPayments = readStore<any>(PAYMENTS_KEY, () => []);
-          if (existingPayments.some((pay: any) => pay.invoiceId === invoiceId)) {
-            return new Response(JSON.stringify({ success: false, error: "Payment already recorded for this invoice" }), { status: 409, headers: { "Content-Type": "application/json" } });
-          }
+
+          // Compute how much has already been paid toward this invoice
+          const alreadyPaid = existingPayments
+            .filter((pay: any) => pay.invoiceId === invoiceId)
+            .reduce((s: number, pay: any) => s + Number(pay.amount || 0), 0);
+
+          const paidNow       = Number(amount);
+          const invoiceTotal  = Number(invoice.amount);
+          const totalPaid     = alreadyPaid + paidNow;
+          const isFullyPaid   = totalPaid >= invoiceTotal;
 
           const now = new Date().toISOString();
           const paidDate = now.split("T")[0];
           const ts = Date.now();
 
-          // Mark invoice paid
-          const updatedInvoices = invoices.map((x: any) =>
-            x.id === invoiceId ? { ...x, status: "paid", paidDate } : x
-          );
-          writeStore(INVOICES_KEY, updatedInvoices);
-          const paidInvoice = updatedInvoices.find((x: any) => x.id === invoiceId);
-
-          // Create payment record
+          // Create payment record for this transaction
           const payRecord = {
             id: `pay-stripe-${ts}`,
             invoiceId,
-            amount: Number(amount),
+            amount: paidNow,
             currency,
             date: paidDate,
             paidAt: now,
@@ -697,13 +706,41 @@ export function startMockServer() {
           };
           writeStore(PAYMENTS_KEY, [payRecord, ...existingPayments]);
 
-          // Update project.spent
-          if (paidInvoice?.projectId && paidInvoice.amount) {
+          // Update invoice — fully paid or partially paid
+          const updatedInvoices = invoices.map((x: any) =>
+            x.id !== invoiceId ? x : {
+              ...x,
+              amountPaid: totalPaid,
+              remainingBalance: Math.max(0, invoiceTotal - totalPaid),
+              status: isFullyPaid ? "paid" : "partially_paid",
+              ...(isFullyPaid ? { paidDate } : {}),
+            }
+          );
+          writeStore(INVOICES_KEY, updatedInvoices);
+          const paidInvoice = updatedInvoices.find((x: any) => x.id === invoiceId);
+
+          // Update project.spent by the amount paid in this transaction (not the full invoice total)
+          if (paidInvoice?.projectId && paidNow > 0) {
             const projects = readStore<any>(PROJECTS_KEY, seedProjects);
             writeStore(PROJECTS_KEY, projects.map((proj: any) =>
               proj.id !== paidInvoice.projectId
                 ? proj
-                : { ...proj, spent: (proj.spent ?? 0) + Number(paidInvoice.amount) }
+                : { ...proj, spent: (proj.spent ?? 0) + paidNow }
+            ));
+          }
+
+          // Synchronize member usedAmount — charge by this payment's amount, not the full invoice
+          if (paidInvoice?.createdById && paidNow > 0) {
+            recordMemberSpend(paidInvoice.createdById, paidNow);
+          }
+
+          // Synchronize client totalBilled by this payment's amount
+          if (paidInvoice?.clientId && paidNow > 0) {
+            const clients = readStore<any>(CLIENTS_KEY, seedClients);
+            writeStore(CLIENTS_KEY, clients.map((c: any) =>
+              c.id !== paidInvoice.clientId
+                ? c
+                : { ...c, totalBilled: (c.totalBilled ?? 0) + paidNow }
             ));
           }
 
@@ -711,15 +748,18 @@ export function startMockServer() {
           const notifs = safeParse<any[]>(localStorage.getItem(NOTIFS_KEY) || "[]", []);
           const newNotifs: any[] = [];
           const invoiceLabel = paidInvoice?.number || invoiceId;
-          const amtLabel = `$${Number(amount).toLocaleString()}`;
+          const amtLabel = `$${paidNow.toLocaleString()}`;
+          const remainingLabel = !isFullyPaid ? ` — $${Math.max(0, invoiceTotal - totalPaid).toLocaleString()} remaining` : "";
 
           if (paidInvoice?.clientId) {
             newNotifs.push({
               id: `notif-stripe-client-${ts}`,
               userId: paidInvoice.clientId,
               type: "payment",
-              title: "Payment Successful",
-              message: `Invoice ${invoiceLabel} for ${amtLabel} has been paid. Thank you!`,
+              title: isFullyPaid ? "Payment Successful" : "Partial Payment Received",
+              message: isFullyPaid
+                ? `Invoice ${invoiceLabel} for ${amtLabel} has been paid in full. Thank you!`
+                : `Partial payment of ${amtLabel} received for ${invoiceLabel}${remainingLabel}. Thank you!`,
               read: false,
               createdAt: now,
               actionUrl: "/client/billing",
@@ -735,8 +775,10 @@ export function startMockServer() {
                 id: `notif-stripe-staff-${ts + i + 1}`,
                 userId: pr.id,
                 type: "payment",
-                title: "Invoice Paid",
-                message: `Invoice ${invoiceLabel} for ${amtLabel} paid${cardholderName ? ` by ${cardholderName}` : ""} via Stripe.`,
+                title: isFullyPaid ? "Invoice Paid" : "Partial Payment",
+                message: isFullyPaid
+                  ? `Invoice ${invoiceLabel} for ${amtLabel} paid${cardholderName ? ` by ${cardholderName}` : ""} via Stripe.`
+                  : `Partial payment ${amtLabel} for ${invoiceLabel}${remainingLabel} received${cardholderName ? ` from ${cardholderName}` : ""}.`,
                 read: false,
                 createdAt: now,
                 actionUrl: "/management/billing",
@@ -1032,6 +1074,9 @@ export function startMockServer() {
             );
             return ok(out);
           }
+          if (role?.endsWith("_member")) {
+            return ok(tasks.filter((t: any) => t.assigneeId === mockUserId || t.userId === mockUserId));
+          }
           return ok(tasks);
         }
 
@@ -1042,6 +1087,29 @@ export function startMockServer() {
               status: 403, headers: { "Content-Type": "application/json" },
             });
           }
+          if (role?.endsWith("_admin") && role !== "hr_admin" && role !== "super_admin") {
+            const domain = role.split("_")[0];
+            const assigneeProfile = profiles.find((x: any) => x.id === body.assigneeId);
+            if (assigneeProfile && assigneeProfile.departmentId !== `dept-${domain}` && !assigneeProfile.role.startsWith(domain)) {
+              return new Response(JSON.stringify({ success: false, error: "Forbidden: Cannot assign task outside your department" }), {
+                status: 403, headers: { "Content-Type": "application/json" },
+              });
+            }
+          }
+          // Duplicate prevention — block identical title+assignee for non-done tasks
+          if (body.title && body.assigneeId) {
+            const titleLower = String(body.title).toLowerCase().trim();
+            const dup = tasks.find((t: any) =>
+              t.status !== "done" &&
+              t.assigneeId === body.assigneeId &&
+              String(t.title || "").toLowerCase().trim() === titleLower
+            );
+            if (dup) {
+              return new Response(JSON.stringify({ success: false, error: `A task "${body.title}" is already assigned to this person` }), {
+                status: 409, headers: { "Content-Type": "application/json" },
+              });
+            }
+          }
           const t = { id: `t${Date.now()}`, ...body };
           localStorage.setItem(TASKS_KEY, JSON.stringify([t, ...tasks]));
           return ok(t);
@@ -1049,6 +1117,19 @@ export function startMockServer() {
 
         if (method === "PUT" && p.startsWith("/saas/v1/tasks/")) {
           const id      = p.split("/").pop();
+          const task    = tasks.find((x: any) => x.id === id);
+          if (!task) return new Response(JSON.stringify({ success: false, error: "Not found" }), { status: 404 });
+          
+          if (role?.endsWith("_member") && task.assigneeId !== mockUserId) {
+            return new Response(JSON.stringify({ success: false, error: "Forbidden" }), { status: 403 });
+          }
+          if (role?.endsWith("_admin") && role !== "hr_admin" && role !== "super_admin") {
+            const domain = role.split("_")[0];
+            if (task.assigneeDept !== `dept-${domain}` && !task.assigneeRole?.startsWith(domain)) {
+              return new Response(JSON.stringify({ success: false, error: "Forbidden" }), { status: 403 });
+            }
+          }
+
           const body    = safeParseBody<any>(init?.body, {});
           const updated = tasks.map((x: any) => (x.id === id ? { ...x, ...body } : x));
           localStorage.setItem(TASKS_KEY, JSON.stringify(updated));
@@ -1080,6 +1161,11 @@ export function startMockServer() {
 
         if (method === "POST" && (p === "/saas/v1/notifications" || p.endsWith("/create"))) {
           const body = safeParseBody<any>(init?.body, {});
+          if (role !== "super_admin" && role !== "management") {
+            if (body.userId && body.userId !== mockUserId) {
+              return new Response(JSON.stringify({ success: false, error: "Forbidden" }), { status: 403, headers: { "Content-Type": "application/json" } });
+            }
+          }
           const n    = { id: `n-${Math.random().toString(36).slice(2, 9)}`, ...body };
           localStorage.setItem(NOTIFS_KEY, JSON.stringify([n, ...notifs]));
           try {
@@ -1167,6 +1253,84 @@ export function startMockServer() {
           localStorage.setItem(SOCIAL_CLICKS_KEY, JSON.stringify([event, ...clicks]));
           const link = links.find((l: any) => l.id === body.linkId || l.trackingId === body.trackingId);
           return ok({ recorded: true, platform: link?.platform ?? "other" });
+        }
+      }
+
+      // ── Employee Activity & Break Tracking ─────────────────────────────────
+      if (p.startsWith("/saas/v1/activity")) {
+        // Enforce Authentication
+        if (!mockUserId || !mockUserRole) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+        }
+
+        if (method === "POST" && p === "/saas/v1/activity/login") {
+          const userProfile = mockUsers.find(u => u.id === mockUserId) || readProfiles().find(u => u.id === mockUserId);
+          const session = ActivityData.startSession(
+            mockUserId, 
+            userProfile?.name || userProfile?.full_name || "Unknown User", 
+            mockUserRole, 
+            userProfile?.departmentId
+          );
+          return ok({ session });
+        }
+
+        if (method === "POST" && p === "/saas/v1/activity/logout") {
+          const session = ActivityData.endSession(mockUserId);
+          return ok({ session });
+        }
+
+        if (method === "POST" && p === "/saas/v1/activity/break/start") {
+          const body = safeParseBody<{ type: ActivityData.BreakType }>(init?.body, { type: "casual_5" });
+          const res = ActivityData.startBreak(mockUserId, body.type);
+          if (!res) return new Response(JSON.stringify({ error: "No active session found or break already active" }), { status: 400 });
+          return ok(res);
+        }
+
+        if (method === "POST" && p === "/saas/v1/activity/break/end") {
+          const res = ActivityData.endBreak(mockUserId);
+          if (!res) return new Response(JSON.stringify({ error: "No active break found" }), { status: 400 });
+          return ok(res);
+        }
+
+        if (method === "GET" && p === "/saas/v1/activity/current") {
+          return ok({
+            session: ActivityData.getCurrentSession(mockUserId),
+            activeBreak: ActivityData.getActiveBreak(mockUserId)
+          });
+        }
+
+        if (method === "GET" && (p === "/saas/v1/activity/sessions" || p.endsWith("/list"))) {
+          const dateFrom = parsed.searchParams.get("dateFrom") || undefined;
+          const dateTo   = parsed.searchParams.get("dateTo") || undefined;
+          const userId   = parsed.searchParams.get("userId") || undefined;
+          
+          let filterUserId = userId;
+          let filterDeptId = undefined;
+          
+          // Strict Server-Side Access Control Validation
+          if (mockUserRole === "employee" || mockUserRole.endsWith("_member")) {
+            filterUserId = mockUserId; // Enforce employee only sees their own data
+          } else if (mockUserRole.endsWith("_admin") && mockUserRole !== "super_admin" && mockUserRole !== "hr_admin") {
+            // Dept Admins see only their dept
+            const deptPrefix = ActivityData.getViewableDeptPrefix(mockUserRole);
+            if (deptPrefix) {
+              const allUsers = readProfiles();
+              const deptUsers = allUsers.filter(u => u.role.startsWith(deptPrefix));
+              // Filter logic within getSessions handles this via rolePrefix, 
+              // but we need to pass rolePrefix to ActivityData.getSessions
+              const sessions = ActivityData.getSessions({ 
+                userId: filterUserId, 
+                dateFrom, 
+                dateTo, 
+                rolePrefix: deptPrefix 
+              });
+              return ok({ sessions, stats: ActivityData.getActivityStats(sessions) });
+            }
+          }
+
+          // Full access for HR, Management, Super Admin
+          const sessions = ActivityData.getSessions({ userId: filterUserId, dateFrom, dateTo });
+          return ok({ sessions, stats: ActivityData.getActivityStats(sessions) });
         }
       }
 

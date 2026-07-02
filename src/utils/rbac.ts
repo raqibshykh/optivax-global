@@ -64,7 +64,7 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
   },
   production_admin: {
     production: ALL_ACTIONS,
-    clients: ["VIEW"],
+    clients: ["VIEW", "ASSIGN"],
     files: ALL_ACTIONS,
     reports: ["VIEW", "EXPORT"],
     notifications: ["VIEW", "CREATE"],
@@ -114,7 +114,7 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     advance_salary: ["VIEW", "APPROVE", "EDIT"],
   },
   hr_member: {
-    hr: ["VIEW", "EDIT"],
+    hr: ["VIEW"],
     files: ["VIEW", "CREATE"],
     notifications: ["VIEW"],
     salary_slips: ["VIEW"],

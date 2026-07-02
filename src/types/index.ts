@@ -156,7 +156,9 @@ export interface Invoice {
   projectId?: string;
   description: string;
   amount: number;
-  status: "paid" | "pending" | "overdue";
+  amountPaid?: number;
+  remainingBalance?: number;
+  status: "paid" | "pending" | "overdue" | "partially_paid";
   issueDate: string;
   dueDate: string;
   paidDate?: string;
@@ -345,6 +347,39 @@ export interface Deliverable {
   approvedAt?: string;
   fileUrl?: string;
   notes?: string;
+}
+
+// ── Client Ownership Assignment ────────────────────────────────────────────
+
+export interface ClientOwnership {
+  clientId:       string;
+  clientName:     string;
+  ownerId:        string;
+  ownerName:      string;
+  ownerEmail:     string;
+  assignedById:   string;
+  assignedByName: string;
+  assignedByRole: string;
+  assignedAt:     string;
+  notes?:         string;
+}
+
+export type OwnershipAction = "assigned" | "reassigned" | "removed";
+
+export interface ClientOwnershipHistoryEntry {
+  id:                  string;
+  clientId:            string;
+  clientName:          string;
+  action:              OwnershipAction;
+  previousOwnerId?:    string;
+  previousOwnerName?:  string;
+  newOwnerId?:         string;
+  newOwnerName?:       string;
+  assignedById:        string;
+  assignedByName:      string;
+  assignedByRole:      string;
+  assignedAt:          string;
+  notes?:              string;
 }
 
 // ── Stored Client (created by Sales Admin, with production assignment) ─────

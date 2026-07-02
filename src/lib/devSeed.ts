@@ -4,6 +4,22 @@
 
 import { mockUsers } from "../mock/users";
 
+const SEED_VERSION = "v3-payroll-standardization";
+const SEED_VERSION_KEY = "optivax_seed_version";
+
+function migrateIfNeeded(): void {
+  try {
+    if (localStorage.getItem(SEED_VERSION_KEY) === SEED_VERSION) return;
+    // Clear stale salary slips (had inflated gross/net from allowances+bonuses) and conversations
+    localStorage.removeItem("mock_conversations");
+    localStorage.removeItem("mock_salary_slips");
+    localStorage.removeItem("mock_advance_requests");
+    // Clear employee extra data so bonus field is dropped on re-seed
+    localStorage.removeItem("optivax_employee_extra");
+    localStorage.setItem(SEED_VERSION_KEY, SEED_VERSION);
+  } catch { /* quota / private-browsing — silently skip */ }
+}
+
 type AnyObj = Record<string, unknown>;
 
 function seedKey(key: string, value: unknown[] | AnyObj): void {
@@ -424,7 +440,7 @@ function seedLeaveRequests(): void {
       id: "leave-3", status: "Pending",
       employeeId: "u24", employeeName: "Edgar Wright",
       role: "production_member", department: "Production",
-      type: "Personal", startDate: "2026-06-25", endDate: "2026-06-26", days: 2,
+      type: "casual", startDate: "2026-06-25", endDate: "2026-06-26", days: 2,
       reason: "Personal matters", submittedAt: "2026-06-16T09:15:00Z",
     },
     {
@@ -549,6 +565,7 @@ function seedSocialTracking(): void {
 // ── Public entry point ────────────────────────────────────────────────────────
 export function seedAllMockData(): void {
   if (typeof window === "undefined") return;
+  migrateIfNeeded();
   seedProfiles();
   seedClients();
   seedProjects();

@@ -5,9 +5,12 @@ import { useClients } from "../../hooks/useClients";
 import { useState, useEffect } from "react";
 import NotificationModal from "./NotificationModal";
 import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../context/AuthContext";
 import type { Notification } from "../../types";
 
 export default function Notifications() {
+  const { user } = useAuth();
+  const canSend = ["super_admin", "management"].includes(user?.role || "");
   const { notifications, isLoading, addNotification, deleteNotification, refreshNotifications } = useNotifications();
   const { clients } = useClients();
   const { showToast } = useToast();
@@ -101,12 +104,14 @@ export default function Notifications() {
             Send notifications and manage communications.
           </p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700"
-        >
-          Send Notification
-        </button>
+        {canSend && (
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700"
+          >
+            Send Notification
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">

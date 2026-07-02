@@ -66,8 +66,8 @@ export default function Billing() {
   const totalInvoiced = invoices.reduce((s, inv) => s + inv.amount, 0);
   const stripeRevenue = stripePayments.reduce((s, p) => s + p.amount, 0);
   const pendingAmount = invoices
-    .filter((i) => i.status === "pending")
-    .reduce((s, i) => s + i.amount, 0);
+    .filter((i) => i.status === "pending" || i.status === "partially_paid")
+    .reduce((s, i) => s + ((i.remainingBalance ?? i.amount)), 0);
   const overdueAmount = invoices
     .filter((i) => i.status === "overdue")
     .reduce((s, i) => s + i.amount, 0);
@@ -191,6 +191,7 @@ export default function Billing() {
               invoices.map((invoice) => {
                 const stripePayment = getStripePayment(invoice.id);
                 const isPaid = invoice.status === "paid";
+                const isPartial = invoice.status === "partially_paid";
                 return (
                   <div
                     key={invoice.id}
@@ -207,11 +208,18 @@ export default function Billing() {
                               ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-400"
                               : invoice.status === "overdue"
                               ? "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-400"
+                              : isPartial
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-400"
                               : "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-400"
                           }`}
                         >
-                          {invoice.status}
+                          {isPartial ? "Partial" : invoice.status}
                         </span>
+                        {isPartial && invoice.remainingBalance != null && (
+                          <span className="text-[10px] text-blue-700 dark:text-blue-400">
+                            ${invoice.remainingBalance.toLocaleString()} due
+                          </span>
+                        )}
                         {isPaid && stripePayment && (
                           <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-400 font-semibold">
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

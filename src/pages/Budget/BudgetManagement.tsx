@@ -12,7 +12,7 @@ import {
   getDeptAllocations, saveDeptAllocations,
   getMemberAllocations, saveMemberAllocations,
   getBudgetAuditLog, appendBudgetAuditEntry,
-  getDeptBudgetSummaries,
+  getDeptBudgetSummaries, getCompanyUnallocated,
   getMembersForDept, getAllDeptAdmins, deptFromRole,
   getBudgetReturns, appendBudgetReturn, getBudgetReturnsByDept,
   getBudgetRequests, appendBudgetRequest, updateBudgetRequest,
@@ -412,8 +412,12 @@ function AssignBudgetModal({
     .reduce((s, d) => s + d.allocatedAmount, 0);
   const maxAllowable = companyTotal - totalAllocatedOthers;
 
-  // PROTECTED: minimum = already SPENT by members (not just allocated)
-  const usedFloor = existingSummary?.usedTotal ?? 0;
+  // PROTECTED: floor = max(already spent, already assigned to members)
+  // Cannot reduce dept below member allocation total, even if some is unspent.
+  const usedFloor = Math.max(
+    existingSummary?.usedTotal ?? 0,
+    existingSummary?.memberAllocatedTotal ?? 0,
+  );
 
   useEffect(() => {
     if (existingAlloc) {
@@ -433,7 +437,13 @@ function AssignBudgetModal({
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { setError("Enter a valid positive amount."); return; }
     if (amt < usedFloor) {
-      setError(`Cannot set below already spent amount (${fmtRs(usedFloor)}). Spent budget is protected.`);
+      const memberAllocTotal = existingSummary?.memberAllocatedTotal ?? 0;
+      const spentTotal       = existingSummary?.usedTotal ?? 0;
+      if (memberAllocTotal > spentTotal && amt < memberAllocTotal) {
+        setError(`Cannot reduce below total already assigned to members (${fmtRs(memberAllocTotal)}). Reduce individual member allocations first.`);
+      } else {
+        setError(`Cannot set below already spent amount (${fmtRs(spentTotal)}). Spent budget is protected.`);
+      }
       return;
     }
     if (amt > maxAllowable) {
@@ -506,7 +516,7 @@ function AssignBudgetModal({
             </div>
             {usedFloor > 0 && (
               <ReadOnlyBadge
-                label="Spent Budget (Protected)"
+                label={usedFloor === (existingSummary?.memberAllocatedTotal ?? 0) && usedFloor > (existingSummary?.usedTotal ?? 0) ? "Member Allocated (Protected)" : "Spent Budget (Protected)"}
                 value={`${fmtRs(usedFloor)} — cannot set allocation below this`}
               />
             )}
@@ -525,7 +535,10 @@ function AssignBudgetModal({
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Budget Amount (Rs.) *
             {usedFloor > 0 && (
-              <span className="text-red-500 font-normal ml-1">— min {fmtRs(usedFloor)} (spent)</span>
+              <span className="text-red-500 font-normal ml-1">
+                — min {fmtRs(usedFloor)}{" "}
+                {usedFloor === (existingSummary?.memberAllocatedTotal ?? 0) && usedFloor > (existingSummary?.usedTotal ?? 0) ? "(member allocated)" : "(spent)"}
+              </span>
             )}
             <span className="text-gray-400 font-normal ml-1">— max {fmtRs(maxAllowable)}</span>
           </label>
@@ -1471,6 +1484,25 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
   ) => {
     const req = allRequests.find(r => r.id === id);
     if (!req) return;
+
+    // L9: Idempotency guard — prevent re-actioning an already-decided request
+    if (req.status !== "Pending") {
+      showToast(`This request is already ${req.status}. No changes were made.`, "warning");
+      setActioningRequest(null);
+      return;
+    }
+
+    // L7: Cap approval against the company's unallocated pool
+    if (status === "Approved" || status === "Partially Approved") {
+      const companyPool = getCompanyUnallocated();
+      if (approvedAmount > companyPool) {
+        showToast(
+          `Cannot approve ${fmtRs(approvedAmount)} — only ${fmtRs(companyPool)} remains in the company unallocated pool. Reduce the approved amount or increase the company budget first.`,
+          "error"
+        );
+        return;
+      }
+    }
 
     updateBudgetRequest(id, {
       status,

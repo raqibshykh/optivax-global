@@ -3,8 +3,9 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { getSalesTasks, saveSalesTasks, SALES_MEMBERS } from "../../mock/salesData";
+import { getSalesTasks, saveSalesTasks, SALES_MEMBERS, SALES_ADMIN_ID } from "../../mock/salesData";
 import { SalesTask } from "../../types";
+import { NotificationService } from "../../services/notificationService";
 
 const PRIORITY_COLORS: Record<string, string> = {
   high:   "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
@@ -87,28 +88,15 @@ export default function SalesTasks() {
     setForm(f => ({ ...f, assignedTo: id, assignedName: member?.name || id }));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
       showToast("You must be logged in to perform this action", "error");
       return;
     }
 
-    const writeNotification = (toUserId: string, title: string, message: string) => {
-      try {
-        const raw = localStorage.getItem("mock_notifications");
-        const existing = raw ? (JSON.parse(raw) as object[]) : [];
-        existing.push({
-          id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          userId: toUserId,
-          title,
-          message,
-          type: "info",
-          read: false,
-          createdAt: new Date().toISOString(),
-        });
-        localStorage.setItem("mock_notifications", JSON.stringify(existing));
-      } catch {}
+    const sendNotification = (toUserId: string, title: string, message: string) => {
+      NotificationService.create({ userId: toUserId, title, message, type: "info", read: false, createdAt: new Date().toISOString() } as any).catch(() => {});
     };
 
     const writeRevision = (taskId: string, taskTitle: string, oldAssigneeName: string, newAssigneeName: string) => {
@@ -138,22 +126,26 @@ export default function SalesTasks() {
       saveSalesTasks(all.map(t => t.id === editing.id ? { ...t, ...form } : t));
 
       if (isReassignment) {
-        writeNotification(
-          editing.assignedTo,
-          "Task Reassigned",
-          `You have been unassigned from: "${form.title}". It has been reassigned to ${form.assignedName}.`
-        );
-        writeNotification(
-          form.assignedTo,
-          "New Task Assigned",
-          `You have been assigned to sales task: "${form.title}".`
-        );
+        sendNotification(editing.assignedTo, "Task Reassigned", `You have been unassigned from: "${form.title}". It has been reassigned to ${form.assignedName}.`);
+        sendNotification(form.assignedTo, "New Task Assigned", `You have been assigned to sales task: "${form.title}".`);
         writeRevision(editing.id, form.title, editing.assignedName, form.assignedName);
         showToast(`Task reassigned to ${form.assignedName}. Both parties notified.`, "success");
       } else {
         showToast("Task updated", "success");
       }
     } else {
+      // Duplicate prevention — same title + assignee among non-done tasks
+      const titleLower = form.title.trim().toLowerCase();
+      const dup = all.find(t =>
+        t.status !== "done" &&
+        t.assignedTo === form.assignedTo &&
+        t.title.trim().toLowerCase() === titleLower
+      );
+      if (dup) {
+        showToast(`A task "${form.title}" is already assigned to ${form.assignedName}`, "error");
+        return;
+      }
+
       const taskId = `stk${Date.now()}`;
       const next: SalesTask = {
         id: taskId,
@@ -162,11 +154,7 @@ export default function SalesTasks() {
         createdBy: user.id,
       };
       saveSalesTasks([next, ...all]);
-      writeNotification(
-        form.assignedTo,
-        "New Task Assigned",
-        `You have been assigned to sales task: "${form.title}".`
-      );
+      sendNotification(form.assignedTo, "New Task Assigned", `You have been assigned to sales task: "${form.title}".`);
       showToast("Task created and assigned", "success");
     }
     setIsModalOpen(false);
@@ -182,7 +170,19 @@ export default function SalesTasks() {
 
   const handleStatusUpdate = (id: string, status: SalesTask["status"]) => {
     const all = getSalesTasks();
+    const task = all.find(t => t.id === id);
     saveSalesTasks(all.map(t => t.id === id ? { ...t, status } : t));
+    // Notify sales admin when a task is completed
+    if (status === "done" && task && user) {
+      NotificationService.create({
+        userId: SALES_ADMIN_ID,
+        type: "system",
+        title: "Sales Task Completed",
+        message: `${user.name || user.email} completed task: "${task.title}"`,
+        read: false,
+        createdAt: new Date().toISOString(),
+      } as any).catch(() => {});
+    }
     showToast(`Task marked as ${STATUS_LABELS[status]}`, "success");
     loadData();
   };

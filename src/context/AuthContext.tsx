@@ -100,17 +100,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string): Promise<string> => {
-    // Use mock login for development
     const session = await mockLogin(email, password);
     if (!session) throw new Error("Failed to retrieve user session");
     const profile = sessionToUser(session);
     setUser(profile);
     notifyLoginActivity(profile.id, profile.name, profile.role);
+    
+    // Start Activity tracking
+    try { await api.post("/saas/v1/activity/login", {}); } catch {}
+    
     return getRoleHome(profile.role);
   };
 
   const logout = async (): Promise<void> => {
     try {
+      await api.post("/saas/v1/activity/logout", {});
       await api.post("/saas/v1/auth/logout", {});
     } catch {
       // ignore — still clear local state

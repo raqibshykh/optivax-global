@@ -61,6 +61,8 @@ import Commissions from "./pages/Sales/Commissions";
 
 // ── Production pages ──────────────────────────────────────────────────────
 import Deliverables from "./pages/Production/Deliverables";
+import ClientOwnership from "./pages/Production/ClientOwnership";
+import MyClients from "./pages/Production/MyClients";
 
 // ── Marketing pages ───────────────────────────────────────────────────────
 import SocialTracking from "./pages/Marketing/SocialTracking";
@@ -162,8 +164,10 @@ export default function App() {
             <Route path="/sales/clients"            element={<Clients />} />
             <Route path="/sales/tasks"              element={<SalesTasks />} />
             <Route path="/sales/targets"            element={<SalesTargets />} />
-            <Route path="/sales/campaigns"          element={<CampaignBudgets />} />
-            <Route path="/sales/team-performance"   element={<TeamPerformance />} />
+            <Route element={<ProtectedRoute allowedDomain="sales" allowedRoles={["sales_admin"]} />}>
+              <Route path="/sales/campaigns"          element={<CampaignBudgets />} />
+              <Route path="/sales/team-performance"   element={<TeamPerformance />} />
+            </Route>
             <Route path="/sales/commissions"        element={<Commissions />} />
             <Route path="/sales/reports"            element={<Reports />} />
             <Route path="/sales/files"              element={<AdminFiles />} />
@@ -183,18 +187,24 @@ export default function App() {
             <Route path="/production"                    element={<Navigate to="/production/dashboard" replace />} />
             <Route path="/production/dashboard"          element={<ProductionPanel />} />
             <Route path="/production/content-requests"   element={<ContentCalendar />} />
-            <Route path="/production/projects"      element={<Projects />} />
-            <Route path="/production/tasks"         element={<Tasks />} />
-            <Route path="/production/deliverables"  element={<Deliverables />} />
-            <Route path="/production/files"         element={<AdminFiles />} />
-            <Route path="/production/reports"       element={<Reports />} />
-            <Route path="/production/revisions"    element={<AdminRevisions />} />
-            <Route path="/production/notifications" element={<AdminNotifications />} />
-            <Route path="/production/settings"      element={<Settings />} />
-            <Route path="/production/profile"       element={<Profile />} />
+            <Route path="/production/projects"           element={<Projects />} />
+            <Route path="/production/tasks"              element={<Tasks />} />
+            <Route path="/production/deliverables"       element={<Deliverables />} />
+            <Route path="/production/files"              element={<AdminFiles />} />
+            <Route path="/production/reports"            element={<Reports />} />
+            <Route path="/production/revisions"          element={<AdminRevisions />} />
+            <Route path="/production/notifications"      element={<AdminNotifications />} />
+            <Route path="/production/settings"           element={<Settings />} />
+            <Route path="/production/profile"            element={<Profile />} />
+            <Route path="/production/my-clients"         element={<MyClients />} />
             <Route element={<ProtectedRoute allowedDomain="production" allowedRoles={["production_admin", "hr_admin", "management"]} />}>
               <Route path="/production/users" element={<Employees />} />
             </Route>
+          </Route>
+
+          {/* ── CLIENT OWNERSHIP — super_admin, management, production_admin ── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "production_admin"]} />}>
+            <Route path="/production/client-ownership" element={<ClientOwnership />} />
           </Route>
 
           {/* ── MARKETING ─────────────────────────────────────────── */}
@@ -229,7 +239,9 @@ export default function App() {
             <Route element={<ProtectedRoute allowedDomain="hr" allowedRoles={["hr_admin", "management"]} />}>
               <Route path="/hr/users" element={<Employees />} />
             </Route>
-            <Route path="/hr/payroll"        element={<Payroll />} />
+            <Route element={<ProtectedRoute allowedDomain="hr" allowedRoles={["hr_admin", "super_admin"]} />}>
+              <Route path="/hr/payroll"        element={<Payroll />} />
+            </Route>
             <Route path="/hr/leave"          element={<LeaveRequests />} />
             <Route path="/hr/attendance"         element={<Attendance />} />
             <Route path="/hr/attendance/monthly" element={<AttendanceMonthly />} />
@@ -244,8 +256,10 @@ export default function App() {
             </Route>
             <Route path="/hr/tasks"          element={<Tasks />} />
             <Route path="/hr/files"          element={<AdminFiles />} />
-            <Route path="/hr/settings"       element={<Settings />} />
-            <Route path="/hr/reports"        element={<Reports />} />
+            <Route element={<ProtectedRoute allowedDomain="hr" allowedRoles={["hr_admin", "super_admin"]} />}>
+              <Route path="/hr/settings"       element={<Settings />} />
+              <Route path="/hr/reports"        element={<Reports />} />
+            </Route>
             <Route path="/hr/notifications"  element={<AdminNotifications />} />
             <Route path="/hr/profile"        element={<Profile />} />
           </Route>

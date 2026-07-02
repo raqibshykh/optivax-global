@@ -59,7 +59,7 @@ export type BudgetMasterAction =
   | "MEMBER_ALLOCATED"
   | "MEMBER_ALLOCATION_UPDATED";
 
-export type BudgetRequestStatus   = "Pending" | "Approved" | "Rejected" | "Partially Approved";
+export type BudgetRequestStatus = "Pending" | "Approved" | "Rejected" | "Partially Approved";
 export type BudgetRequestPriority = "Low" | "Medium" | "High" | "Critical";
 
 export interface BudgetReturn {
@@ -115,9 +115,9 @@ export interface BudgetAuditEntry {
 
 // ── Backward-compat types (used by ManagementPanel) ───────────────────────────
 
-export type BudgetStatus   = "active" | "paused" | "closed" | "overspent";
+export type BudgetStatus = "active" | "paused" | "closed" | "overspent";
 export type BudgetCategory = "Operations" | "Marketing" | "Development" | "HR" | "Infrastructure" | "Sales" | "General";
-export type BudgetAction   = "create" | "increase" | "reduce" | "transfer_out" | "transfer_in" | "adjust" | "reallocate" | "edit" | "close" | "reopen" | "pause" | "note";
+export type BudgetAction = "create" | "increase" | "reduce" | "transfer_out" | "transfer_in" | "adjust" | "reallocate" | "edit" | "close" | "reopen" | "pause" | "note";
 
 export interface Budget {
   id: string;
@@ -155,12 +155,12 @@ export interface BudgetAuditLog {
 
 // ── Storage keys ───────────────────────────────────────────────────────────────
 
-const COMPANY_KEY  = "mock_company_budget";
-const RETURNS_KEY  = "mock_budget_returns";
+const COMPANY_KEY = "mock_company_budget";
+const RETURNS_KEY = "mock_budget_returns";
 const REQUESTS_KEY = "mock_budget_requests";
-const DEPT_KEY     = "mock_dept_allocations";
-const MEMBER_KEY   = "mock_member_allocations";
-const AUDIT_KEY    = "mock_budget_master_audit";
+const DEPT_KEY = "mock_dept_allocations";
+const MEMBER_KEY = "mock_member_allocations";
+const AUDIT_KEY = "mock_budget_master_audit";
 
 // ── Seeds ──────────────────────────────────────────────────────────────────────
 
@@ -180,44 +180,44 @@ function seedCompanyBudget(): CompanyBudget {
 function seedDeptAllocations(): DeptAllocation[] {
   const now = "2026-01-15T09:00:00Z";
   return [
-    { id: "da-sales",      department: "Sales",      adminId: "u8",  adminName: "James Carter",  allocatedAmount: 1000000, purpose: "Sales Operations & Client Acquisition", effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
-    { id: "da-marketing",  department: "Marketing",  adminId: "u10", adminName: "Olivia Brown",  allocatedAmount: 1000000, purpose: "Marketing Campaign",                    effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
-    { id: "da-production", department: "Production", adminId: "u9",  adminName: "David Chen",    allocatedAmount: 1000000, purpose: "Department Operations",                 effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
-    { id: "da-hr",         department: "HR",         adminId: "u11", adminName: "Ava Johnson",   allocatedAmount:  500000, purpose: "Employee Activities",                   effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
-    { id: "da-it",         department: "IT Support", adminId: "u16", adminName: "Ryan Patel",    allocatedAmount:  500000, purpose: "Software Subscription",                 effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
+    { id: "da-sales", department: "Sales", adminId: "u8", adminName: "James Carter", allocatedAmount: 1000000, purpose: "Sales Operations & Client Acquisition", effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
+    { id: "da-marketing", department: "Marketing", adminId: "u10", adminName: "Olivia Brown", allocatedAmount: 1000000, purpose: "Marketing Campaign", effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
+    { id: "da-production", department: "Production", adminId: "u9", adminName: "David Chen", allocatedAmount: 1000000, purpose: "Department Operations", effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
+    { id: "da-hr", department: "HR", adminId: "u11", adminName: "Ava Johnson", allocatedAmount: 500000, purpose: "Employee Activities", effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
+    { id: "da-it", department: "IT Support", adminId: "u16", adminName: "Ryan Patel", allocatedAmount: 500000, purpose: "Software Subscription", effectiveDate: "2026-01-15", allocatedAt: now, updatedAt: now, allocatedById: "u1", allocatedByName: "Super Admin" },
   ];
 }
 
 function seedMemberAllocations(): MemberAllocation[] {
   const now = "2026-02-01T09:00:00Z";
   return [
-    { id: "ma-u12", employeeId: "u12", employeeName: "Emma Wilson",     employeeRole: "sales_member",      department: "Sales",      allocatedAmount: 150000, usedAmount: 87500, allocatedById: "u8",  allocatedByName: "James Carter", allocatedAt: now, updatedAt: now },
-    { id: "ma-u22", employeeId: "u22", employeeName: "Chris Nolan",     employeeRole: "sales_member",      department: "Sales",      allocatedAmount: 100000, usedAmount: 40000, allocatedById: "u8",  allocatedByName: "James Carter", allocatedAt: now, updatedAt: now },
-    { id: "ma-u23", employeeId: "u23", employeeName: "Diana Prince",    employeeRole: "sales_member",      department: "Sales",      allocatedAmount: 120000, usedAmount: 55000, allocatedById: "u8",  allocatedByName: "James Carter", allocatedAt: now, updatedAt: now },
-    { id: "ma-u14", employeeId: "u14", employeeName: "Noah Davis",      employeeRole: "marketing_member",  department: "Marketing",  allocatedAmount: 200000, usedAmount: 85000, allocatedById: "u10", allocatedByName: "Olivia Brown",  allocatedAt: now, updatedAt: now },
-    { id: "ma-u20", employeeId: "u20", employeeName: "Alice Martins",   employeeRole: "marketing_member",  department: "Marketing",  allocatedAmount: 150000, usedAmount: 60000, allocatedById: "u10", allocatedByName: "Olivia Brown",  allocatedAt: now, updatedAt: now },
-    { id: "ma-u21", employeeId: "u21", employeeName: "Ben Thompson",    employeeRole: "marketing_member",  department: "Marketing",  allocatedAmount: 100000, usedAmount: 30000, allocatedById: "u10", allocatedByName: "Olivia Brown",  allocatedAt: now, updatedAt: now },
-    { id: "ma-u13", employeeId: "u13", employeeName: "Liam Park",       employeeRole: "production_member", department: "Production", allocatedAmount: 250000, usedAmount: 120000, allocatedById: "u9", allocatedByName: "David Chen",    allocatedAt: now, updatedAt: now },
-    { id: "ma-u24", employeeId: "u24", employeeName: "Edgar Wright",    employeeRole: "production_member", department: "Production", allocatedAmount: 180000, usedAmount:  75000, allocatedById: "u9", allocatedByName: "David Chen",    allocatedAt: now, updatedAt: now },
-    { id: "ma-u15", employeeId: "u15", employeeName: "Ethan Lee",       employeeRole: "hr_member",         department: "HR",         allocatedAmount: 120000, usedAmount:  62000, allocatedById: "u11", allocatedByName: "Ava Johnson",  allocatedAt: now, updatedAt: now },
-    { id: "ma-u25", employeeId: "u25", employeeName: "Fiona Gallagher", employeeRole: "hr_member",         department: "HR",         allocatedAmount:  80000, usedAmount:  23000, allocatedById: "u11", allocatedByName: "Ava Johnson",  allocatedAt: now, updatedAt: now },
-    { id: "ma-u26", employeeId: "u26", employeeName: "Sophia Kim",      employeeRole: "it_member",         department: "IT Support", allocatedAmount: 150000, usedAmount:  95000, allocatedById: "u16", allocatedByName: "Ryan Patel",   allocatedAt: now, updatedAt: now },
-    { id: "ma-u27", employeeId: "u27", employeeName: "Marcus Bell",     employeeRole: "it_member",         department: "IT Support", allocatedAmount: 100000, usedAmount:  42000, allocatedById: "u16", allocatedByName: "Ryan Patel",   allocatedAt: now, updatedAt: now },
+    { id: "ma-u12", employeeId: "u12", employeeName: "Emma Wilson", employeeRole: "sales_member", department: "Sales", allocatedAmount: 150000, usedAmount: 87500, allocatedById: "u8", allocatedByName: "James Carter", allocatedAt: now, updatedAt: now },
+    { id: "ma-u22", employeeId: "u22", employeeName: "Chris Nolan", employeeRole: "sales_member", department: "Sales", allocatedAmount: 100000, usedAmount: 40000, allocatedById: "u8", allocatedByName: "James Carter", allocatedAt: now, updatedAt: now },
+    { id: "ma-u23", employeeId: "u23", employeeName: "Diana Prince", employeeRole: "sales_member", department: "Sales", allocatedAmount: 120000, usedAmount: 55000, allocatedById: "u8", allocatedByName: "James Carter", allocatedAt: now, updatedAt: now },
+    { id: "ma-u14", employeeId: "u14", employeeName: "Noah Davis", employeeRole: "marketing_member", department: "Marketing", allocatedAmount: 200000, usedAmount: 85000, allocatedById: "u10", allocatedByName: "Olivia Brown", allocatedAt: now, updatedAt: now },
+    { id: "ma-u20", employeeId: "u20", employeeName: "Alice Martins", employeeRole: "marketing_member", department: "Marketing", allocatedAmount: 150000, usedAmount: 60000, allocatedById: "u10", allocatedByName: "Olivia Brown", allocatedAt: now, updatedAt: now },
+    { id: "ma-u21", employeeId: "u21", employeeName: "Ben Thompson", employeeRole: "marketing_member", department: "Marketing", allocatedAmount: 100000, usedAmount: 30000, allocatedById: "u10", allocatedByName: "Olivia Brown", allocatedAt: now, updatedAt: now },
+    { id: "ma-u13", employeeId: "u13", employeeName: "Liam Park", employeeRole: "production_member", department: "Production", allocatedAmount: 250000, usedAmount: 120000, allocatedById: "u9", allocatedByName: "David Chen", allocatedAt: now, updatedAt: now },
+    { id: "ma-u24", employeeId: "u24", employeeName: "Edgar Wright", employeeRole: "production_member", department: "Production", allocatedAmount: 180000, usedAmount: 75000, allocatedById: "u9", allocatedByName: "David Chen", allocatedAt: now, updatedAt: now },
+    { id: "ma-u15", employeeId: "u15", employeeName: "Ethan Lee", employeeRole: "hr_member", department: "HR", allocatedAmount: 120000, usedAmount: 62000, allocatedById: "u11", allocatedByName: "Ava Johnson", allocatedAt: now, updatedAt: now },
+    { id: "ma-u25", employeeId: "u25", employeeName: "Fiona Gallagher", employeeRole: "hr_member", department: "HR", allocatedAmount: 80000, usedAmount: 23000, allocatedById: "u11", allocatedByName: "Ava Johnson", allocatedAt: now, updatedAt: now },
+    { id: "ma-u26", employeeId: "u26", employeeName: "Sophia Kim", employeeRole: "it_member", department: "IT Support", allocatedAmount: 150000, usedAmount: 95000, allocatedById: "u16", allocatedByName: "Ryan Patel", allocatedAt: now, updatedAt: now },
+    { id: "ma-u27", employeeId: "u27", employeeName: "Marcus Bell", employeeRole: "it_member", department: "IT Support", allocatedAmount: 100000, usedAmount: 42000, allocatedById: "u16", allocatedByName: "Ryan Patel", allocatedAt: now, updatedAt: now },
   ];
 }
 
 function seedAuditEntries(): BudgetAuditEntry[] {
   return [
-    { id: "ba-001", action: "BUDGET_CREATED",          previousAmount: 0,        newAmount: 5000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", notes: "Initial company budget for FY2026",                  timestamp: "2026-01-01T09:00:00Z" },
-    { id: "ba-002", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount: 1000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "James Carter",  department: "Sales",      purpose: "Sales Operations & Client Acquisition", notes: "FY2026 Sales department allocation",      timestamp: "2026-01-15T09:00:00Z" },
-    { id: "ba-003", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount: 1000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "Olivia Brown", department: "Marketing",  purpose: "Marketing Campaign",                    notes: "FY2026 Marketing department allocation",  timestamp: "2026-01-15T09:05:00Z" },
-    { id: "ba-004", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount: 1000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "David Chen",   department: "Production", purpose: "Department Operations",                 notes: "FY2026 Production department allocation", timestamp: "2026-01-15T09:10:00Z" },
-    { id: "ba-005", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount:  500000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "Ava Johnson",  department: "HR",         purpose: "Employee Activities",                   notes: "FY2026 HR department allocation",         timestamp: "2026-01-15T09:15:00Z" },
-    { id: "ba-006", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount:  500000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "Ryan Patel",   department: "IT Support", purpose: "Software Subscription",                 notes: "FY2026 IT department allocation",         timestamp: "2026-01-15T09:20:00Z" },
-    { id: "ba-007", action: "MEMBER_ALLOCATED",         previousAmount: 0,        newAmount:  150000, performedById: "u8", performedByName: "James Carter",  performedByRole: "sales_admin",      targetName: "Emma Wilson",     department: "Sales",      notes: "Q1 allocation", timestamp: "2026-02-01T09:00:00Z" },
-    { id: "ba-008", action: "MEMBER_ALLOCATED",         previousAmount: 0,        newAmount:  200000, performedById: "u10", performedByName: "Olivia Brown", performedByRole: "marketing_admin",  targetName: "Noah Davis",      department: "Marketing",  notes: "Q1 allocation", timestamp: "2026-02-01T09:05:00Z" },
-    { id: "ba-009", action: "BUDGET_INCREASED",         previousAmount: 5000000,  newAmount: 5000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", notes: "No change — reviewed and confirmed",         timestamp: "2026-04-01T09:00:00Z" },
-    { id: "ba-010", action: "DEPT_ALLOCATION_UPDATED",  previousAmount: 900000,   newAmount: 1000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "James Carter",  department: "Sales",      notes: "Q2 top-up for Sales commission pool",     timestamp: "2026-04-15T10:00:00Z" },
+    { id: "ba-001", action: "BUDGET_CREATED", previousAmount: 0, newAmount: 5000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", notes: "Initial company budget for FY2026", timestamp: "2026-01-01T09:00:00Z" },
+    { id: "ba-002", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount: 1000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "James Carter", department: "Sales", purpose: "Sales Operations & Client Acquisition", notes: "FY2026 Sales department allocation", timestamp: "2026-01-15T09:00:00Z" },
+    { id: "ba-003", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount: 1000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "Olivia Brown", department: "Marketing", purpose: "Marketing Campaign", notes: "FY2026 Marketing department allocation", timestamp: "2026-01-15T09:05:00Z" },
+    { id: "ba-004", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount: 1000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "David Chen", department: "Production", purpose: "Department Operations", notes: "FY2026 Production department allocation", timestamp: "2026-01-15T09:10:00Z" },
+    { id: "ba-005", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount: 500000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "Ava Johnson", department: "HR", purpose: "Employee Activities", notes: "FY2026 HR department allocation", timestamp: "2026-01-15T09:15:00Z" },
+    { id: "ba-006", action: "DEPT_ALLOCATED", previousAmount: 0, newAmount: 500000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "Ryan Patel", department: "IT Support", purpose: "Software Subscription", notes: "FY2026 IT department allocation", timestamp: "2026-01-15T09:20:00Z" },
+    { id: "ba-007", action: "MEMBER_ALLOCATED", previousAmount: 0, newAmount: 150000, performedById: "u8", performedByName: "James Carter", performedByRole: "sales_admin", targetName: "Emma Wilson", department: "Sales", notes: "Q1 allocation", timestamp: "2026-02-01T09:00:00Z" },
+    { id: "ba-008", action: "MEMBER_ALLOCATED", previousAmount: 0, newAmount: 200000, performedById: "u10", performedByName: "Olivia Brown", performedByRole: "marketing_admin", targetName: "Noah Davis", department: "Marketing", notes: "Q1 allocation", timestamp: "2026-02-01T09:05:00Z" },
+    { id: "ba-009", action: "BUDGET_INCREASED", previousAmount: 5000000, newAmount: 5000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", notes: "No change — reviewed and confirmed", timestamp: "2026-04-01T09:00:00Z" },
+    { id: "ba-010", action: "DEPT_ALLOCATION_UPDATED", previousAmount: 900000, newAmount: 1000000, performedById: "u1", performedByName: "Super Admin", performedByRole: "super_admin", targetName: "James Carter", department: "Sales", notes: "Q2 top-up for Sales commission pool", timestamp: "2026-04-15T10:00:00Z" },
   ];
 }
 
@@ -298,6 +298,38 @@ export function appendBudgetAuditEntry(entry: Omit<BudgetAuditEntry, "id" | "tim
   localStorage.setItem(AUDIT_KEY, JSON.stringify(capped));
 }
 
+// ── Member Spend Recording ─────────────────────────────────────────────────────
+
+/**
+ * Atomically increments a member's usedAmount by `amount`.
+ * Called by server.ts when an invoice payment is confirmed.
+ * Returns true if the member allocation record was found and updated.
+ */
+export function recordMemberSpend(employeeId: string, amount: number): boolean {
+  if (!employeeId || amount <= 0) return false;
+  const all = getMemberAllocations();
+  const idx = all.findIndex(m => m.employeeId === employeeId);
+  if (idx < 0) return false;
+  all[idx] = {
+    ...all[idx],
+    usedAmount: all[idx].usedAmount + amount,
+    updatedAt:  new Date().toISOString(),
+  };
+  saveMemberAllocations(all);
+  return true;
+}
+
+/**
+ * Returns the company's total unallocated budget (totalAmount − sum of dept allocations).
+ * Used to cap budget-request approval amounts.
+ */
+export function getCompanyUnallocated(): number {
+  const cb    = getCompanyBudget();
+  const depts = getDeptAllocations();
+  const totalAllocated = depts.reduce((s, d) => s + d.allocatedAmount, 0);
+  return Math.max(0, (cb?.totalAmount ?? 0) - totalAllocated);
+}
+
 // ── Computed Stats ─────────────────────────────────────────────────────────────
 
 export interface BudgetMasterStats {
@@ -314,13 +346,13 @@ export function getCompanyBudgetStats(): BudgetMasterStats {
   const depts = getDeptAllocations();
   const members = getMemberAllocations();
 
-  const totalAmount          = cb?.totalAmount ?? 0;
+  const totalAmount = cb?.totalAmount ?? 0;
   const totalAllocatedToDepts = depts.reduce((s, d) => s + d.allocatedAmount, 0);
-  const totalUnallocated     = totalAmount - totalAllocatedToDepts;
-  const totalUsedByMembers   = members.reduce((s, m) => s + m.usedAmount, 0);
+  const totalUnallocated = totalAmount - totalAllocatedToDepts;
+  const totalUsedByMembers = members.reduce((s, m) => s + m.usedAmount, 0);
   const totalMemberAllocated = members.reduce((s, m) => s + m.allocatedAmount, 0);
   const totalRemainingForMembers = totalMemberAllocated - totalUsedByMembers;
-  const utilizationPct       = totalAmount > 0 ? Math.round((totalUsedByMembers / totalAmount) * 100) : 0;
+  const utilizationPct = totalAmount > 0 ? Math.round((totalUsedByMembers / totalAmount) * 100) : 0;
 
   return { totalAmount, totalAllocatedToDepts, totalUnallocated, totalUsedByMembers, totalRemainingForMembers, utilizationPct };
 }
@@ -343,8 +375,8 @@ export function getDeptBudgetSummaries(): DeptBudgetSummary[] {
   return depts.map(d => {
     const deptMembers = members.filter(m => m.department === d.department);
     const memberAllocatedTotal = deptMembers.reduce((s, m) => s + m.allocatedAmount, 0);
-    const usedTotal            = deptMembers.reduce((s, m) => s + m.usedAmount, 0);
-    const utilizationPct       = d.allocatedAmount > 0 ? Math.round((usedTotal / d.allocatedAmount) * 100) : 0;
+    const usedTotal = deptMembers.reduce((s, m) => s + m.usedAmount, 0);
+    const utilizationPct = d.allocatedAmount > 0 ? Math.round((usedTotal / d.allocatedAmount) * 100) : 0;
     return {
       department: d.department,
       adminName: d.adminName,
@@ -361,12 +393,12 @@ export function getDeptBudgetSummaries(): DeptBudgetSummary[] {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 export function deptFromRole(role: string): string {
-  if (role.startsWith("sales"))      return "Sales";
+  if (role.startsWith("sales")) return "Sales";
   if (role.startsWith("production")) return "Production";
-  if (role.startsWith("marketing"))  return "Marketing";
-  if (role.startsWith("hr"))         return "HR";
-  if (role.startsWith("it"))         return "IT Support";
-  if (role === "management")         return "Management";
+  if (role.startsWith("marketing")) return "Marketing";
+  if (role.startsWith("hr")) return "HR";
+  if (role.startsWith("it")) return "IT Support";
+  if (role === "management") return "Management";
   return "General";
 }
 
@@ -423,7 +455,7 @@ export function appendBudgetRequest(entry: Omit<BudgetRequest, "id" | "submitted
   const all = getBudgetRequests();
   const newEntry: BudgetRequest = {
     ...entry,
-    id:          `breq-${Date.now()}`,
+    id: `breq-${Date.now()}`,
     submittedAt: new Date().toISOString(),
   };
   saveBudgetRequests([...all, newEntry]);
@@ -450,7 +482,7 @@ export function getPendingBudgetRequests(): BudgetRequest[] {
 // ── Backward-compat shim for ManagementPanel ──────────────────────────────────
 
 export function getBudgets(): Budget[] {
-  const depts   = getDeptAllocations();
+  const depts = getDeptAllocations();
   const members = getMemberAllocations();
   return depts.map(d => {
     const used = members.filter(m => m.department === d.department).reduce((s, m) => s + m.usedAmount, 0);
@@ -467,12 +499,12 @@ export function getBudgets(): Budget[] {
 }
 
 export function getBudgetStats(budgets: Budget[]) {
-  const total     = budgets.reduce((s, b) => s + b.totalBudget, 0);
-  const used      = budgets.reduce((s, b) => s + b.usedBudget, 0);
+  const total = budgets.reduce((s, b) => s + b.totalBudget, 0);
+  const used = budgets.reduce((s, b) => s + b.usedBudget, 0);
   const remaining = total - used;
-  const utilPct   = total > 0 ? Math.round((used / total) * 100) : 0;
+  const utilPct = total > 0 ? Math.round((used / total) * 100) : 0;
   const overspent = budgets.filter(b => b.status === "overspent").length;
-  const active    = budgets.filter(b => b.status === "active").length;
+  const active = budgets.filter(b => b.status === "active").length;
   return { total, used, remaining, utilPct, overspent, active, count: budgets.length };
 }
 

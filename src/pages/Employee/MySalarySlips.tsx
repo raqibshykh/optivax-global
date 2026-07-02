@@ -123,26 +123,48 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <div><span className="text-xs text-gray-400 block">Salary Month</span><span className="font-medium">{monthLabel}</span></div>
           </div>
 
-          {/* Earnings — display-only breakdown, does not affect stored payroll data */}
+          {/* Salary Breakdown */}
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Earnings</p>
-            <Row label="Basic Salary (50%)"          value={fmtRs(bd.basic)} />
-            <Row label="House Rent Allowance (20%)"  value={fmtRs(bd.hra)} />
-            <Row label="Transport Allowance (15%)"   value={fmtRs(bd.transport)} />
-            <Row label="Medical Allowance (15%)"     value={fmtRs(bd.medical)} />
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Salary Breakdown</p>
+            <Row label="Basic Salary" value={fmtRs(bd.basic)} />
+            <Row label="House Rent Allowance" value={fmtRs(bd.hra)} />
+            <Row label="Medical Allowance" value={fmtRs(bd.medical)} />
+            <Row label="Conveyance Allowance" value={fmtRs(bd.conveyance)} />
             <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
-              <span className="font-semibold text-sm">Total Earnings</span>
+              <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Total Gross Salary</span>
               <span className="font-bold text-sm text-gray-900 dark:text-white">{fmtRs(slip.basicSalary)}</span>
             </div>
           </div>
 
-          {slip.advanceSalaryDeduction > 0 && (
+          {computeDeductions(slip) > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Deductions</p>
-              <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />
+              {slip.advanceSalaryDeduction > 0 && (
+                <Row label="Advance Salary Recovery" value={`−${fmtRs(slip.advanceSalaryDeduction)}`} accent="text-red-600 dark:text-red-400" />
+              )}
+              {(slip.unpaidLeaveDeduction ?? 0) > 0 && (
+                <Row
+                  label={`Unpaid Leave — ${slip.unpaidLeaveDays ?? 0} day${(slip.unpaidLeaveDays ?? 0) !== 1 ? "s" : ""}`}
+                  value={`−${fmtRs(slip.unpaidLeaveDeduction ?? 0)}`}
+                  accent="text-red-600 dark:text-red-400"
+                />
+              )}
+              {(slip.halfDayDeduction ?? 0) > 0 && (
+                <Row label="Half Day Deduction" value={`−${fmtRs(slip.halfDayDeduction ?? 0)}`} accent="text-orange-500" />
+              )}
+              {(slip.latePenaltyDeduction ?? 0) > 0 && (
+                <Row
+                  label={`Late Penalty — ${slip.latePenaltyCount ?? 0} late arrivals → ${slip.latePenaltyDays ?? 0} day${(slip.latePenaltyDays ?? 0) !== 1 ? "s" : ""}`}
+                  value={`−${fmtRs(slip.latePenaltyDeduction ?? 0)}`}
+                  accent="text-orange-500"
+                />
+              )}
+              {(slip.deductions ?? []).map((d, i) => (
+                <Row key={i} label={d.label} value={`−${fmtRs(d.amount)}`} accent="text-red-500" />
+              ))}
               <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-200 dark:border-gray-700">
                 <span className="font-semibold text-sm">Total Deductions</span>
-                <span className="font-bold text-sm text-red-600">−{fmtRs(slip.advanceSalaryDeduction)}</span>
+                <span className="font-bold text-sm text-red-600">−{fmtRs(computeDeductions(slip))}</span>
               </div>
             </div>
           )}

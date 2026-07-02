@@ -4,6 +4,7 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { notifyLeaveRequestSubmitted, notifyLeaveDecision } from "../../services/notificationHelpers";
+import { COMPANY_HOLIDAYS_2026, COMPANY_HOLIDAYS_2025 } from "../../mock/attendanceData";
 
 const STORAGE_KEY = "mock_leave_requests";
 
@@ -87,7 +88,19 @@ function saveLeaves(data: LeaveRequest[]) {
 }
 function calcDays(start: string, end: string): number {
   if (!start || !end) return 0;
-  return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86_400_000) + 1);
+  const s = new Date(start);
+  const e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return 0;
+  let count = 0;
+  const cur = new Date(s);
+  while (cur <= e) {
+    const dow = cur.getDay();
+    const iso = cur.toISOString().slice(0, 10);
+    const holidays = cur.getFullYear() === 2025 ? COMPANY_HOLIDAYS_2025 : COMPANY_HOLIDAYS_2026;
+    if (dow !== 0 && dow !== 6 && !holidays.includes(iso)) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return Math.max(1, count);
 }
 
 const EMPTY_FORM = { type: "annual" as LeaveType, startDate: "", endDate: "", reason: "" };
@@ -138,6 +151,13 @@ export default function LeaveRequests() {
     if (!user) return;
     if (!form.startDate || !form.endDate) { showToast("Select start and end dates", "error"); return; }
     if (new Date(form.endDate) < new Date(form.startDate)) { showToast("End date cannot precede start date", "error"); return; }
+    const overlapping = leaves.filter(l =>
+      l.userId === user.id &&
+      l.status !== "rejected" &&
+      new Date(l.startDate) <= new Date(form.endDate) &&
+      new Date(l.endDate) >= new Date(form.startDate)
+    );
+    if (overlapping.length > 0) { showToast("You already have a leave request overlapping these dates", "error"); return; }
     const days = calcDays(form.startDate, form.endDate);
     const req: LeaveRequest = {
       id: `lv-${Date.now()}`,

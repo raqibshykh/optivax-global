@@ -1,4 +1,4 @@
-import { loadYearData, computeMonthlyReport, STAFF_USERS } from "./attendanceData";
+import { loadYearData, computeMonthlyReport, STAFF_USERS, COMPANY_HOLIDAYS_2026, COMPANY_HOLIDAYS_2025 } from "./attendanceData";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -16,8 +16,8 @@ export interface SalarySlip {
   designation: string;
   salaryMonth: string;             // "YYYY-MM"
   basicSalary: number;
-  allowances: PayrollItem[];
-  bonuses: PayrollItem[];
+  allowances?: PayrollItem[];      // kept optional for stored-record compat; ignored in all calculations
+  bonuses?: PayrollItem[];         // kept optional for stored-record compat; ignored in all calculations
   deductions: PayrollItem[];
   advanceSalaryDeduction: number;
   // Attendance-based deductions (policy: all leaves unpaid, every 3 lates = 1 day deduction)
@@ -27,9 +27,9 @@ export interface SalarySlip {
   latePenaltyCount?: number;       // total late arrivals
   latePenaltyDays?: number;        // floor(lateArrivals / 3)
   latePenaltyDeduction?: number;   // latePenaltyDays × dailyRate
-  grossSalary: number;             // basic + allowances + bonuses
+  grossSalary: number;             // equals basicSalary — policy: no allowances or bonuses
   totalDeductions: number;         // all deductions combined
-  netSalary: number;               // grossSalary - totalDeductions
+  netSalary: number;               // basicSalary - totalDeductions
   generatedAt: string;
   generatedById: string;
   generatedByName: string;
@@ -63,10 +63,9 @@ export const ADVANCE_REQUESTS_KEY   = "mock_advance_requests";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-export const computeGross = (s: SalarySlip) =>
-  s.basicSalary +
-  s.allowances.reduce((a, i) => a + i.amount, 0) +
-  s.bonuses.reduce((a, i) => a + i.amount, 0);
+// Policy: grossSalary === basicSalary (the employee's official monthly salary).
+// Allowances/bonuses are NOT added separately — gross = monthly salary.
+export const computeGross = (s: SalarySlip) => s.basicSalary;
 
 export const computeDeductions = (s: SalarySlip) =>
   s.advanceSalaryDeduction +
@@ -77,164 +76,153 @@ export const computeDeductions = (s: SalarySlip) =>
 
 export const computeNet = (s: SalarySlip) => computeGross(s) - computeDeductions(s);
 
+// ── Salary slip display breakdown ─────────────────────────────────────────────
+// Splits grossSalary (= employee monthly salary) into display components for salary slips.
+// These components are DISPLAY ONLY — they always sum to grossSalary and do not add extra earnings.
+// Percentages: Basic 50%, House Rent 30%, Medical 10%, Conveyance 10% (remainder).
+
+export interface SlipBreakdown {
+  basic:      number; // 50% of gross
+  hra:        number; // 30% of gross
+  medical:    number; // 10% of gross
+  conveyance: number; // remainder (ensures exact sum = gross)
+}
+
+export function computeSlipBreakdown(grossSalary: number): SlipBreakdown {
+  const basic      = Math.round(grossSalary * 0.50);
+  const hra        = Math.round(grossSalary * 0.30);
+  const medical    = Math.round(grossSalary * 0.10);
+  const conveyance = grossSalary - basic - hra - medical;
+  return { basic, hra, medical, conveyance };
+}
+
 // ── Seed data ─────────────────────────────────────────────────────────────────
 
 const SEED_SLIPS: SalarySlip[] = [
   {
     id: "slip-001",
-    employeeId: "seed-emp-01",
-    employeeName: "Aisha Rahman",
-    employeeEmail: "aisha.rahman@optivaxglobal.com",
+    employeeId: "u8",
+    employeeName: "James Carter",
+    employeeEmail: "sales.admin@example.com",
     department: "Sales",
-    designation: "Sales Manager",
+    designation: "Sales Admin",
     salaryMonth: "2026-04",
     basicSalary: 65000,
-    allowances: [
-      { label: "House Rent Allowance", amount: 16250 },
-      { label: "Transport Allowance",  amount: 5000 },
-      { label: "Medical Allowance",    amount: 3000 },
-    ],
-    bonuses: [
-      { label: "Performance Bonus", amount: 10000 },
-    ],
+    allowances: [],
+    bonuses: [],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 99250,
+    grossSalary: 65000,
     totalDeductions: 0,
-    netSalary: 99250,
+    netSalary: 65000,
     generatedAt: "2026-04-30T10:00:00.000Z",
-    generatedById: "user-hr-01",
-    generatedByName: "HR Admin",
+    generatedById: "u11",
+    generatedByName: "Ava Johnson",
     generatedByRole: "hr_admin",
   },
   {
     id: "slip-002",
-    employeeId: "seed-emp-02",
-    employeeName: "Bilal Siddiqui",
-    employeeEmail: "bilal.siddiqui@optivaxglobal.com",
+    employeeId: "u9",
+    employeeName: "David Chen",
+    employeeEmail: "production.admin@example.com",
     department: "Production",
-    designation: "Production Lead",
+    designation: "Production Admin",
     salaryMonth: "2026-04",
     basicSalary: 55000,
-    allowances: [
-      { label: "House Rent Allowance", amount: 13750 },
-      { label: "Transport Allowance",  amount: 4000 },
-      { label: "Medical Allowance",    amount: 2500 },
-    ],
+    allowances: [],
     bonuses: [],
     deductions: [],
     advanceSalaryDeduction: 15000,
-    grossSalary: 75250,
+    grossSalary: 55000,
     totalDeductions: 15000,
-    netSalary: 60250,
+    netSalary: 40000,
     generatedAt: "2026-04-30T10:15:00.000Z",
-    generatedById: "user-hr-01",
-    generatedByName: "HR Admin",
+    generatedById: "u11",
+    generatedByName: "Ava Johnson",
     generatedByRole: "hr_admin",
   },
   {
     id: "slip-003",
-    employeeId: "seed-emp-03",
-    employeeName: "Fatima Khan",
-    employeeEmail: "fatima.khan@optivaxglobal.com",
+    employeeId: "u10",
+    employeeName: "Olivia Brown",
+    employeeEmail: "marketing.admin@example.com",
     department: "Marketing",
-    designation: "Marketing Executive",
+    designation: "Marketing Admin",
     salaryMonth: "2026-04",
     basicSalary: 48000,
-    allowances: [
-      { label: "House Rent Allowance", amount: 12000 },
-      { label: "Transport Allowance",  amount: 3500 },
-      { label: "Medical Allowance",    amount: 2000 },
-    ],
-    bonuses: [
-      { label: "Campaign Bonus", amount: 5000 },
-    ],
+    allowances: [],
+    bonuses: [],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 70500,
+    grossSalary: 48000,
     totalDeductions: 0,
-    netSalary: 70500,
+    netSalary: 48000,
     generatedAt: "2026-04-30T10:30:00.000Z",
-    generatedById: "user-hr-01",
-    generatedByName: "HR Admin",
+    generatedById: "u11",
+    generatedByName: "Ava Johnson",
     generatedByRole: "hr_admin",
   },
   {
     id: "slip-004",
-    employeeId: "seed-emp-01",
-    employeeName: "Aisha Rahman",
-    employeeEmail: "aisha.rahman@optivaxglobal.com",
+    employeeId: "u8",
+    employeeName: "James Carter",
+    employeeEmail: "sales.admin@example.com",
     department: "Sales",
-    designation: "Sales Manager",
+    designation: "Sales Admin",
     salaryMonth: "2026-05",
     basicSalary: 65000,
-    allowances: [
-      { label: "House Rent Allowance", amount: 16250 },
-      { label: "Transport Allowance",  amount: 5000 },
-      { label: "Medical Allowance",    amount: 3000 },
-    ],
-    bonuses: [
-      { label: "Quarterly Bonus", amount: 20000 },
-    ],
+    allowances: [],
+    bonuses: [],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 109250,
+    grossSalary: 65000,
     totalDeductions: 0,
-    netSalary: 109250,
+    netSalary: 65000,
     generatedAt: "2026-05-31T10:00:00.000Z",
-    generatedById: "user-hr-01",
-    generatedByName: "HR Admin",
+    generatedById: "u11",
+    generatedByName: "Ava Johnson",
     generatedByRole: "hr_admin",
   },
   {
     id: "slip-005",
-    employeeId: "seed-emp-04",
-    employeeName: "Omar Farooq",
-    employeeEmail: "omar.farooq@optivaxglobal.com",
+    employeeId: "u15",
+    employeeName: "Ethan Lee",
+    employeeEmail: "hr.member@example.com",
     department: "HR",
     designation: "HR Specialist",
     salaryMonth: "2026-05",
     basicSalary: 42000,
-    allowances: [
-      { label: "House Rent Allowance", amount: 10500 },
-      { label: "Transport Allowance",  amount: 3000 },
-    ],
+    allowances: [],
     bonuses: [],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 55500,
+    grossSalary: 42000,
     totalDeductions: 0,
-    netSalary: 55500,
+    netSalary: 42000,
     generatedAt: "2026-05-31T11:00:00.000Z",
-    generatedById: "user-hr-01",
-    generatedByName: "HR Admin",
+    generatedById: "u11",
+    generatedByName: "Ava Johnson",
     generatedByRole: "hr_admin",
   },
   {
     id: "slip-006",
-    employeeId: "seed-emp-02",
-    employeeName: "Bilal Siddiqui",
-    employeeEmail: "bilal.siddiqui@optivaxglobal.com",
+    employeeId: "u9",
+    employeeName: "David Chen",
+    employeeEmail: "production.admin@example.com",
     department: "Production",
-    designation: "Production Lead",
+    designation: "Production Admin",
     salaryMonth: "2026-05",
     basicSalary: 55000,
-    allowances: [
-      { label: "House Rent Allowance", amount: 13750 },
-      { label: "Transport Allowance",  amount: 4000 },
-      { label: "Medical Allowance",    amount: 2500 },
-    ],
-    bonuses: [
-      { label: "Project Completion Bonus", amount: 8000 },
-    ],
+    allowances: [],
+    bonuses: [],
     deductions: [],
     advanceSalaryDeduction: 0,
-    grossSalary: 83250,
+    grossSalary: 55000,
     totalDeductions: 0,
-    netSalary: 83250,
+    netSalary: 55000,
     generatedAt: "2026-05-31T11:30:00.000Z",
-    generatedById: "user-hr-01",
-    generatedByName: "HR Admin",
+    generatedById: "u11",
+    generatedByName: "Ava Johnson",
     generatedByRole: "hr_admin",
   },
 ];
@@ -242,38 +230,38 @@ const SEED_SLIPS: SalarySlip[] = [
 const SEED_ADVANCE_REQUESTS: AdvanceSalaryRequest[] = [
   {
     id: "adv-001",
-    employeeId: "seed-emp-02",
-    employeeName: "Bilal Siddiqui",
+    employeeId: "u9",
+    employeeName: "David Chen",
     employeeRole: "production_admin",
     department: "Production",
     requestedAmount: 15000,
     reason: "Emergency medical expenses for family member.",
     requestDate: "2026-04-10T09:00:00.000Z",
     status: "paid",
-    approvedById: "user-hr-01",
-    approvedByName: "HR Admin",
+    approvedById: "u11",
+    approvedByName: "Ava Johnson",
     approvedAt: "2026-04-11T10:30:00.000Z",
     notes: "Approved with deduction in April salary.",
   },
   {
     id: "adv-002",
-    employeeId: "seed-emp-03",
-    employeeName: "Fatima Khan",
-    employeeRole: "marketing_member",
+    employeeId: "u10",
+    employeeName: "Olivia Brown",
+    employeeRole: "marketing_admin",
     department: "Marketing",
     requestedAmount: 20000,
     reason: "Home renovation expenses.",
     requestDate: "2026-05-05T11:00:00.000Z",
     status: "approved",
-    approvedById: "user-m-01",
-    approvedByName: "Management",
+    approvedById: "u2",
+    approvedByName: "Sarah Mitchell",
     approvedAt: "2026-05-06T09:15:00.000Z",
     notes: "Deduction to be spread over 2 months.",
   },
   {
     id: "adv-003",
-    employeeId: "seed-emp-05",
-    employeeName: "Zainab Malik",
+    employeeId: "u12",
+    employeeName: "Emma Wilson",
     employeeRole: "sales_member",
     department: "Sales",
     requestedAmount: 10000,
@@ -283,8 +271,8 @@ const SEED_ADVANCE_REQUESTS: AdvanceSalaryRequest[] = [
   },
   {
     id: "adv-004",
-    employeeId: "seed-emp-04",
-    employeeName: "Omar Farooq",
+    employeeId: "u15",
+    employeeName: "Ethan Lee",
     employeeRole: "hr_member",
     department: "HR",
     requestedAmount: 25000,
@@ -294,23 +282,23 @@ const SEED_ADVANCE_REQUESTS: AdvanceSalaryRequest[] = [
   },
   {
     id: "adv-005",
-    employeeId: "seed-emp-06",
-    employeeName: "Hassan Ali",
-    employeeRole: "sales_admin",
+    employeeId: "u22",
+    employeeName: "Chris Nolan",
+    employeeRole: "sales_member",
     department: "Sales",
     requestedAmount: 30000,
     reason: "Business trip advance before reimbursement.",
     requestDate: "2026-06-10T14:00:00.000Z",
     status: "rejected",
-    approvedById: "user-hr-01",
-    approvedByName: "HR Admin",
+    approvedById: "u11",
+    approvedByName: "Ava Johnson",
     approvedAt: "2026-06-11T09:00:00.000Z",
     rejectionReason: "Advance limit exceeded for this quarter. Please submit a reimbursement claim instead.",
   },
   {
     id: "adv-006",
-    employeeId: "seed-emp-07",
-    employeeName: "Sara Ahmed",
+    employeeId: "u24",
+    employeeName: "Edgar Wright",
     employeeRole: "production_member",
     department: "Production",
     requestedAmount: 8000,
@@ -485,25 +473,41 @@ export function getPayrollStats(slips: SalarySlip[], requests: AdvanceSalaryRequ
   };
 }
 
-// ── Display-only salary breakdown — used ONLY in slip templates (PDF/preview) ─
-// Stored payroll values, budgets, reports, and all other modules are unchanged.
-
-export interface SlipBreakdown {
-  basic:     number; // 50%
-  hra:       number; // 20%
-  transport: number; // 15%
-  medical:   number; // 15% (remainder — ensures sum === grossSalary exactly)
-}
-
-export function computeSlipBreakdown(grossSalary: number): SlipBreakdown {
-  const basic     = Math.round(grossSalary * 0.50);
-  const hra       = Math.round(grossSalary * 0.20);
-  const transport = Math.round(grossSalary * 0.15);
-  const medical   = grossSalary - basic - hra - transport;
-  return { basic, hra, transport, medical };
-}
-
 // ── Strict Deductions Logic ───────────────────────────────────────────────────
+
+const ADVANCE_INSTALLMENT_MONTHS = 3;
+
+// Counts weekday (Mon–Fri, non-holiday) approved leave days for an employee in a given month.
+// Reads from mock_leave_requests — the authoritative store written by LeaveRequests.tsx.
+function _countApprovedLeaveDays(employeeId: string, year: number, month: number): number {
+  try {
+    const raw = localStorage.getItem("mock_leave_requests");
+    if (!raw) return 0;
+    const all = JSON.parse(raw) as Array<{ userId?: string; status?: string; startDate?: string; endDate?: string }>;
+    const approved = all.filter(l => l.userId === employeeId && l.status === "approved");
+    if (approved.length === 0) return 0;
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd   = new Date(year, month, 0);
+    let total = 0;
+    for (const leave of approved) {
+      if (!leave.startDate || !leave.endDate) continue;
+      const s = new Date(leave.startDate);
+      const e = new Date(leave.endDate);
+      const rangeStart = s < monthStart ? new Date(monthStart) : s;
+      const rangeEnd   = e > monthEnd   ? new Date(monthEnd)   : e;
+      if (rangeStart > rangeEnd) continue;
+      const cur = new Date(rangeStart);
+      while (cur <= rangeEnd) {
+        const dow = cur.getDay();
+        const iso = cur.toISOString().slice(0, 10);
+        const holidays = cur.getFullYear() === 2025 ? COMPANY_HOLIDAYS_2025 : COMPANY_HOLIDAYS_2026;
+        if (dow !== 0 && dow !== 6 && !holidays.includes(iso)) total++;
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+    return total;
+  } catch { return 0; }
+}
 
 export interface StrictDeductions {
   advanceSalaryDeduction: number;
@@ -523,6 +527,11 @@ export function computeStrictDeductions(employeeId: string, salaryMonth: string,
   const pastSlips = getSalarySlips().filter((s) => s.employeeId === employeeId);
   const totalRecovered = pastSlips.reduce((s, sl) => s + sl.advanceSalaryDeduction, 0);
   const outstandingAdvance = Math.max(0, totalApprovedAdvance - totalRecovered);
+  // Spread advance recovery over installments instead of deducting the full balance at once
+  const monthlyInstallment = totalApprovedAdvance > 0
+    ? Math.ceil(totalApprovedAdvance / ADVANCE_INSTALLMENT_MONTHS)
+    : 0;
+  const advanceSalaryDeduction = Math.min(outstandingAdvance, monthlyInstallment);
 
   // Attendance-based deductions — read live from attendance records
   let unpaidLeaveDays = 0;
@@ -537,7 +546,9 @@ export function computeStrictDeductions(employeeId: string, salaryMonth: string,
       if (staff) {
         const allRecords = loadYearData(year);
         const report = computeMonthlyReport(staff.id, staff.name, staff.role, month, year, allRecords);
-        unpaidLeaveDays = report.leaveDays + report.absentDays;
+        // Use approved leaves from mock_leave_requests (authoritative) instead of pseudo-random attendance leaveDays
+        const approvedLeaveDays = _countApprovedLeaveDays(employeeId, year, month);
+        unpaidLeaveDays = approvedLeaveDays + report.absentDays;
         halfDaysCount   = report.halfDays;
         lateCount       = report.lateArrivals;
       }
@@ -550,7 +561,7 @@ export function computeStrictDeductions(employeeId: string, salaryMonth: string,
   const lateAttendanceDeduction = Math.round(Math.floor(lateCount / 3) * dailyRate);
 
   return {
-    advanceSalaryDeduction: outstandingAdvance,
+    advanceSalaryDeduction,
     unpaidLeaveDays,
     unpaidLeaveDeduction,
     halfDayDeduction,
@@ -607,52 +618,66 @@ function _slipHtml(slip: SalarySlip, co: _CompanyBranding): string {
 <title>Salary Slip — ${slip.employeeName} — ${ml}</title>
 <style>
 *{box-sizing:border-box;}
-body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:28px;background:#f4f6f9;color:#1a2733;}
-.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);position:relative;isolation:isolate;}
-.wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(35deg);width:55%;opacity:0.08;pointer-events:none;z-index:-1;}
-.wm img{width:100%;height:auto;display:block;}
+body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:28px;background:#f4f6f9;color:#111827;position:relative;}
+/* Watermark: fixed to viewport/page, outside .wrap, never clipped */
+.wm{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;}
+.wm img{width:58%;max-width:420px;height:auto;object-fit:contain;opacity:0.04;transform:rotate(30deg);}
+/* Main card sits above watermark */
+.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:visible;box-shadow:0 4px 24px rgba(0,0,0,0.10);position:relative;z-index:1;}
 /* Header */
-.hdr{display:flex;align-items:center;gap:18px;padding:22px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}
+.hdr{display:flex;align-items:center;gap:18px;padding:22px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;border-radius:12px 12px 0 0;}
 .co-block{flex:1;min-width:0;}
 .co-name{font-size:19px;font-weight:800;letter-spacing:0.3px;margin:0 0 2px;}
-.co-tag{font-size:11px;opacity:.72;margin:0 0 5px;font-style:italic;}
-.co-det{font-size:10.5px;opacity:.70;line-height:1.65;}
+.co-tag{font-size:11px;opacity:.80;margin:0 0 5px;font-style:italic;}
+.co-det{font-size:10.5px;opacity:.85;line-height:1.65;}
 .slip-box{text-align:right;flex-shrink:0;}
-.slip-badge{display:inline-block;border:1px solid rgba(255,255,255,0.45);background:rgba(255,255,255,0.15);border-radius:5px;padding:4px 11px;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:5px;}
+.slip-badge{display:inline-block;border:1px solid rgba(255,255,255,0.55);background:rgba(255,255,255,0.18);border-radius:5px;padding:4px 11px;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:5px;}
 .slip-mo{font-size:14px;font-weight:600;}
-.slip-id{font-size:9.5px;opacity:.60;margin-top:3px;}
+.slip-id{font-size:9.5px;opacity:.75;margin-top:3px;}
 /* Employee grid */
-.eg{display:grid;grid-template-columns:repeat(3,1fr);background:#f0f4f8;border-bottom:1px solid #dde3ec;}
-.ec{padding:13px 18px;border-right:1px solid #dde3ec;}
+.eg{display:grid;grid-template-columns:repeat(3,1fr);background:#f0f4f8;border-bottom:2px solid #c7d3e0;}
+.ec{padding:13px 18px;border-right:1px solid #d1dae5;}
 .ec:last-child{border-right:none;}
-.ec.row2{border-top:1px solid #dde3ec;}
-.el{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#7b8fa6;margin-bottom:3px;}
-.ev{font-size:13px;font-weight:600;color:#1a2733;}
+.ec.row2{border-top:1px solid #d1dae5;}
+.el{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7a99;margin-bottom:4px;}
+.ev{font-size:13px;font-weight:700;color:#111827;}
 .ev.sm{font-size:11px;}
-/* Salary lines */
-.sh{background:#e8edf3;padding:8px 18px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#4a6075;border-top:1px solid #dde3ec;border-bottom:1px solid #dde3ec;}
-.lr{display:flex;justify-content:space-between;padding:6.5px 18px;border-bottom:1px solid #f0f4f8;font-size:12.5px;}
-.ll{color:#4a5568;}
-.lv{font-weight:500;}
-.lv.earn{color:#1a2733;}
-.lv.bon{color:#047857;}
-.lv.ded{color:#c53030;}
-.sub{display:flex;justify-content:space-between;padding:9px 18px;background:#edf2f7;font-size:13px;font-weight:700;color:#1a2733;border-top:2px solid #dde3ec;}
-.sub.ded{color:#c53030;}
-/* Net */
-.net{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}
-.net-lbl{font-size:13px;font-weight:700;letter-spacing:1.5px;opacity:.9;}
-.net-amt{font-size:26px;font-weight:800;}
+/* Section headers */
+.sh{background:#dde5ef;padding:9px 18px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;border-top:1px solid #c7d3e0;border-bottom:1px solid #c7d3e0;}
+/* Salary line rows */
+.lr{display:flex;justify-content:space-between;padding:7px 18px;border-bottom:1px solid #e8edf4;font-size:12.5px;}
+.ll{color:#1f2937;font-weight:400;}
+.lv{font-weight:600;}
+.lv.earn{color:#111827;}
+.lv.bon{color:#065f46;}
+.lv.ded{color:#991b1b;}
+/* Sub-total row */
+.sub{display:flex;justify-content:space-between;padding:10px 18px;background:#e2e8f0;font-size:13.5px;font-weight:800;color:#0f172a;border-top:2px solid #b8c6d6;}
+.sub.ded{color:#7f1d1d;}
+/* Net salary */
+.net{display:flex;justify-content:space-between;align-items:center;padding:20px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 100%);color:#fff;border-top:3px solid #1e3a5f;}
+.net-lbl{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:1;}
+.net-right{text-align:right;}
+.net-tag{font-size:9px;font-weight:600;letter-spacing:1.5px;opacity:.75;margin-bottom:2px;text-transform:uppercase;}
+.net-amt{font-size:30px;font-weight:900;letter-spacing:-0.5px;}
 /* Notes */
-.notes{margin:14px 18px 0;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:11px;color:#92400e;}
+.notes{margin:14px 18px 0;padding:10px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:11px;color:#78350f;}
 /* Footer */
-.ftr{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 28px 16px;border-top:1px solid #e8edf3;background:#f9fafb;margin-top:0;}
-.ft{font-size:9.5px;color:#9aabb7;line-height:1.55;}
-.ft strong{color:#7b8fa6;}
-@media print{body{background:#fff;padding:0;}.wrap{box-shadow:none;border-radius:0;}.wm{width:105mm;}@page{margin:12mm;size:A4 portrait;}}
+.ftr{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 28px 16px;border-top:1px solid #dde5ef;background:#f8fafc;margin-top:0;border-radius:0 0 12px 12px;}
+.ft{font-size:9.5px;color:#6b7280;line-height:1.6;}
+.ft strong{color:#374151;}
+@media print{
+  body{background:#fff;padding:0;}
+  .wm{position:fixed;top:0;left:0;width:100%;height:100%;}
+  .wm img{width:58%;max-width:380px;opacity:0.04;}
+  .wrap{box-shadow:none;border-radius:0;overflow:visible;}
+  .hdr{border-radius:0;}
+  .ftr{border-radius:0;}
+  @page{margin:12mm;size:A4 portrait;}
+}
 </style></head><body>
+<div class="wm"><img src="${logoSrc}" alt="" /></div>
 <div class="wrap">
-  <div class="wm"><img src="${logoSrc}" alt="" /></div>
   <div class="hdr">
     <div style="flex-shrink:0;">${logoHtml}</div>
     <div class="co-block">
@@ -679,12 +704,12 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:28px;background:#f4
     <div class="ec row2"><div class="el">Salary Period</div><div class="ev">${ml}</div></div>
   </div>
 
-  <div class="sh">Earnings</div>
-  <div class="lr"><span class="ll">Basic Salary (50%)</span><span class="lv earn">${fmtR(bd.basic)}</span></div>
-  <div class="lr"><span class="ll">House Rent Allowance (20%)</span><span class="lv earn">${fmtR(bd.hra)}</span></div>
-  <div class="lr"><span class="ll">Transport Allowance (15%)</span><span class="lv earn">${fmtR(bd.transport)}</span></div>
-  <div class="lr"><span class="ll">Medical Allowance (15%)</span><span class="lv earn">${fmtR(bd.medical)}</span></div>
-  <div class="sub"><span>Total Earnings</span><span>${fmtR(computeGross(slip))}</span></div>
+  <div class="sh">Salary Breakdown</div>
+  <div class="lr"><span class="ll">Basic Salary</span><span class="lv earn">${fmtR(bd.basic)}</span></div>
+  <div class="lr"><span class="ll">House Rent Allowance</span><span class="lv earn">${fmtR(bd.hra)}</span></div>
+  <div class="lr"><span class="ll">Medical Allowance</span><span class="lv earn">${fmtR(bd.medical)}</span></div>
+  <div class="lr"><span class="ll">Conveyance Allowance</span><span class="lv earn">${fmtR(bd.conveyance)}</span></div>
+  <div class="sub"><span>Total Gross Salary</span><span>${fmtR(slip.basicSalary)}</span></div>
 
   ${computeDeductions(slip) > 0 ? `
   <div class="sh">Deductions</div>
@@ -697,8 +722,11 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:28px;background:#f4
   ` : ""}
 
   <div class="net">
-    <span class="net-lbl">NET SALARY PAYABLE</span>
-    <span class="net-amt">${fmtR(displayNet)}</span>
+    <span class="net-lbl">Net Salary Payable</span>
+    <div class="net-right">
+      <div class="net-tag">Total Take-Home</div>
+      <div class="net-amt">${fmtR(displayNet)}</div>
+    </div>
   </div>
 
   ${slip.notes ? `<div class="notes"><strong>Note:</strong> ${slip.notes}</div>` : ""}
@@ -728,31 +756,51 @@ export function printSalarySlip(slip: SalarySlip) {
 
 export function printSalarySlipsBulk(slips: SalarySlip[]) {
   if (slips.length === 0) return;
-  const co    = _readBranding();
-  const pages = slips.map(s => `<div style="page-break-after:always; margin-bottom: 40px;">${_slipHtml(s, co).replace(/^[\s\S]*?<body[^>]*>/, "").replace(/<\/body>[\s\S]*$/, "")}</div>`);
+  const co      = _readBranding();
+  const logoSrc = `${window.location.origin}/images/logo/logo-icon-dark.png`;
+
+  // Strip each slip's own <style>, <body> tags, and per-slip .wm watermark div
+  // so the bulk document applies one unified stylesheet and one shared watermark.
+  const pages = slips.map(s => {
+    const body = _slipHtml(s, co)
+      .replace(/^[\s\S]*?<body[^>]*>/, "")
+      .replace(/<\/body>[\s\S]*$/, "")
+      .replace(/<div class="wm">[\s\S]*?<\/div>\s*/, "");
+    return `<div style="page-break-after:always;">${body}</div>`;
+  });
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Bulk Salary Slips — ${co.name}</title>
 <style>
 *{box-sizing:border-box;}
-body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:24px;background:#f4f6f9;}
-.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);position:relative;isolation:isolate;}
-.wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(35deg);width:55%;opacity:0.08;pointer-events:none;z-index:-1;}
-.wm img{width:100%;height:auto;display:block;}
-.hdr{display:flex;align-items:center;gap:18px;padding:22px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}
-.co-block{flex:1;min-width:0;}.co-name{font-size:19px;font-weight:800;margin:0 0 2px;}.co-tag{font-size:11px;opacity:.72;margin:0 0 5px;font-style:italic;}.co-det{font-size:10.5px;opacity:.70;line-height:1.65;}
-.slip-box{text-align:right;flex-shrink:0;}.slip-badge{display:inline-block;border:1px solid rgba(255,255,255,0.45);background:rgba(255,255,255,0.15);border-radius:5px;padding:4px 11px;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:5px;}.slip-mo{font-size:14px;font-weight:600;}.slip-id{font-size:9.5px;opacity:.60;margin-top:3px;}
-.eg{display:grid;grid-template-columns:repeat(3,1fr);background:#f0f4f8;border-bottom:1px solid #dde3ec;}.ec{padding:13px 18px;border-right:1px solid #dde3ec;}.ec:last-child{border-right:none;}.ec.row2{border-top:1px solid #dde3ec;}.el{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#7b8fa6;margin-bottom:3px;}.ev{font-size:13px;font-weight:600;color:#1a2733;}.ev.sm{font-size:11px;}
-.sh{background:#e8edf3;padding:8px 18px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#4a6075;border-top:1px solid #dde3ec;border-bottom:1px solid #dde3ec;}
-.lr{display:flex;justify-content:space-between;padding:6.5px 18px;border-bottom:1px solid #f0f4f8;font-size:12.5px;}.ll{color:#4a5568;}.lv{font-weight:500;}.lv.earn{color:#1a2733;}.lv.bon{color:#047857;}.lv.ded{color:#c53030;}
-.sub{display:flex;justify-content:space-between;padding:9px 18px;background:#edf2f7;font-size:13px;font-weight:700;color:#1a2733;border-top:2px solid #dde3ec;}.sub.ded{color:#c53030;}
-.net{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;}.net-lbl{font-size:13px;font-weight:700;letter-spacing:1.5px;opacity:.9;}.net-amt{font-size:26px;font-weight:800;}
-.notes{margin:14px 18px 0;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:11px;color:#92400e;}
-.ftr{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 28px 16px;border-top:1px solid #e8edf3;background:#f9fafb;}.ft{font-size:9.5px;color:#9aabb7;line-height:1.55;}.ft strong{color:#7b8fa6;}
-@media print{body{background:#fff;padding:0;}.wrap{page-break-after:always;box-shadow:none;border-radius:0;}.wm{width:105mm;}@page{margin:12mm;size:A4 portrait;}}
+body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:24px;background:#f4f6f9;color:#111827;position:relative;}
+/* Single watermark covers every printed page */
+.wm{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;}
+.wm img{width:58%;max-width:420px;height:auto;object-fit:contain;opacity:0.04;transform:rotate(30deg);}
+.wrap{max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:visible;box-shadow:0 4px 24px rgba(0,0,0,0.08);position:relative;z-index:1;}
+.hdr{display:flex;align-items:center;gap:18px;padding:22px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);color:#fff;border-radius:12px 12px 0 0;}
+.co-block{flex:1;min-width:0;}.co-name{font-size:19px;font-weight:800;margin:0 0 2px;}.co-tag{font-size:11px;opacity:.80;margin:0 0 5px;font-style:italic;}.co-det{font-size:10.5px;opacity:.85;line-height:1.65;}
+.slip-box{text-align:right;flex-shrink:0;}.slip-badge{display:inline-block;border:1px solid rgba(255,255,255,0.55);background:rgba(255,255,255,0.18);border-radius:5px;padding:4px 11px;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:5px;}.slip-mo{font-size:14px;font-weight:600;}.slip-id{font-size:9.5px;opacity:.75;margin-top:3px;}
+.eg{display:grid;grid-template-columns:repeat(3,1fr);background:#f0f4f8;border-bottom:2px solid #c7d3e0;}.ec{padding:13px 18px;border-right:1px solid #d1dae5;}.ec:last-child{border-right:none;}.ec.row2{border-top:1px solid #d1dae5;}.el{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7a99;margin-bottom:4px;}.ev{font-size:13px;font-weight:700;color:#111827;}.ev.sm{font-size:11px;}
+.sh{background:#dde5ef;padding:9px 18px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;border-top:1px solid #c7d3e0;border-bottom:1px solid #c7d3e0;}
+.lr{display:flex;justify-content:space-between;padding:7px 18px;border-bottom:1px solid #e8edf4;font-size:12.5px;}.ll{color:#1f2937;font-weight:400;}.lv{font-weight:600;}.lv.earn{color:#111827;}.lv.bon{color:#065f46;}.lv.ded{color:#991b1b;}
+.sub{display:flex;justify-content:space-between;padding:10px 18px;background:#e2e8f0;font-size:13.5px;font-weight:800;color:#0f172a;border-top:2px solid #b8c6d6;}.sub.ded{color:#7f1d1d;}
+.net{display:flex;justify-content:space-between;align-items:center;padding:20px 28px;background:linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 100%);color:#fff;border-top:3px solid #1e3a5f;}.net-lbl{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;}.net-right{text-align:right;}.net-tag{font-size:9px;font-weight:600;letter-spacing:1.5px;opacity:.75;margin-bottom:2px;text-transform:uppercase;}.net-amt{font-size:30px;font-weight:900;letter-spacing:-0.5px;}
+.notes{margin:14px 18px 0;padding:10px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:11px;color:#78350f;}
+.ftr{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 28px 16px;border-top:1px solid #dde5ef;background:#f8fafc;border-radius:0 0 12px 12px;}.ft{font-size:9.5px;color:#6b7280;line-height:1.6;}.ft strong{color:#374151;}
+@media print{
+  body{background:#fff;padding:0;}
+  .wm{position:fixed;top:0;left:0;width:100%;height:100%;}
+  .wm img{width:58%;max-width:380px;opacity:0.04;}
+  .wrap{page-break-after:always;box-shadow:none;border-radius:0;overflow:visible;}
+  .hdr,.ftr{border-radius:0;}
+  @page{margin:12mm;size:A4 portrait;}
+}
 </style></head><body>
+<div class="wm"><img src="${logoSrc}" alt="" /></div>
 ${pages.join("\n")}
 </body></html>`;
+
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 600); }
 }

@@ -1,18 +1,19 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import {
-  getAttendanceExceptions, saveAttendanceExceptions,
+  AttendanceExceptionService,
   type AttendanceException, type ExceptionType,
-} from "../../mock/itSupportData";
+} from "../../services/itSupportService";
 
 const EXCEPTION_LABELS: Record<ExceptionType, string> = {
   "missing-punch":    "Missing Punch",
   "late-arrival":     "Late Arrival",
   "early-departure":  "Early Departure",
   "no-record":        "No Record",
+  "duplicate-punch":  "Duplicate Punch",
 };
 
 export default function AttendanceExceptions() {
@@ -21,10 +22,14 @@ export default function AttendanceExceptions() {
 
   const isAdmin = user?.role === "it_admin" || user?.role === "super_admin";
 
-  const [exceptions, setExceptions] = useState<AttendanceException[]>(() => getAttendanceExceptions());
+  const [exceptions, setExceptions] = useState<AttendanceException[]>([]);
   const [filterType, setFilterType]   = useState<"all" | ExceptionType>("all");
   const [filterStatus, setFilterStatus] = useState<"all" | AttendanceException["status"]>("all");
   const [notesModal, setNotesModal]   = useState<{ id: string; notes: string } | null>(null);
+
+  useEffect(() => {
+    AttendanceExceptionService.getAll().then(setExceptions).catch(() => {});
+  }, []);
 
   const filtered = useMemo(() =>
     exceptions.filter(ex => {
@@ -39,18 +44,16 @@ export default function AttendanceExceptions() {
   const reviewed = exceptions.filter(e => e.status === "reviewed").length;
   const resolved = exceptions.filter(e => e.status === "approved" || e.status === "rejected").length;
 
-  const updateStatus = (id: string, status: AttendanceException["status"]) => {
-    const updated = exceptions.map(e => e.id === id ? { ...e, status } : e);
-    setExceptions(updated);
-    saveAttendanceExceptions(updated);
+  const updateStatus = async (id: string, status: AttendanceException["status"]) => {
+    const updated = await AttendanceExceptionService.update(id, { status });
+    setExceptions(prev => prev.map(e => e.id === id ? updated : e));
     showToast(`Exception marked as ${status}.`, "success");
   };
 
-  const saveNotes = () => {
+  const saveNotes = async () => {
     if (!notesModal) return;
-    const updated = exceptions.map(e => e.id === notesModal.id ? { ...e, notes: notesModal.notes } : e);
-    setExceptions(updated);
-    saveAttendanceExceptions(updated);
+    const updated = await AttendanceExceptionService.update(notesModal.id, { notes: notesModal.notes });
+    setExceptions(prev => prev.map(e => e.id === notesModal.id ? updated : e));
     setNotesModal(null);
     showToast("Notes saved.", "success");
   };

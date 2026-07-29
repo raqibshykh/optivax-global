@@ -1,22 +1,25 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { useAuth } from "../../context/AuthContext";
 import { UserService, type UserProfile } from "../../services/userService";
 import {
-  getSalarySlips, saveSalarySlips, printSalarySlip, printSalarySlipsBulk,
-  computeNet, computeDeductions, computeStrictDeductions, computeSlipBreakdown,
-  type SalarySlip,
-} from "../../mock/payrollData";
+  PayrollService, printSalarySlip, printSalarySlipsBulk, computeStrictDeductions,
+  countApprovedLeaveDaysInMonth,
+  computeNet, computeDeductions, computeSlipBreakdown,
+  type SalarySlip, type AdvanceSalaryRequest,
+} from "../../services/payrollService";
 import { AuditLogService } from "../../services/auditLogService";
-import { getCompanySettings } from "../../services/companySettingsService";
+import type { AuditLog } from "../../types";
+import { getCompanySettings, COMPANY_DEFAULTS, type CompanySettings } from "../../services/companySettingsService";
 import { useToast } from "../../context/ToastContext";
 import { notifySalarySlipGenerated } from "../../services/notificationHelpers";
-import { safeParse } from "../../lib/storage";
+import { EmployeeExtraService } from "../../services/employeeExtraService";
+import { AttendanceService, computeMonthlyReport, type AttendanceRecord } from "../../services/attendanceService";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-
-const EXTRA_KEY = "optivax_employee_extra";
 
 interface EmployeeExtraData {
   salary?: number;
@@ -74,15 +77,32 @@ function getDeptFromRole(role: string): string {
   return "General";
 }
 
-function buildSlip(
+async function buildSlip(
   emp: UserProfile,
   month: string,
   basicSalary: number,
-  generator: { id: string; name: string; role: string }
-): SalarySlip {
+  generator: { id: string; name: string; role: string },
+  allAdvances: AdvanceSalaryRequest[],
+  allSlips: SalarySlip[],
+  yearAttendance: AttendanceRecord[]
+): Promise<SalarySlip> {
   const dept = getDeptFromRole(emp.role ?? "");
 
-  const strictDeductions       = computeStrictDeductions(emp.id, month, basicSalary);
+  const approvedAdvances = allAdvances.filter(
+    (r) => r.employeeId === emp.id && (r.status === "approved" || r.status === "paid")
+  );
+  const pastSlips = allSlips.filter((s) => s.employeeId === emp.id);
+  const [yearStr, monthStr] = month.split("-");
+  const yearNum = parseInt(yearStr, 10);
+  const monthNum = parseInt(monthStr, 10);
+  const approvedLeaveDaysInMonth = await countApprovedLeaveDaysInMonth(emp.id, yearNum, monthNum);
+
+  const monthlyReport = computeMonthlyReport(emp.id, emp.full_name || emp.email, emp.role ?? "", monthNum, yearNum, yearAttendance);
+  const strictDeductions = computeStrictDeductions(basicSalary, approvedAdvances, pastSlips, approvedLeaveDaysInMonth, {
+    absentDays: monthlyReport.absentDays,
+    halfDays: monthlyReport.halfDays,
+    lateArrivals: monthlyReport.lateArrivals,
+  });
   const advanceSalaryDeduction = strictDeductions.advanceSalaryDeduction;
   const grossSalary            = basicSalary;
   const totalDeductions        = advanceSalaryDeduction
@@ -121,9 +141,10 @@ function buildSlip(
 
 // ── Slip view modal ────────────────────────────────────────────────────────────
 
-function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => void }) {
+function SlipViewModal({ slip, onClose, employeeAvatar }: { slip: SalarySlip; onClose: () => void; employeeAvatar?: string | null }) {
   const monthLabel = new Date(slip.salaryMonth + "-01").toLocaleString("default", { month: "long", year: "numeric" });
-  const company    = useMemo(() => getCompanySettings(), []);
+  const [company, setCompany] = useState(COMPANY_DEFAULTS);
+  useEffect(() => { getCompanySettings().then(setCompany).catch(() => {}); }, []);
   const bd         = computeSlipBreakdown(slip.basicSalary);
 
   const Row = ({ label, value, accent }: { label: string; value: string; accent?: string }) => (
@@ -138,7 +159,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
       <div className="relative overflow-hidden w-full max-w-xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl flex flex-col max-h-[90vh]">
         {/* Background watermark */}
         <img
-          src="/images/logo/logo-icon-dark.png"
+          src={`${import.meta.env.BASE_URL}images/logo/logo-icon-dark.png`}
           alt=""
           aria-hidden="true"
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[35deg] w-[52%] opacity-[0.07] pointer-events-none select-none z-[1]"
@@ -147,7 +168,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
         <div className="relative z-[2] bg-gradient-to-r from-[#1e3a5f] to-[#2563eb] text-white px-6 py-4 rounded-t-2xl flex-shrink-0">
           <div className="flex items-center gap-3 mb-3">
             <img
-              src="/images/logo/logo-icon-dark.png"
+              src={`${import.meta.env.BASE_URL}images/logo/logo-icon-dark.png`}
               alt={company.name}
               className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0"
             />
@@ -158,10 +179,13 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <button onClick={onClose} className="text-white opacity-70 hover:opacity-100 text-2xl leading-none ml-2">×</button>
           </div>
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs opacity-65 uppercase tracking-wide mb-0.5">Salary Slip</p>
-              <h3 className="text-lg font-bold">{slip.employeeName}</h3>
-              <p className="text-sm opacity-80">{monthLabel} · {slip.department}</p>
+            <div className="flex items-center gap-3">
+              <Avatar src={employeeAvatar} name={slip.employeeName} size="md" />
+              <div>
+                <p className="text-xs opacity-65 uppercase tracking-wide mb-0.5">Salary Slip</p>
+                <h3 className="text-lg font-bold">{slip.employeeName}</h3>
+                <p className="text-sm opacity-80">{monthLabel} · {slip.department}</p>
+              </div>
             </div>
             <div className="text-right text-xs opacity-60 mt-1">
               <p>ID: {slip.id.toUpperCase()}</p>
@@ -214,7 +238,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
 
         <div className="relative z-[2] px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3 flex-shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors">Close</button>
-          <button onClick={() => printSalarySlip(slip)} className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors">Print / Download PDF</button>
+          <button onClick={() => printSalarySlip(slip, company)} className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors">Print / Download PDF</button>
         </div>
       </div>
     </div>
@@ -224,10 +248,13 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
 // ── Audit log section ──────────────────────────────────────────────────────────
 
 function AuditSection() {
-  const logs = useMemo(
-    () => AuditLogService.getByEntityType("salary_slip").filter(l => l.action === "BULK_SALARY_SLIPS_GENERATED").slice(0, 10),
-    []
-  );
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+
+  useEffect(() => {
+    AuditLogService.getByEntityType("salary_slip")
+      .then((all) => setLogs(all.filter(l => l.action === "BULK_SALARY_SLIPS_GENERATED").slice(0, 10)))
+      .catch(() => setLogs([]));
+  }, []);
 
   if (logs.length === 0) return null;
 
@@ -248,7 +275,12 @@ function AuditSection() {
               const nv = (log.newValue ?? {}) as Record<string, unknown>;
               return (
                 <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white whitespace-nowrap">{log.performedByName}</td>
+                  <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      <Avatar name={log.performedByName} size="xs" />
+                      <span>{log.performedByName}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">{log.performedByRole}</td>
                   <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300 whitespace-nowrap">{String(nv.month ?? "—")}</td>
                   <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">{String(nv.department ?? "—")}</td>
@@ -281,6 +313,7 @@ export default function BulkSalarySlips() {
   const [extraData, setExtraData]   = useState<Record<string, EmployeeExtraData>>({});
   const [loading, setLoading]       = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [company, setCompany]       = useState<CompanySettings>(COMPANY_DEFAULTS);
 
   // Filters
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -300,17 +333,23 @@ export default function BulkSalarySlips() {
     (async () => {
       setLoading(true);
       try {
-        const allUsers = await UserService.getAll();
+        const [allUsers, extra] = await Promise.all([
+          UserService.getAll(),
+          EmployeeExtraService.getAll(),
+        ]);
         setEmployees(allUsers.filter(u => !EXCLUDED_ROLES.has(u.role ?? "")));
-        setExtraData(safeParse<Record<string, EmployeeExtraData>>(localStorage.getItem(EXTRA_KEY), {}));
+        setExtraData(extra);
       } catch {
         showToast("Failed to load employee data", "error");
       } finally {
         setLoading(false);
       }
     })();
-    setAllSlips(getSalarySlips());
-  }, []);
+    PayrollService.getSalarySlips().then(setAllSlips).catch(() => setAllSlips([]));
+    getCompanySettings().then(setCompany).catch(() => {});
+    // showToast is stable (memoized in ToastContext) — safe to include
+    // without turning this into anything but a mount-only effect.
+  }, [showToast]);
 
   const departments = useMemo(
     () => [...new Set(employees.map(e => getDeptFromRole(e.role ?? "")))].sort(),
@@ -379,12 +418,17 @@ export default function BulkSalarySlips() {
 
     setGenerating(true);
     try {
-      const currentSlips = getSalarySlips();
+      const yearNum = parseInt(selectedMonth.split("-")[0], 10);
+      const [currentSlips, currentAdvances, yearAttendance] = await Promise.all([
+        PayrollService.getSalarySlips(),
+        PayrollService.getAdvanceRequests(),
+        AttendanceService.getYearData(yearNum),
+      ]);
       const generator = { id: user?.id ?? "", name: user?.name ?? "", role: user?.role ?? "" };
 
-      const newSlips: SalarySlip[] = toProcess.map(row =>
-        buildSlip(row.emp, selectedMonth, row.basicSalary, generator)
-      );
+      const newSlips: SalarySlip[] = await Promise.all(toProcess.map(row =>
+        buildSlip(row.emp, selectedMonth, row.basicSalary, generator, currentAdvances, currentSlips, yearAttendance)
+      ));
 
       // Remove old slips for employees being regenerated
       const toRegenerateIds = new Set(
@@ -393,7 +437,7 @@ export default function BulkSalarySlips() {
       const retained = currentSlips.filter(s => !toRegenerateIds.has(s.id));
       const updated  = [...retained, ...newSlips];
 
-      saveSalarySlips(updated);
+      await PayrollService.saveSalarySlips(updated);
       setAllSlips(updated);
 
       // Reset processed rows to "skip" (slip now exists)
@@ -449,8 +493,8 @@ export default function BulkSalarySlips() {
       showToast("No generated slips to download for current filters.", "info");
       return;
     }
-    printSalarySlipsBulk(slipsToDownload);
-  }, [employeeRows, showToast]);
+    printSalarySlipsBulk(slipsToDownload, company);
+  }, [employeeRows, showToast, company]);
 
   // ── Access guard ─────────────────────────────────────────────────────────────
 
@@ -615,7 +659,13 @@ export default function BulkSalarySlips() {
       <AuditSection />
 
       {/* ── Modals ──────────────────────────────────────────────────────── */}
-      {viewingSlip && <SlipViewModal slip={viewingSlip} onClose={() => setViewingSlip(null)} />}
+      {viewingSlip && (
+        <SlipViewModal
+          slip={viewingSlip}
+          onClose={() => setViewingSlip(null)}
+          employeeAvatar={employees.find(e => e.id === viewingSlip.employeeId)?.avatar_url}
+        />
+      )}
     </>
   );
 }
@@ -648,8 +698,7 @@ function EmployeeTableRow({
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
       {/* Employee */}
       <td className="px-4 py-3 whitespace-nowrap">
-        <p className="text-sm font-medium text-gray-900 dark:text-white">{emp.full_name || emp.email}</p>
-        <p className="text-xs text-gray-400">{emp.email}</p>
+        <EmployeeIdentity src={emp.avatar_url} name={emp.full_name || emp.email} employeeId={emp.email} size="sm" />
       </td>
 
       {/* Department */}

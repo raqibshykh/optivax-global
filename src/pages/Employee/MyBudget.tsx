@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
-import { getMemberAllocation, type MemberAllocation } from "../../mock/budgetData";
+import { BudgetService, type MemberAllocation } from "../../services/budgetService";
 
 const fmtRs = (n: number) => `Rs. ${Math.round(n).toLocaleString()}`;
 
@@ -67,6 +67,7 @@ function AllocationCard({ alloc }: { alloc: MemberAllocation }) {
           <Detail label="Allocation Date" value={new Date(alloc.allocatedAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })} />
           <Detail label="Utilization"    value={`${pct}%`} />
         </div>
+        <p className="text-[11px] text-gray-400 italic">"Used" is recorded manually by your department admin, not tracked automatically from expenses.</p>
 
         {pct >= 85 && (
           <div className={`p-3 rounded-xl text-sm ${pct >= 100 ? "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400" : "bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400"}`}>
@@ -83,7 +84,9 @@ export default function MyBudget() {
   const [alloc, setAlloc] = useState<MemberAllocation | null>(null);
 
   useEffect(() => {
-    if (user?.id) setAlloc(getMemberAllocation(user.id) ?? null);
+    if (user?.id) {
+      BudgetService.getMemberAllocation(user.id).then((a) => setAlloc(a ?? null)).catch(() => setAlloc(null));
+    }
   }, [user?.id]);
 
   return (

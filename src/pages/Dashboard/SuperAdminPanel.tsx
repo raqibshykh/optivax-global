@@ -1,41 +1,39 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
-import { api } from "../../lib/client";
 import Chart from "react-apexcharts";
-import { UserService } from "../../services/userService";
-import type { UserProfile } from "../../services/userService";
+import { UserService, type UserProfile } from "../../services/userService";
 import { notifyUserCreated } from "../../services/notificationHelpers";
 import { useAuth } from "../../context/AuthContext";
-import { storeMockPassword } from "../../lib/client";
-import { safeParse } from "../../lib/storage";
-import type { LeaveRequest } from "../Client/Profile";
-import { seedAllMockData } from "../../lib/devSeed";
-import { getCampaigns, getTargets, getSalesTasks } from "../../mock/salesData";
+import { ClientService } from "../../services/clientService";
+import { ProjectService } from "../../services/projectService";
+import { PaymentService } from "../../services/paymentService";
+import { InvoiceService } from "../../services/invoiceService";
+import { EmailService } from "../../services/emailService";
+import { LeaveRequestService, type LeaveRequest } from "../../services/leaveRequestService";
+import { EmployeeExtraService, type EmployeeExtraData } from "../../services/employeeExtraService";
+import { TaskService } from "../../services/taskService";
+import { DeliverableService } from "../../services/deliverableService";
+import { MarketingCampaignService, type MarketingCampaign as MarketingCampaignBase } from "../../services/marketingCampaignService";
+import { CampaignService, SalesTargetService, SalesTaskService } from "../../services/salesOpsService";
+import { OrganizationService, type Organization } from "../../services/organizationService";
+import { SubscriptionService, type Subscription } from "../../services/subscriptionService";
 import { AuditLogService } from "../../services/auditLogService";
 import {
-  getContentEntries, STATUS_BADGE, STATUS_DOT, PROD_STATUS_BADGE, PROD_STATUS_DOT, PLATFORM_ABBR,
+  ContentCalendarService, STATUS_BADGE, STATUS_DOT, PROD_STATUS_BADGE, PROD_STATUS_DOT, PLATFORM_ABBR,
   type ContentEntry,
-} from "../../mock/contentCalendarData";
+} from "../../services/contentCalendarService";
+import type { Client, Project, Invoice, Task, Deliverable, CampaignBudget, SalesTarget, SalesTask, EmailTemplate, EmailCampaign, EmailAutomation } from "../../types";
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
-interface Organization    { id: string; name: string; owner_id: string; created_at: string; }
-interface Payment         { id: string; amount: number; currency?: string; created_at: string; date?: string; status?: string; method: string; transactionId: string; invoiceId?: string; }
-interface Subscription    { id: string; organization_id: string; plan_name: string; status: string; billing_cycle: string; current_period_end: string; }
-interface StoredClient    { id: string; companyName?: string; name?: string; company?: string; contactName?: string; email: string; phone?: string; status: string; }
-interface Project         { id: string; name: string; clientId: string; status: string; priority: string; progress: number; budget: number; spent: number; deadline: string; description: string; }
-interface EmployeeExtra   { userId: string; salary: number; salaryStatus: string; workMode: string; leavesTaken: number; }
-interface MockTask        { id: string; title: string; description?: string; status: string; priority: string; assignee?: string; assigneeId?: string; dueDate?: string; budget?: number; budgetUsed?: number; category?: string; }
-interface Invoice         { id: string; number: string; clientId: string; projectId?: string; description?: string; amount: number; status: string; issueDate: string; dueDate: string; paidDate?: string; }
-interface MarketingCampaign { id: string; name: string; budget: number; spent: number; status: string; platform?: string; startDate?: string; endDate?: string; impressions?: number; clicks?: number; conversions?: number; }
-interface SalesCampaign   { id: string; campaignName: string; totalBudget: number; budgetSpent: number; status: string; startDate?: string; endDate?: string; notes?: string; }
-interface SalesTarget     { id: string; memberId: string; memberName: string; monthlyTarget: number; quarterlyTarget: number; annualTarget?: number; achievedAmount: number; period: string; }
-interface SalesTask       { id: string; title: string; description?: string; assignedTo: string; assignedName?: string; priority: string; dueDate: string; status: string; estimatedValue: number; notes?: string; }
-interface Deliverable     { id: string; title: string; description?: string; clientName?: string; projectName?: string; status: string; dueDate?: string; uploadedByName?: string; approvedByName?: string; uploadedAt?: string; }
-interface EmailTemplate   { id: string; name: string; subject: string; type?: string; createdAt?: string; }
-interface EmailCampaign   { id: string; name: string; subject: string; status: string; sentDate?: string; scheduleDate?: string; audienceTags?: string[]; stats?: { sent: number; opened: number; clicked: number }; }
-interface EmailAutomation { id: string; name: string; triggerType: string; status: string; delayHours?: number; }
-interface CreateUserForm  { full_name: string; email: string; password: string; role: string; company: string; }
+// Payment and MarketingCampaign have no exported service type that fully covers
+// the fields this dashboard displays (PaymentService's StripePaymentRecord has
+// no `status`; MarketingCampaignService's type omits impressions/clicks/etc.),
+// so they stay local — MarketingCampaign extends the service type to pick up
+// any fields it does define.
+interface Payment            { id: string; amount: number; currency?: string; created_at: string; date?: string; status?: string; method: string; transactionId: string; invoiceId?: string; }
+interface MarketingCampaign extends MarketingCampaignBase { startDate?: string; endDate?: string; impressions?: number; clicks?: number; conversions?: number; }
+interface CreateUserForm     { full_name: string; email: string; password: string; role: string; company: string; }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const ALL_ROLES = [
@@ -129,9 +127,6 @@ const PANEL_LINKS = [
   { label: "Audit Logs",          path: "/admin/audit-logs",         dept: "Management" },
 ];
 
-const LEAVE_KEY = "optivax_leave_requests";
-const EXTRA_KEY = "optivax_employee_extra";
-
 const TABS = [
   "Overview", "Users", "Projects", "Clients", "Departments",
   "Tasks", "Invoices", "Transactions", "Campaigns", "Deliverables", "Email", "Leave Requests",
@@ -200,59 +195,28 @@ export default function SuperAdminPanel() {
   const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
 
-  // ── State — seeded from localStorage immediately, refreshed via API ──────────
-  const [users,         setUsers]         = useState<UserProfile[]>(() =>
-    safeParse<UserProfile[]>(localStorage.getItem("mock_profiles"), [])
-  );
-  const [clients,       setClients]       = useState<StoredClient[]>(() =>
-    safeParse<StoredClient[]>(localStorage.getItem("optivax_clients"), [])
-  );
-  const [projects,      setProjects]      = useState<Project[]>(() =>
-    safeParse<Project[]>(localStorage.getItem("mock_projects"), [])
-  );
-  const [payments,      setPayments]      = useState<Payment[]>(() =>
-    safeParse<Payment[]>(localStorage.getItem("mock_payments"), [])
-  );
-  const [invoices,      setInvoices]      = useState<Invoice[]>(() =>
-    safeParse<Invoice[]>(localStorage.getItem("mock_invoices"), [])
-  );
-  const [organizations, setOrganizations] = useState<Organization[]>(() =>
-    safeParse<Organization[]>(localStorage.getItem("mock_organizations"), [])
-  );
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>(() =>
-    safeParse<Subscription[]>(localStorage.getItem("mock_subscriptions"), [])
-  );
-  const [emailTemplates,  setEmailTemplates]  = useState<EmailTemplate[]>(() =>
-    safeParse<EmailTemplate[]>(localStorage.getItem("email_templates"), [])
-  );
-  const [emailCampaigns,  setEmailCampaigns]  = useState<EmailCampaign[]>(() =>
-    safeParse<EmailCampaign[]>(localStorage.getItem("email_campaigns"), [])
-  );
-  const [emailAutomations,setEmailAutomations]= useState<EmailAutomation[]>(() =>
-    safeParse<EmailAutomation[]>(localStorage.getItem("email_automations"), [])
-  );
+  // ── State — populated via API calls in fetchData() below ─────────────────
+  const [users,         setUsers]         = useState<UserProfile[]>([]);
+  const [clients,       setClients]       = useState<Client[]>([]);
+  const [projects,      setProjects]      = useState<Project[]>([]);
+  const [payments,      setPayments]      = useState<Payment[]>([]);
+  const [invoices,      setInvoices]      = useState<Invoice[]>([]);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [emailTemplates,  setEmailTemplates]  = useState<EmailTemplate[]>([]);
+  const [emailCampaigns,  setEmailCampaigns]  = useState<EmailCampaign[]>([]);
+  const [emailAutomations,setEmailAutomations]= useState<EmailAutomation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // ── localStorage-backed state ─────────────────────────────────────────────
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() =>
-    safeParse<LeaveRequest[]>(localStorage.getItem(LEAVE_KEY), [])
-  );
-  const [extras, setExtras] = useState<Record<string, EmployeeExtra>>(() =>
-    safeParse<Record<string, EmployeeExtra>>(localStorage.getItem(EXTRA_KEY), {})
-  );
-  const [mockTasks,     setMockTasks]     = useState<MockTask[]>(() =>
-    safeParse<MockTask[]>(localStorage.getItem("mock_tasks"), [])
-  );
-  const [salesTasks,    setSalesTasks]    = useState<SalesTask[]>(() => getSalesTasks() as SalesTask[]);
-  const [mktCampaigns,  setMktCampaigns]  = useState<MarketingCampaign[]>(() =>
-    safeParse<MarketingCampaign[]>(localStorage.getItem("marketing_campaigns"), [])
-  );
-  const [salesCampaigns,setSalesCampaigns]= useState<SalesCampaign[]>(() => getCampaigns() as SalesCampaign[]);
-  const [salesTargets,  setSalesTargets]  = useState<SalesTarget[]>(() => getTargets() as SalesTarget[]);
-  const [deliverables,  setDeliverables]  = useState<Deliverable[]>(() =>
-    safeParse<Deliverable[]>(localStorage.getItem("optivax_deliverables"), [])
-  );
-  const [calEntries,    setCalEntries]    = useState<ContentEntry[]>(() => getContentEntries());
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [extras, setExtras] = useState<Record<string, EmployeeExtraData>>({});
+  const [mockTasks,     setMockTasks]     = useState<Task[]>([]);
+  const [salesTasks,    setSalesTasks]    = useState<SalesTask[]>([]);
+  const [mktCampaigns,  setMktCampaigns]  = useState<MarketingCampaign[]>([]);
+  const [salesCampaigns,setSalesCampaigns]= useState<CampaignBudget[]>([]);
+  const [salesTargets,  setSalesTargets]  = useState<SalesTarget[]>([]);
+  const [deliverables,  setDeliverables]  = useState<Deliverable[]>([]);
+  const [calEntries,    setCalEntries]    = useState<ContentEntry[]>([]);
 
   // ── Modal / form state ────────────────────────────────────────────────────
   const [showCreateUser, setShowCreateUser] = useState(false);
@@ -275,59 +239,63 @@ export default function SuperAdminPanel() {
   const [emailTab,       setEmailTab]       = useState<"templates" | "campaigns" | "automations">("campaigns");
   const [leaveFilter,    setLeaveFilter]    = useState<"All" | "Pending" | "Approved" | "Rejected">("All");
 
-  // ── Data fetching — refreshes API state; localStorage provides the initial values ──
+  // ── Data fetching — loads all dashboard data via services ────────────────
   const fetchData = async () => {
+    setIsLoading(true);
     try {
       const results = await Promise.allSettled([
-        api.get<UserProfile[]>("/saas/v1/profiles/list"),
-        api.get<Organization[]>("/saas/v1/organizations/list"),
-        api.get<Payment[]>("/saas/v1/payments/list"),
-        api.get<Subscription[]>("/saas/v1/subscriptions/list"),
-        api.get<StoredClient[]>("/saas/v1/clients/list"),
-        api.get<Project[]>("/saas/v1/projects/list"),
-        api.get<Invoice[]>("/saas/v1/invoices/list"),
-        api.get<EmailTemplate[]>("/saas/v1/email/templates/list"),
-        api.get<EmailCampaign[]>("/saas/v1/email/campaigns/list"),
-        api.get<EmailAutomation[]>("/saas/v1/email/automations/list"),
+        UserService.getAll(),                      // 0
+        OrganizationService.getAll(),               // 1
+        PaymentService.getAll(),                    // 2
+        SubscriptionService.getAll(),                // 3
+        ClientService.getAll(),                     // 4
+        ProjectService.getAll(),                     // 5
+        InvoiceService.getAll(),                     // 6
+        EmailService.getTemplates(),                 // 7
+        EmailService.getCampaigns(),                 // 8
+        EmailService.getAutomations(),                // 9
+        LeaveRequestService.getEmployeeRequests(),    // 10
+        TaskService.getAll(),                        // 11
+        SalesTaskService.getAll(),                    // 12
+        MarketingCampaignService.getAll(),            // 13
+        CampaignService.getAll(),                     // 14
+        SalesTargetService.getAll(),                  // 15
+        DeliverableService.getAll(),                   // 16
+        ContentCalendarService.getAll(),               // 17
+        EmployeeExtraService.getAll(),                 // 18
       ]);
       const pick = <T,>(r: PromiseSettledResult<T[]>): T[] =>
         r.status === "fulfilled" && Array.isArray(r.value) && r.value.length > 0 ? r.value : [];
-      const apiUsers   = pick(results[0]);
-      const apiClients = pick(results[4]);
-      const apiProjects= pick(results[5]);
-      // Only overwrite localStorage-seeded state when API returns non-empty data
-      if (apiUsers.length)    setUsers(apiUsers);
-      if (pick(results[1]).length) setOrganizations(pick(results[1]));
-      if (pick(results[2]).length) setPayments(pick(results[2]));
-      if (pick(results[3]).length) setSubscriptions(pick(results[3]));
-      if (apiClients.length)  setClients(apiClients);
-      if (apiProjects.length) setProjects(apiProjects);
-      if (pick(results[6]).length) setInvoices(pick(results[6]));
-      if (pick(results[7]).length) setEmailTemplates(pick(results[7]));
-      if (pick(results[8]).length) setEmailCampaigns(pick(results[8]));
-      if (pick(results[9]).length) setEmailAutomations(pick(results[9]));
+      if (pick(results[0]).length)  setUsers(pick(results[0]));
+      if (pick(results[1]).length)  setOrganizations(pick(results[1]));
+      if (pick(results[2]).length)  setPayments(pick(results[2]));
+      if (pick(results[3]).length)  setSubscriptions(pick(results[3]));
+      if (pick(results[4]).length)  setClients(pick(results[4]));
+      if (pick(results[5]).length)  setProjects(pick(results[5]));
+      if (pick(results[6]).length)  setInvoices(pick(results[6]));
+      if (pick(results[7]).length)  setEmailTemplates(pick(results[7]));
+      if (pick(results[8]).length)  setEmailCampaigns(pick(results[8]));
+      if (pick(results[9]).length)  setEmailAutomations(pick(results[9]));
+      if (pick(results[10]).length) setLeaveRequests(pick(results[10]));
+      if (pick(results[11]).length) setMockTasks(pick(results[11]));
+      if (pick(results[12]).length) setSalesTasks(pick(results[12]));
+      if (pick(results[13]).length) setMktCampaigns(pick(results[13]));
+      if (pick(results[14]).length) setSalesCampaigns(pick(results[14]));
+      if (pick(results[15]).length) setSalesTargets(pick(results[15]));
+      if (pick(results[16]).length) setDeliverables(pick(results[16]));
+      if (pick(results[17]).length) setCalEntries(pick(results[17]));
+      const extrasResult = results[18];
+      if (extrasResult.status === "fulfilled" && Object.keys(extrasResult.value).length > 0) {
+        setExtras(extrasResult.value);
+      }
     } catch {
       // data load failure is handled by empty state in UI
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => { fetchData(); }, []);
-
-  useEffect(() => {
-    const handler = (e: StorageEvent) => {
-      if (e.key === LEAVE_KEY)              setLeaveRequests(safeParse<LeaveRequest[]>(e.newValue, []));
-      if (e.key === EXTRA_KEY)              setExtras(safeParse<Record<string, EmployeeExtra>>(e.newValue, {}));
-      if (e.key === "mock_tasks")           setMockTasks(safeParse<MockTask[]>(e.newValue, []));
-      if (e.key === "marketing_campaigns")  setMktCampaigns(safeParse<MarketingCampaign[]>(e.newValue, []));
-      if (e.key === "optivax_deliverables") setDeliverables(safeParse<Deliverable[]>(e.newValue, []));
-      if (e.key === "sales_tasks")          setSalesTasks(getSalesTasks() as SalesTask[]);
-      if (e.key === "sales_campaigns")      setSalesCampaigns(getCampaigns() as SalesCampaign[]);
-      if (e.key === "sales_targets")        setSalesTargets(getTargets() as SalesTarget[]);
-      if (e.key === "mkt_content_calendar_v1") setCalEntries(getContentEntries());
-    };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  }, []);
 
   // ── Derived values ────────────────────────────────────────────────────────
   const employees    = useMemo(() => users.filter(u => u.role !== "client"), [users]);
@@ -416,8 +384,7 @@ export default function SuperAdminPanel() {
     }
     setCreateLoading(true); setCreateError("");
     try {
-      const newUser = await UserService.create({ full_name: createForm.full_name, email: createForm.email, avatar_url: "", company: createForm.company, role: createForm.role, created_at: new Date().toISOString() });
-      storeMockPassword(createForm.email, createForm.password);
+      const newUser = await UserService.create({ full_name: createForm.full_name, email: createForm.email, avatar_url: "", company: createForm.company, role: createForm.role, created_at: new Date().toISOString(), password: createForm.password });
       if (currentUser) {
         notifyUserCreated(currentUser.id, currentUser.name, currentUser.role, newUser.id, newUser.full_name, newUser.email, newUser.role);
         AuditLogService.add({
@@ -439,64 +406,29 @@ export default function SuperAdminPanel() {
   };
 
   const handleDeleteUser = async (id: string) => {
-    try { await UserService.delete(id); fetchData(); } catch {}
+    try { await UserService.delete(id); fetchData(); } catch { /* non-critical */ }
     setDeleteUserId(null);
   };
 
-  const handleResetMockData = () => {
-    const MOCK_KEYS = [
-      "mock_profiles", "optivax_clients", "mock_projects", "mock_invoices",
-      "mock_payments", "mock_tasks", "mock_files", "mock_revisions",
-      "marketing_campaigns", "optivax_deliverables",
-      "optivax_leave_requests", "optivax_employee_extra", "email_templates",
-      "email_campaigns", "email_automations", "mock_organizations", "mock_subscriptions",
-      "mock_attendance", "mock_assignments", "mock_leads", "mock_commissions",
-      "sales_campaigns", "sales_tasks", "sales_targets",
-      "social_links", "social_clicks", "social_account_metrics",
-      "optivax_audit_logs", "mock_notifications", "mock_passwords",
-      "mock_it_tickets", "mock_biometric_devices", "mock_device_sync_logs", "mock_attendance_exceptions",
-      "mock_conversations", "mock_budgets", "mock_budget_audit_logs",
-      "mock_salary_slips", "mock_advance_requests",
-    ];
-    MOCK_KEYS.forEach(k => localStorage.removeItem(k));
-    seedAllMockData();
-    // re-read all state directly from freshly-seeded localStorage
-    setUsers         (safeParse<UserProfile[]>  (localStorage.getItem("mock_profiles"),        []));
-    setClients       (safeParse<StoredClient[]> (localStorage.getItem("optivax_clients"),       []));
-    setProjects      (safeParse<Project[]>      (localStorage.getItem("mock_projects"),         []));
-    setPayments      (safeParse<Payment[]>      (localStorage.getItem("mock_payments"),         []));
-    setInvoices      (safeParse<Invoice[]>      (localStorage.getItem("mock_invoices"),         []));
-    setOrganizations (safeParse<Organization[]> (localStorage.getItem("mock_organizations"),    []));
-    setSubscriptions (safeParse<Subscription[]> (localStorage.getItem("mock_subscriptions"),    []));
-    setEmailTemplates  (safeParse<EmailTemplate[]>  (localStorage.getItem("email_templates"),   []));
-    setEmailCampaigns  (safeParse<EmailCampaign[]>  (localStorage.getItem("email_campaigns"),   []));
-    setEmailAutomations(safeParse<EmailAutomation[]>(localStorage.getItem("email_automations"), []));
-    setLeaveRequests (safeParse<LeaveRequest[]> (localStorage.getItem(LEAVE_KEY),               []));
-    setExtras        (safeParse<Record<string, EmployeeExtra>>(localStorage.getItem(EXTRA_KEY), {}));
-    setMockTasks     (safeParse<MockTask[]>     (localStorage.getItem("mock_tasks"),            []));
-    setMktCampaigns  (safeParse<MarketingCampaign[]>(localStorage.getItem("marketing_campaigns"),[]));
-    setDeliverables  (safeParse<Deliverable[]>  (localStorage.getItem("optivax_deliverables"),  []));
-    setSalesTasks(getSalesTasks() as SalesTask[]);
-    setSalesCampaigns(getCampaigns() as SalesCampaign[]);
-    setSalesTargets(getTargets() as SalesTarget[]);
-  };
-
-  const handleLeaveAction = (id: string, action: "Approved" | "Rejected") => {
+  const handleLeaveAction = async (id: string, action: "Approved" | "Rejected") => {
     const leave = leaveRequests.find(l => l.id === id);
-    const updated = leaveRequests.map(l => l.id === id ? { ...l, status: action } : l);
-    setLeaveRequests(updated);
-    localStorage.setItem(LEAVE_KEY, JSON.stringify(updated));
-    if (currentUser && leave) {
-      AuditLogService.add({
-        action: action === "Approved" ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
-        entityType: "leave_request",
-        entityId: leave.id,
-        entityName: `${leave.employeeName} — ${leave.type} (${leave.days}d)`,
-        performedBy: currentUser.id,
-        performedByName: currentUser.name,
-        performedByRole: currentUser.role,
-        description: `${action} leave request for ${leave.employeeName}: ${leave.type} from ${leave.startDate} to ${leave.endDate}`,
-      });
+    try {
+      await LeaveRequestService.updateEmployeeRequestStatus(id, action);
+      setLeaveRequests(prev => prev.map(l => l.id === id ? { ...l, status: action } : l));
+      if (currentUser && leave) {
+        AuditLogService.add({
+          action: action === "Approved" ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
+          entityType: "leave_request",
+          entityId: leave.id,
+          entityName: `${leave.employeeName} — ${leave.type} (${leave.days}d)`,
+          performedBy: currentUser.id,
+          performedByName: currentUser.name,
+          performedByRole: currentUser.role,
+          description: `${action} leave request for ${leave.employeeName}: ${leave.type} from ${leave.startDate} to ${leave.endDate}`,
+        });
+      }
+    } catch {
+      // no-op — the list will reflect the last confirmed server state on next reload
     }
   };
 
@@ -538,10 +470,6 @@ export default function SuperAdminPanel() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Super Admin Control Center</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Complete platform visibility — all data, all departments, all permissions.</p>
         </div>
-        <button onClick={handleResetMockData}
-          className="px-4 py-2 text-sm font-medium text-white bg-gray-700 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 rounded-lg transition-colors whitespace-nowrap">
-          ↺ Reload Mock Data
-        </button>
       </div>
 
       {/* Tab bar */}

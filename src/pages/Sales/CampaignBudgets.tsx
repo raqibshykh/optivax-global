@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { getCampaigns, saveCampaigns, SALES_MEMBERS } from "../../mock/salesData";
+import { CampaignService } from "../../services/salesOpsService";
+import { UserService } from "../../services/userService";
 import { CampaignBudget } from "../../types";
 import { canManageBudget } from "../../utils/rbac";
 import { notifySalesBudgetCreated, notifySalesBudgetUpdated, notifySalesBudgetDeleted } from "../../services/notificationHelpers";
@@ -34,22 +36,34 @@ export default function CampaignBudgets() {
   const isAdmin = canManageBudget(user ?? null);
 
   const [campaigns, setCampaigns] = useState<CampaignBudget[]>([]);
+  const [salesMembers, setSalesMembers] = useState<{ id: string; name: string; avatar_url?: string }[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<CampaignBudget | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
-  const loadData = () => {
-    const all = getCampaigns();
+  const loadData = useCallback(async () => {
+    const all = await CampaignService.getAll();
     if (!isAdmin && user) {
       setCampaigns(all.filter(c => c.assignedMembers.includes(user.id)));
     } else {
       setCampaigns(all);
     }
-  };
+    // Deliberately depends on the primitive `user?.id`, not the `user`
+    // object reference — only the id is read inside.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, user?.id]);
 
-  useEffect(() => { loadData(); }, [isAdmin, user?.id]);
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Sales team members are real users (role "sales_member"), sourced from
+  // UserService rather than a separate mock member list.
+  useEffect(() => {
+    UserService.listByRole("sales_member")
+      .then(profiles => setSalesMembers(profiles.map(p => ({ id: p.id, name: p.full_name, avatar_url: p.avatar_url }))))
+      .catch(() => {});
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -72,15 +86,14 @@ export default function CampaignBudgets() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
       showToast("You must be logged in to perform this action", "error");
       return;
     }
-    const all = getCampaigns();
     if (editing) {
-      saveCampaigns(all.map(c => c.id === editing.id ? { ...c, ...form } : c));
+      await CampaignService.update(editing.id, form);
       if (typeof notifySalesBudgetUpdated === "function") {
         notifySalesBudgetUpdated(user.id, user.name, user.role, form.campaignName, editing.id);
       } else {
@@ -88,13 +101,11 @@ export default function CampaignBudgets() {
       }
       showToast("Campaign updated", "success");
     } else {
-      const next: CampaignBudget = {
-        id: `cb${Date.now()}`,
+      const next = await CampaignService.create({
         ...form,
         createdAt: new Date().toISOString(),
         createdBy: user.id,
-      };
-      saveCampaigns([next, ...all]);
+      });
       if (typeof notifySalesBudgetCreated === "function") {
         notifySalesBudgetCreated(user.id, user.name, user.role, next.campaignName, next.id);
       }
@@ -104,11 +115,10 @@ export default function CampaignBudgets() {
     loadData();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm("Delete this campaign budget?")) return;
-    const all = getCampaigns();
-    const campaignToDelete = all.find(c => c.id === id);
-    saveCampaigns(all.filter(c => c.id !== id));
+    const campaignToDelete = campaigns.find(c => c.id === id);
+    await CampaignService.delete(id);
     if (campaignToDelete && user && typeof notifySalesBudgetDeleted === "function") {
       notifySalesBudgetDeleted(user.id, user.name, user.role, campaignToDelete.campaignName, id);
     }
@@ -219,9 +229,7 @@ export default function CampaignBudgets() {
               {filtered.map(c => {
                 const remaining = c.totalBudget - c.budgetSpent;
                 const pct = c.totalBudget > 0 ? Math.round((c.budgetSpent / c.totalBudget) * 100) : 0;
-                const memberNames = c.assignedMembers
-                  .map(id => SALES_MEMBERS.find(m => m.id === id)?.name || id)
-                  .join(", ");
+                const members = c.assignedMembers.map(id => salesMembers.find(m => m.id === id));
                 return (
                   <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                     <td className="px-4 py-4 max-w-52">
@@ -239,7 +247,23 @@ export default function CampaignBudgets() {
                         <span className="text-xs text-gray-600 dark:text-gray-400 w-8 text-right">{pct}%</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-xs text-gray-600 dark:text-gray-400 max-w-36">{memberNames || "—"}</td>
+                    <td className="px-4 py-4 max-w-36">
+                      {members.length > 0 ? (
+                        <div className="flex items-center -space-x-2">
+                          {members.map((m, idx) => (
+                            <Avatar
+                              key={c.assignedMembers[idx]}
+                              src={m?.avatar_url}
+                              name={m?.name || c.assignedMembers[idx]}
+                              size="xs"
+                              className="ring-2 ring-white dark:ring-gray-900"
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-600 dark:text-gray-400">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-4 text-xs text-gray-500 whitespace-nowrap">{c.startDate}<br />{c.endDate}</td>
                     <td className="px-4 py-4">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[c.status]}`}>
@@ -341,7 +365,7 @@ export default function CampaignBudgets() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Assign Members</label>
                 <div className="space-y-2 p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  {SALES_MEMBERS.map(m => (
+                  {salesMembers.map(m => (
                     <label key={m.id} className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -349,6 +373,7 @@ export default function CampaignBudgets() {
                         onChange={() => toggleMember(m.id)}
                         className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
                       />
+                      <Avatar src={m.avatar_url} name={m.name} size="xs" />
                       <span className="text-sm text-gray-700 dark:text-gray-300">{m.name}</span>
                     </label>
                   ))}

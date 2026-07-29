@@ -2,12 +2,15 @@ import React, { useState, useEffect } from "react";
 import { Modal } from "../../components/ui/modal";
 import Input from "../../components/form/input/InputField";
 import Label from "../../components/form/Label";
+import Avatar from "../../components/common/Avatar";
 import { Project } from "../../types";
 import { useClients } from "../../hooks/useClients";
 import { useAuth } from "../../context/AuthContext";
+import { useDepartments } from "../../context/DepartmentContext";
 import { canManageBudget } from "../../utils/rbac";
-import { safeParse } from "../../lib/storage";
 import { NotificationService } from "../../services/notificationService";
+import { UserService } from "../../services/userService";
+import { RevisionService } from "../../services/revisionService";
 
 interface UserProfile {
   id: string;
@@ -15,6 +18,7 @@ interface UserProfile {
   role?: string;
   departmentId?: string;
   designation?: string;
+  avatar_url?: string;
 }
 
 interface ProjectModalProps {
@@ -24,16 +28,10 @@ interface ProjectModalProps {
   onSave: (projectData: Omit<Project, "id" | "createdAt" | "updatedAt">) => Promise<void>;
 }
 
-const PROFILES_KEY  = "mock_profiles";
-const REVISIONS_KEY = "mock_revisions";
-
-function loadProfiles(): UserProfile[] {
-  return safeParse<UserProfile[]>(localStorage.getItem(PROFILES_KEY) ?? "[]", []);
-}
-
 export default function ProjectModal({ isOpen, onClose, project, onSave }: ProjectModalProps) {
   const { clients } = useClients();
   const { user } = useAuth();
+  const { getDepartmentName } = useDepartments();
   const isBudgetOwner = canManageBudget(user ?? null);
   const isSuper   = user?.role === "super_admin";
   const isManager = user?.role === "management";
@@ -59,8 +57,10 @@ export default function ProjectModal({ isOpen, onClose, project, onSave }: Proje
 
   useEffect(() => {
     if (!isOpen) return;
-    const all = loadProfiles();
-    setProfiles(all);
+    (async () => {
+      const all = await UserService.getAll();
+      setProfiles(all);
+    })();
     if (project) {
       setFormData({
         clientId: project.clientId,
@@ -144,19 +144,15 @@ export default function ProjectModal({ isOpen, onClose, project, onSave }: Proje
             removed.length ? `Removed: ${names(removed)}` : "",
           ].filter(Boolean).join(" | ");
 
-          // Persist revision entry directly to localStorage
-          const revisions = safeParse<any[]>(localStorage.getItem(REVISIONS_KEY) ?? "[]", []);
-          revisions.unshift({
-            id: `rev-${Date.now()}`,
+          // Persist revision entry via the RevisionService (backend-backed audit trail)
+          await RevisionService.create({
             projectId: project.id,
             clientId: formData.clientId,
             comment: `Assignment change — ${comment}`,
             status: "pending",
             type: "assignment_change",
             updatedBy: user?.id,
-            created_at: now,
           });
-          localStorage.setItem(REVISIONS_KEY, JSON.stringify(revisions));
 
           // Notify newly assigned users
           await Promise.allSettled(
@@ -299,9 +295,10 @@ export default function ProjectModal({ isOpen, onClose, project, onSave }: Proje
                   const p = profileById(uid);
                   return (
                     <div key={uid} className="flex items-center gap-2 text-sm py-1 px-2 rounded bg-gray-50 dark:bg-gray-800">
+                      <Avatar src={p?.avatar_url} name={p?.full_name || uid} size="xs" />
                       <span className="font-medium text-gray-900 dark:text-white">{p?.full_name || uid}</span>
                       <span className="text-gray-400">·</span>
-                      <span className="text-gray-500 capitalize">{p?.departmentId?.replace("dept-", "") || "—"}</span>
+                      <span className="text-gray-500">{getDepartmentName(p?.departmentId)}</span>
                       {p?.designation && (
                         <>
                           <span className="text-gray-400">·</span>
@@ -338,6 +335,7 @@ export default function ProjectModal({ isOpen, onClose, project, onSave }: Proje
                         onChange={() => toggleAssignee(p.id)}
                         className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
                       />
+                      <Avatar src={p.avatar_url} name={p.full_name || p.id} size="xs" />
                       <span className="text-sm text-gray-900 dark:text-white">{p.full_name || p.id}</span>
                       <span className="text-xs text-gray-400 ml-auto capitalize">{p.role?.replace(/_/g, " ")}</span>
                     </label>

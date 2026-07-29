@@ -3,8 +3,7 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import {
-  loadYearData,
-  STAFF_USERS,
+  AttendanceService,
   MONTHS,
   monthLabel,
   getAccessibleDepts,
@@ -14,7 +13,8 @@ import {
   STATUS_COLORS,
   type AttendanceStatus,
   type AttendanceRecord,
-} from "../../mock/attendanceData";
+  type StaffUser,
+} from "../../services/attendanceService";
 
 const TODAY     = new Date();
 const CUR_YEAR  = TODAY.getFullYear();
@@ -63,15 +63,21 @@ export default function AttendanceCalendar() {
 
   const accessibleDepts = useMemo(() => getAccessibleDepts(role), [role]);
 
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+
+  useEffect(() => {
+    AttendanceService.getStaffUsers().then(setStaffUsers);
+  }, []);
+
   const visibleUsers = useMemo(() => {
     if (!isAdmin && accessibleDepts !== "all") {
-      return STAFF_USERS.filter((u) => {
-        const d = (u as { departmentId?: string }).departmentId || ROLE_TO_DEPT[u.role] || "";
+      return staffUsers.filter((u) => {
+        const d = u.departmentId || ROLE_TO_DEPT[u.role] || "";
         return (accessibleDepts as string[]).includes(d);
       });
     }
-    return STAFF_USERS;
-  }, [isAdmin, accessibleDepts]);
+    return staffUsers;
+  }, [isAdmin, accessibleDepts, staffUsers]);
 
   const [year,      setYear]      = useState(CUR_YEAR);
   const [month,     setMonth]     = useState(CUR_MONTH);
@@ -85,10 +91,10 @@ export default function AttendanceCalendar() {
 
   useEffect(() => {
     setLoading(true);
-    setTimeout(() => {
-      setRecords(loadYearData(year));
+    AttendanceService.getYearData(year).then((data) => {
+      setRecords(data);
       setLoading(false);
-    }, 0);
+    });
   }, [year]);
 
   useEffect(() => {

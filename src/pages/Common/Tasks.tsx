@@ -1,51 +1,24 @@
-import React, { useState, useEffect } from "react";
-import { api } from "../../lib/client";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { UserService, UserProfile } from "../../services/userService";
+import Avatar from "../../components/common/Avatar";
 import { useToast } from "../../context/ToastContext";
-import { NotificationService } from "../../services/notificationService";
-import { notifyTaskCreated, notifyTaskUpdated, notifyTaskDeleted, notifyTaskReassigned, notifyTaskStatusChanged } from "../../services/notificationHelpers";
+import { TaskService } from "../../services/taskService";
+import { ProjectService } from "../../services/projectService";
+import { RevisionService } from "../../services/revisionService";
+import type { Task } from "../../types";
+import { notifyTaskCreated, notifyTaskUpdated, notifyTaskDeleted, notifyTaskReassigned, notifyTaskStatusChanged, notifyTaskCompleted } from "../../services/notificationHelpers";
 import { useNavigate, useLocation } from "react-router-dom";
+import LoadingState from "../../components/common/LoadingState";
+import ErrorState from "../../components/common/ErrorState";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type TaskStatus = "todo" | "in-progress" | "done" | "blocked";
 type Priority   = "low" | "medium" | "high";
 type TaskCategory = "general" | "campaign" | "content" | "analytics";
-
-export interface MockTask {
-  id: string;
-  title: string;
-  description: string;
-  status: TaskStatus;
-  priority: Priority;
-  assignee: string;
-  assigneeId?: string;
-  dueDate: string;
-  budget?: number;
-  budgetUsed?: number;
-  category?: TaskCategory;
-  projectId?: string;
-  projectName?: string;
-  assigneeDept?: string;
-  assigneeRole?: string;
-  createdBy?: string;
-}
-
-// ── Mock data ─────────────────────────────────────────────────────────────
-const INITIAL_TASKS: MockTask[] = [
-  { id: "t1",  title: "Design login screen",       description: "Create new UI for auth flow",   status: "done",        priority: "high",   assignee: "Emma Wilson",    assigneeId: "u12", dueDate: "2026-06-10", createdBy: "u8" },
-  { id: "t2",  title: "API integration — leads",   description: "Connect leads CRUD to backend", status: "in-progress", priority: "high",   assignee: "James Carter",   assigneeId: "u8",  dueDate: "2026-06-18", createdBy: "u8" },
-  { id: "t3",  title: "Write unit tests",          description: "Cover auth context hooks",      status: "todo",        priority: "medium", assignee: "Liam Park",      assigneeId: "u13", dueDate: "2026-06-22", createdBy: "u9" },
-  { id: "t4",  title: "Update client portal",      description: "Refresh billing UI",            status: "in-progress", priority: "medium", assignee: "Olivia Brown",   assigneeId: "u10", dueDate: "2026-06-20", createdBy: "u10" },
-  { id: "t5",  title: "Database schema migration", description: "Add employee tables",           status: "todo",        priority: "high",   assignee: "David Chen",     assigneeId: "u9",  dueDate: "2026-06-25", createdBy: "u9" },
-  { id: "t6",  title: "Fix sidebar routing",       description: "Remove dead navigation links",  status: "done",        priority: "high",   assignee: "Noah Davis",     assigneeId: "u14", dueDate: "2026-06-15", createdBy: "u10" },
-  { id: "t7",  title: "Email campaign scheduler",  description: "Implement send scheduling",     status: "blocked",     priority: "medium", assignee: "Ava Johnson",    assigneeId: "u11", dueDate: "2026-06-30", createdBy: "u11" },
-  { id: "t8",  title: "HR payroll report",         description: "Generate monthly payroll PDF",  status: "todo",        priority: "low",    assignee: "Ethan Lee",      assigneeId: "u15", dueDate: "2026-07-01", createdBy: "u11" },
-  { id: "t9",  title: "Deploy to staging",         description: "Push latest build to staging",  status: "in-progress", priority: "high",   assignee: "James Carter",   assigneeId: "u8",  dueDate: "2026-06-17", createdBy: "u8" },
-  { id: "t10", title: "Onboard client — Globex",   description: "Initial setup and handover",    status: "todo",        priority: "medium", assignee: "Sarah Mitchell",  assigneeId: "u2",  dueDate: "2026-06-28", createdBy: "u2" },
-];
+export type MockTask = Task;
 
 const COLUMNS: { id: TaskStatus; label: string; color: string }[] = [
   { id: "todo",        label: "To Do",      color: "border-t-gray-400" },
@@ -91,6 +64,7 @@ export default function Tasks() {
   const showBudgetFields = isMarketingRoute && (isMarketingAdmin || isDeptAdmin || isSuper);
 
   const [showForm, setShowForm]         = useState(false);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [newTitle, setNewTitle]         = useState("");
   const [newPriority, setNewPriority]   = useState<Priority>("medium");
   const [newAssigneeId, setNewAssigneeId] = useState<string | undefined>(undefined);
@@ -109,25 +83,43 @@ export default function Tasks() {
   const [editingTask, setEditingTask] = useState<MockTask | null>(null);
   const [editForm, setEditForm] = useState<Partial<MockTask & { assigneeId?: string }>>({});
 
-  useEffect(() => {
-    (async () => {
-      try { setUsers(await UserService.getAll()); } catch { setUsers([]); }
-      try {
-        const data = await api.get<MockTask[]>("/saas/v1/tasks");
-        setTasks(Array.isArray(data) ? data : []);
-      } catch { setTasks([]); }
-      try {
-        const data = await api.get<Array<{ id: string; name: string; clientId?: string }>>("/saas/v1/projects/list");
-        setProjects(Array.isArray(data) ? data.map(p => ({ id: p.id, name: p.name, clientId: p.clientId })) : []);
-      } catch {}
-    })();
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadBoard = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try { setUsers(await UserService.getAll()); } catch { setUsers([]); }
+    try {
+      const data = await TaskService.getAll();
+      setTasks(Array.isArray(data) ? data : []);
+    } catch {
+      setTasks([]);
+      setLoadError("Failed to load tasks. Please try again.");
+    }
+    try {
+      const data = await ProjectService.getAll();
+      setProjects(data.map(p => ({ id: p.id, name: p.name, clientId: p.clientId })));
+    } catch { /* non-critical */ }
+    setIsLoading(false);
   }, []);
 
-  const usersById: Record<string, UserProfile> = users.reduce((acc, u) => ({ ...acc, [u.id]: u }), {} as Record<string, UserProfile>);
-  const projectsById: Record<string, SimpleProject> = projects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, SimpleProject>);
+  useEffect(() => {
+    loadBoard();
+  }, [loadBoard]);
+
+  const usersById: Record<string, UserProfile> = useMemo(
+    () => users.reduce((acc, u) => ({ ...acc, [u.id]: u }), {} as Record<string, UserProfile>),
+    [users]
+  );
+  const projectsById: Record<string, SimpleProject> = useMemo(
+    () => projects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, SimpleProject>),
+    [projects]
+  );
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isCreatingTask) return;
     if (!newTitle.trim()) return;
     if (!newProjectId) { showToast("Please select a project", "error"); return; }
     const isCampaignTask = isMarketingRoute && newCategory === "campaign";
@@ -135,8 +127,9 @@ export default function Tasks() {
     const assigneeProfile = newAssigneeId ? usersById[newAssigneeId] : undefined;
     const assigneeDept = assigneeProfile?.departmentId ?? (user?.role ? `dept-${user.role.replace("_admin","").replace("_member","")}` : undefined);
     const assigneeRole = assigneeProfile?.role ?? user?.role;
+    setIsCreatingTask(true);
     try {
-      const saved = await api.post<MockTask>("/saas/v1/tasks", {
+      const saved = await TaskService.create({
         title: newTitle.trim(),
         description: newDescription,
         status: "todo",
@@ -157,24 +150,24 @@ export default function Tasks() {
       if (user) {
         notifyTaskCreated(user.id, user.name, user.role, saved.title, saved.id, saved.assigneeId);
       }
-    } catch { showToast("Failed to create task", "error"); return; }
+    } catch { showToast("Failed to create task", "error"); return; } finally { setIsCreatingTask(false); }
     setNewTitle(""); setNewDescription(""); setNewCategory("general");
     setNewBudget(0); setNewDueDate(""); setNewProjectId(""); setShowForm(false);
   };
 
 
-  const updateBudgetUsed = async (taskId: string, amount: number) => {
+  const updateBudgetUsed = useCallback(async (taskId: string, amount: number) => {
     const t = tasks.find(x => x.id === taskId);
     if (!t) return;
     const budgetUsed = Math.max(0, Math.min(amount, t.budget ?? amount));
     try {
-      await api.put(`/saas/v1/tasks/${taskId}`, { budgetUsed });
+      await TaskService.update(taskId, { budgetUsed });
       setTasks((prev) => prev.map((x) => x.id === taskId ? { ...x, budgetUsed } : x));
       showToast("Budget usage updated", "success");
     } catch { showToast("Failed to update budget", "error"); }
-  };
+  }, [tasks, showToast]);
 
-  const moveTask = async (id: string, newStatus: TaskStatus) => {
+  const moveTask = useCallback(async (id: string, newStatus: TaskStatus) => {
     const t = tasks.find((x) => x.id === id);
     if (!t) return;
     const prevStatus = t.status;
@@ -188,34 +181,34 @@ export default function Tasks() {
     }
 
     try {
-      await api.put(`/saas/v1/tasks/${id}`, { status: newStatus });
+      await TaskService.update(id, { status: newStatus });
       setTasks((prev) => prev.map((x) => (x.id === id ? { ...x, status: newStatus } : x)));
       if (prevStatus !== newStatus && user) {
         notifyTaskStatusChanged(user.id, user.name, user.role, t.title, t.id, newStatus);
       }
-      if (newStatus === "done" && prevStatus !== "done") {
-        notifyAdminsOfCompletion(t);
+      if (newStatus === "done" && prevStatus !== "done" && user) {
+        notifyTaskCompleted(user.id, user.name, user.role, t.title, t.id);
         showToast((isMember || isHRAdmin) ? "Task complete — admins notified" : "Task marked complete", "success");
       } else {
         showToast("Task status updated", "success");
       }
     } catch { showToast("Failed to update task", "error"); }
-  };
+  }, [tasks, isMember, isHRAdmin, isDeptAdmin, usersById, viewerDept, user, showToast]);
 
-  const deleteTask = async (id: string) => {
+  const deleteTask = useCallback(async (id: string) => {
     if (!window.confirm("Delete this task permanently?")) return;
     try {
       const taskToDelete = tasks.find(t => t.id === id);
-      await api.delete(`/saas/v1/tasks/${id}`);
+      await TaskService.delete(id);
       setTasks((prev) => prev.filter((t) => t.id !== id));
       if (taskToDelete && user) {
         notifyTaskDeleted(user.id, user.name, user.role, taskToDelete.title, taskToDelete.id, taskToDelete.assigneeId);
       }
       showToast("Task deleted", "success");
     } catch { showToast("Failed to delete task", "error"); }
-  };
+  }, [tasks, user, showToast]);
 
-  const openEdit = (task: MockTask) => {
+  const openEdit = useCallback((task: MockTask) => {
     setEditingTask(task);
     setEditForm({
       title: task.title,
@@ -225,7 +218,7 @@ export default function Tasks() {
       projectId: task.projectId,
       assigneeId: task.assigneeId,
     });
-  };
+  }, []);
 
   const saveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -249,7 +242,7 @@ export default function Tasks() {
     };
 
     try {
-      await api.put(`/saas/v1/tasks/${editingTask.id}`, taskUpdates);
+      await TaskService.update(editingTask.id, taskUpdates);
       setTasks((prev) => prev.map((t) => t.id === editingTask.id ? { ...t, ...taskUpdates } : t));
     } catch { showToast("Failed to update task", "error"); return; }
 
@@ -264,20 +257,16 @@ export default function Tasks() {
 
     // Write revision / audit log
     try {
-      const revisions = JSON.parse(localStorage.getItem("mock_revisions") || "[]");
-      const rev = {
-        id: `rev-task-reassign-${Date.now()}`,
+      await RevisionService.create({
         type: "task_reassign",
-        status: "completed",
         projectId: editingTask.projectId || editForm.projectId || "",
+        clientId: "",
         comment: `Task "${editingTask.title}" reassigned from ${
           oldAssigneeId ? usersById[oldAssigneeId]?.full_name || "unassigned" : "unassigned"
         } to ${newAssigneeId ? usersById[newAssigneeId]?.full_name || "unassigned" : "unassigned"} by ${user?.name || "admin"}.`,
         updatedBy: user?.id || "",
-        created_at: new Date().toISOString(),
-      };
-      localStorage.setItem("mock_revisions", JSON.stringify([rev, ...revisions]));
-    } catch {}
+      });
+    } catch { /* non-critical */ }
 
     if (isReassignment) {
       showToast(
@@ -289,25 +278,6 @@ export default function Tasks() {
     }
 
     setEditingTask(null);
-  };
-
-  const notifyAdminsOfCompletion = (task: MockTask) => {
-    if (!task.assigneeId) return;
-    const assignee = usersById[task.assigneeId];
-    const assigneeDept = assignee ? assignee.departmentId : undefined;
-    const admins = users.filter((u) => {
-      if (u.role === "super_admin" || u.role === "management" || u.role === "hr_admin") return true;
-      if (u.role.endsWith("_admin") && u.departmentId && assigneeDept && u.departmentId === assigneeDept) return true;
-      return false;
-    });
-    const createdAt = new Date().toISOString();
-    admins.forEach(async (a) => {
-      try {
-        const n = { userId: a.id, type: "system" as const, title: "Task completed", message: `${assignee?.full_name || "A user"} completed task '${task.title}'`, read: false, createdAt, actionUrl: `/admin/notifications` };
-        const created = await NotificationService.create(n as Omit<import("../../types").Notification, "id">);
-        window.dispatchEvent(new CustomEvent("saas:notification", { detail: { id: created.id, type: created.type || "task", payload: created } }));
-      } catch {}
-    });
   };
 
   const visibleTasks = tasks.filter((t) => {
@@ -400,13 +370,20 @@ export default function Tasks() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500" />
 
           <div className="flex gap-2">
-            <button type="submit" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">Add Task</button>
+            <button type="submit" disabled={isCreatingTask} className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60 disabled:cursor-not-allowed">
+              {isCreatingTask ? "Adding…" : "Add Task"}
+            </button>
             <button type="button" onClick={() => setShowForm(false)} className="rounded-lg px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
           </div>
         </form>
       )}
 
       {/* ── Kanban Board ─────────────────────────────────────────────── */}
+      {isLoading ? (
+        <LoadingState label="Loading tasks..." />
+      ) : loadError ? (
+        <ErrorState message={loadError} onRetry={loadBoard} />
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
         {COLUMNS.map((col) => {
           const colTasks = visibleTasks.filter((t) => t.status === col.id);
@@ -427,10 +404,10 @@ export default function Tasks() {
                     isMember={!!isMember}
                     isOwnTask={!!(user?.id && task.assigneeId === user.id)}
                     canEditDelete={canEditDeleteTask}
-                    onMove={(newStatus) => moveTask(task.id, newStatus)}
-                    onUpdateBudget={(amount) => updateBudgetUsed(task.id, amount)}
-                    onDelete={() => deleteTask(task.id)}
-                    onEdit={() => openEdit(task)}
+                    onMove={moveTask}
+                    onUpdateBudget={updateBudgetUsed}
+                    onDelete={deleteTask}
+                    onEdit={openEdit}
                     columns={COLUMNS}
                   />
                 ))}
@@ -439,6 +416,7 @@ export default function Tasks() {
           );
         })}
       </div>
+      )}
 
       {/* Manager tracking panel */}
       {isManager && (
@@ -570,6 +548,11 @@ export default function Tasks() {
 }
 
 // ── Extracted TaskCard component ──────────────────────────────────────────
+// Callback props are the stable top-level dispatchers (each wrapped in
+// useCallback by the parent) rather than per-render closures bound to this
+// card's task id — combined with React.memo below, this means typing in the
+// parent's "add task" form (or any other unrelated state change) no longer
+// re-renders every card on the board, only ones whose own props actually changed.
 interface TaskCardProps {
   task: MockTask;
   col: { id: TaskStatus; label: string; color: string };
@@ -577,14 +560,14 @@ interface TaskCardProps {
   isMember: boolean;
   isOwnTask: boolean;
   canEditDelete: boolean;
-  onMove: (status: TaskStatus) => void;
-  onUpdateBudget: (amount: number) => void;
-  onDelete: () => void;
-  onEdit: () => void;
+  onMove: (id: string, status: TaskStatus) => void;
+  onUpdateBudget: (id: string, amount: number) => void;
+  onDelete: (id: string) => void;
+  onEdit: (task: MockTask) => void;
   columns: typeof COLUMNS;
 }
 
-function TaskCard({ task, usersById, isMember, isOwnTask, canEditDelete, onMove, onUpdateBudget, onDelete, onEdit, columns }: TaskCardProps) {
+const TaskCard = React.memo(function TaskCard({ task, usersById, isMember, isOwnTask, canEditDelete, onMove, onUpdateBudget, onDelete, onEdit, columns }: TaskCardProps) {
   const [budgetInput, setBudgetInput] = useState<string>("");
   const [showBudgetEdit, setShowBudgetEdit] = useState(false);
 
@@ -595,7 +578,7 @@ function TaskCard({ task, usersById, isMember, isOwnTask, canEditDelete, onMove,
 
   const handleBudgetSave = () => {
     const val = parseFloat(budgetInput);
-    if (!isNaN(val) && val >= 0) onUpdateBudget(val);
+    if (!isNaN(val) && val >= 0) onUpdateBudget(task.id, val);
     setBudgetInput(""); setShowBudgetEdit(false);
   };
 
@@ -608,10 +591,10 @@ function TaskCard({ task, usersById, isMember, isOwnTask, canEditDelete, onMove,
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityBadge(task.priority)}`}>{task.priority}</span>
           {canEditDelete && (
             <>
-              <button onClick={onEdit} title="Edit task" className="text-gray-400 hover:text-brand-600 p-0.5 rounded transition-colors">
+              <button onClick={() => onEdit(task)} title="Edit task" className="text-gray-400 hover:text-brand-600 p-0.5 rounded transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
               </button>
-              <button onClick={onDelete} title="Delete task" className="text-gray-400 hover:text-red-500 p-0.5 rounded transition-colors">
+              <button onClick={() => onDelete(task.id)} title="Delete task" className="text-gray-400 hover:text-red-500 p-0.5 rounded transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               </button>
             </>
@@ -635,13 +618,14 @@ function TaskCard({ task, usersById, isMember, isOwnTask, canEditDelete, onMove,
 
       {/* Assignee + due date */}
       <div className="flex items-center justify-between mt-2">
-        <div>
-          <span className="text-xs text-gray-400">{task.assignee}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Avatar src={task.assigneeId ? usersById[task.assigneeId]?.avatar_url : null} name={task.assignee} size="xs" />
+          <span className="text-xs text-gray-400 truncate">{task.assignee}</span>
           {task.assigneeId && usersById[task.assigneeId] && (
-            <span className="ml-2 inline-block text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">{usersById[task.assigneeId].role}</span>
+            <span className="ml-1 inline-block text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0">{usersById[task.assigneeId].role}</span>
           )}
         </div>
-        <span className="text-xs text-gray-400">{task.dueDate}</span>
+        <span className="text-xs text-gray-400 shrink-0">{task.dueDate}</span>
       </div>
 
       {/* Budget section — assignee can update spending, others view */}
@@ -683,7 +667,7 @@ function TaskCard({ task, usersById, isMember, isOwnTask, canEditDelete, onMove,
       {/* Status move buttons — members only move their own tasks */}
       <div className="mt-2 flex flex-wrap gap-1">
         {columns.filter((c) => c.id !== task.status).map((c) => (
-          <button key={c.id} onClick={() => onMove(c.id)}
+          <button key={c.id} onClick={() => onMove(task.id, c.id)}
             className="rounded px-2 py-0.5 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors">
             → {c.label}
           </button>
@@ -691,4 +675,4 @@ function TaskCard({ task, usersById, isMember, isOwnTask, canEditDelete, onMove,
       </div>
     </div>
   );
-}
+});

@@ -1,20 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
-import { api } from "../../lib/client";
+import Avatar from "../../components/common/Avatar";
+import { RevisionService, type Revision } from "../../services/revisionService";
+import { ProjectService } from "../../services/projectService";
 import { useClients } from "../../hooks/useClients";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
-
-interface Revision {
-  id: string;
-  projectId: string;
-  clientId: string;
-  comment: string;
-  status: string;
-  created_at: string;
-  type?: string;
-  updatedBy?: string;
-}
 
 interface Project {
   id: string;
@@ -48,11 +39,11 @@ export default function AdminRevisions() {
     setIsLoading(true);
     try {
       const [revData, projData] = await Promise.all([
-        api.get<Revision[]>("/saas/v1/revisions/list"),
-        api.get<Project[]>("/saas/v1/projects/list"),
+        RevisionService.getAll(),
+        ProjectService.getAll(),
       ]);
-      setRevisions(revData || []);
-      setProjects(projData || []);
+      setRevisions(revData);
+      setProjects(projData);
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Failed to load revisions.", "error");
     } finally {
@@ -72,11 +63,14 @@ export default function AdminRevisions() {
     return c ? c.name : clientId;
   };
 
+  const getClientAvatar = (clientId: string) =>
+    clients.find((cl) => cl.id === clientId)?.avatar;
+
   const handleStatusChange = async (revisionId: string, newStatus: string) => {
     if (!canEditRevisions) return;
     setUpdatingId(revisionId);
     try {
-      await api.put("/saas/v1/revisions/update", { id: revisionId, status: newStatus });
+      await RevisionService.update(revisionId, { status: newStatus });
       setRevisions((prev) =>
         prev.map((r) => (r.id === revisionId ? { ...r, status: newStatus } : r))
       );
@@ -173,9 +167,12 @@ export default function AdminRevisions() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">
-                        {getClientName(revision.clientId)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <Avatar src={getClientAvatar(revision.clientId)} name={getClientName(revision.clientId)} size="xs" />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {getClientName(revision.clientId)}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 max-w-xs">
                       <p className="text-sm text-gray-600 dark:text-gray-400 truncate" title={revision.comment}>

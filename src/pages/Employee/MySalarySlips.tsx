@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
 import { useAuth } from "../../context/AuthContext";
-import { getSalarySlips, printSalarySlip, computeDeductions, computeSlipBreakdown, type SalarySlip } from "../../mock/payrollData";
-import { getCompanySettings } from "../../services/companySettingsService";
+import { PayrollService, printSalarySlip, computeDeductions, computeSlipBreakdown, type SalarySlip } from "../../services/payrollService";
+import { getCompanySettings, COMPANY_DEFAULTS, type CompanySettings } from "../../services/companySettingsService";
 
 const fmtRs = (n: number) => `Rs. ${Math.round(n).toLocaleString()}`;
 
@@ -67,9 +68,10 @@ function SlipCard({ slip, onPrint, onView }: {
   );
 }
 
-function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => void }) {
+function SlipViewModal({ slip, onClose, employeeAvatar }: { slip: SalarySlip; onClose: () => void; employeeAvatar?: string | null }) {
   const monthLabel = new Date(slip.salaryMonth + "-01").toLocaleString("default", { month: "long", year: "numeric" });
-  const company    = useMemo(() => getCompanySettings(), []);
+  const [company, setCompany] = useState(COMPANY_DEFAULTS);
+  useEffect(() => { getCompanySettings().then(setCompany).catch(() => {}); }, []);
   const bd         = computeSlipBreakdown(slip.basicSalary);
 
   const Row = ({ label, value, accent }: { label: string; value: string; accent?: string }) => (
@@ -84,7 +86,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
       <div className="relative overflow-hidden w-full max-w-xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl flex flex-col max-h-[90vh]">
         {/* Background watermark */}
         <img
-          src="/images/logo/logo-icon-dark.png"
+          src={`${import.meta.env.BASE_URL}images/logo/logo-icon-dark.png`}
           alt=""
           aria-hidden="true"
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[35deg] w-[52%] opacity-[0.07] pointer-events-none select-none z-[1]"
@@ -93,7 +95,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
         <div className="relative z-[2] bg-gradient-to-r from-[#1e3a5f] to-[#2563eb] text-white px-6 py-4 rounded-t-2xl flex-shrink-0">
           <div className="flex items-center gap-3 mb-3">
             <img
-              src="/images/logo/logo-icon-dark.png"
+              src={`${import.meta.env.BASE_URL}images/logo/logo-icon-dark.png`}
               alt={company.name}
               className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0"
             />
@@ -104,10 +106,13 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <button onClick={onClose} className="text-white opacity-70 hover:opacity-100 text-2xl leading-none ml-2">×</button>
           </div>
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs opacity-65 uppercase tracking-wide mb-0.5">Salary Slip</p>
-              <h3 className="text-lg font-bold">{slip.employeeName}</h3>
-              <p className="text-sm opacity-80">{monthLabel} · {slip.department}</p>
+            <div className="flex items-center gap-3">
+              <Avatar src={employeeAvatar} name={slip.employeeName} size="md" />
+              <div>
+                <p className="text-xs opacity-65 uppercase tracking-wide mb-0.5">Salary Slip</p>
+                <h3 className="text-lg font-bold">{slip.employeeName}</h3>
+                <p className="text-sm opacity-80">{monthLabel} · {slip.department}</p>
+              </div>
             </div>
             <div className="text-right text-xs opacity-60 mt-1">
               <p>ID: {slip.id.toUpperCase()}</p>
@@ -183,7 +188,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
 
         <div className="relative z-[2] px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3 flex-shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors">Close</button>
-          <button onClick={() => printSalarySlip(slip)} className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors">Print / Download PDF</button>
+          <button onClick={() => printSalarySlip(slip, company)} className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors">Print / Download PDF</button>
         </div>
       </div>
     </div>
@@ -195,10 +200,16 @@ export default function MySalarySlips() {
   const [slips, setSlips]       = useState<SalarySlip[]>([]);
   const [filterMonth, setFilter] = useState("all");
   const [viewing, setViewing]    = useState<SalarySlip | null>(null);
+  const [company, setCompany]    = useState<CompanySettings>(COMPANY_DEFAULTS);
 
   useEffect(() => {
-    const all = getSalarySlips();
-    setSlips(all.filter(s => s.employeeId === user?.id));
+    getCompanySettings().then(setCompany).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    PayrollService.getSalarySlips().then((all) => {
+      setSlips(all.filter(s => s.employeeId === user?.id));
+    }).catch(() => setSlips([]));
   }, [user?.id]);
 
   const filtered = useMemo(() =>
@@ -258,14 +269,14 @@ export default function MySalarySlips() {
             <SlipCard
               key={slip.id}
               slip={slip}
-              onPrint={() => printSalarySlip(slip)}
+              onPrint={() => printSalarySlip(slip, company)}
               onView={() => setViewing(slip)}
             />
           ))}
         </div>
       )}
 
-      {viewing && <SlipViewModal slip={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <SlipViewModal slip={viewing} onClose={() => setViewing(null)} employeeAvatar={user?.avatar} />}
     </>
   );
 }

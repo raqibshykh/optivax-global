@@ -1,26 +1,23 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
+import LoadingState from "../../components/common/LoadingState";
+import ErrorState from "../../components/common/ErrorState";
+import Avatar from "../../components/common/Avatar";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import {
   notifyBudgetAllocatedToDept, notifyBudgetAllocatedToMember, notifyCompanyBudgetAction,
   notifyBudgetReturned, notifyBudgetRequested, notifyBudgetRequestActioned,
 } from "../../services/notificationHelpers";
 import {
-  getCompanyBudget, saveCompanyBudget, resetCompanyBudget,
-  getDeptAllocations, saveDeptAllocations,
-  getMemberAllocations, saveMemberAllocations,
-  getBudgetAuditLog, appendBudgetAuditEntry,
-  getDeptBudgetSummaries, getCompanyUnallocated,
-  getMembersForDept, getAllDeptAdmins, deptFromRole,
-  getBudgetReturns, appendBudgetReturn, getBudgetReturnsByDept,
-  getBudgetRequests, appendBudgetRequest, updateBudgetRequest,
-  getBudgetRequestsByDept, getPendingBudgetRequests,
+  BudgetService,
+  getDeptBudgetSummaries, deptFromRole,
   type CompanyBudget, type DeptAllocation, type MemberAllocation,
   type BudgetAuditEntry, type BudgetMasterAction, type DeptBudgetSummary,
   type BudgetReturn, type BudgetRequest, type BudgetRequestStatus, type BudgetRequestPriority,
-} from "../../mock/budgetData";
+} from "../../services/budgetService";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -392,7 +389,8 @@ function AssignBudgetModal({
     prevPurpose: string | undefined
   ) => void;
 }) {
-  const deptAdmins = useMemo(() => getAllDeptAdmins(), []);
+  const [deptAdmins, setDeptAdmins] = useState<{ id: string; name: string; role: string; dept: string }[]>([]);
+  useEffect(() => { BudgetService.getAllDeptAdmins().then(setDeptAdmins).catch(() => {}); }, []);
   const DEPTS = useMemo(() => [...new Set(deptAdmins.map(a => a.dept))].sort(), [deptAdmins]);
 
   const [selectedDept, setSelectedDept] = useState(preselectedDept ?? "");
@@ -1256,8 +1254,7 @@ function AuditLogTable({ entries }: { entries: BudgetAuditEntry[] }) {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <p className="text-sm text-gray-900 dark:text-white">{e.performedByName}</p>
-                  <p className="text-xs text-gray-400">{e.performedByRole}</p>
+                  <EmployeeIdentity name={e.performedByName} designation={e.performedByRole} size="sm" />
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                   {e.action === "BUDGET_REALLOCATED" && e.fromDepartment && e.toDepartment ? (
@@ -1322,15 +1319,33 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
   const [pendingRequests, setPendingRequests] = useState<BudgetRequest[]>([]);
   const [allRequests,     setAllRequests]     = useState<BudgetRequest[]>([]);
   const [actioningRequest, setActioningRequest] = useState<BudgetRequest | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const reload = () => {
-    setBudget(getCompanyBudget());
-    setDeptSummaries(getDeptBudgetSummaries());
-    setAllDeptAllocs(getDeptAllocations());
-    setMembers(getMemberAllocations());
-    setAuditLog(getBudgetAuditLog());
-    setPendingRequests(getPendingBudgetRequests());
-    setAllRequests(getBudgetRequests());
+  const reload = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [cb, depts, members, audit, pending, allReqs] = await Promise.all([
+        BudgetService.getCompanyBudget(),
+        BudgetService.getDeptAllocations(),
+        BudgetService.getMemberAllocations(),
+        BudgetService.getBudgetAuditLog(),
+        BudgetService.getPendingBudgetRequests(),
+        BudgetService.getBudgetRequests(),
+      ]);
+      setBudget(cb);
+      setDeptSummaries(getDeptBudgetSummaries(depts, members));
+      setAllDeptAllocs(depts);
+      setMembers(members);
+      setAuditLog(audit);
+      setPendingRequests(pending);
+      setAllRequests(allReqs);
+    } catch {
+      setLoadError("Failed to load budget data. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => { reload(); }, []);
@@ -1350,17 +1365,22 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
 
   const totalAllocatedToDepts = stats?.allocated ?? 0;
 
+  const sortedAllRequests = useMemo(
+    () => [...allRequests].sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()),
+    [allRequests]
+  );
+
   // ── Company Budget CRUD ────────────────────────────────────────────────────
-  const handleBudgetSave = (action: BudgetMasterAction, _amount: number, notes: string, newTotal?: number) => {
+  const handleBudgetSave = async (action: BudgetMasterAction, _amount: number, notes: string, newTotal?: number) => {
     if (action === "BUDGET_RESET") {
       const prev = budget?.totalAmount ?? 0;
-      resetCompanyBudget();
-      appendBudgetAuditEntry({
+      await BudgetService.resetCompanyBudget();
+      await BudgetService.appendBudgetAuditEntry({
         action: "BUDGET_RESET", previousAmount: prev, newAmount: 0,
         performedById: user?.id ?? "", performedByName: user?.name ?? "", performedByRole: user?.role ?? "",
         notes,
       });
-      reload();
+      await reload();
       setBudgetModal(null);
       showToast("Company budget has been reset.", "success");
       return;
@@ -1377,8 +1397,8 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
       createdById:   budget?.createdById ?? (user?.id ?? ""),
       createdByName: budget?.createdByName ?? (user?.name ?? ""),
     };
-    saveCompanyBudget(updated);
-    appendBudgetAuditEntry({
+    await BudgetService.saveCompanyBudget(updated);
+    await BudgetService.appendBudgetAuditEntry({
       action, previousAmount: prev, newAmount: updated.totalAmount,
       performedById: user?.id ?? "", performedByName: user?.name ?? "", performedByRole: user?.role ?? "",
       notes,
@@ -1388,18 +1408,18 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
       action === "BUDGET_CREATED" ? "created" : action === "BUDGET_INCREASED" ? "increased" : action === "BUDGET_REDUCED" ? "reduced" : "updated",
       updated.totalAmount, prev
     );
-    reload();
+    await reload();
     setBudgetModal(null);
     showToast("Company budget updated.", "success");
   };
 
   // ── Dept Budget Assignment ─────────────────────────────────────────────────
-  const handleAssignBudget = (
+  const handleAssignBudget = async (
     dept: string, adminId: string, adminName: string,
     amount: number, purpose: string, effectiveDate: string, notes: string,
     prevPurpose: string | undefined,
   ) => {
-    const allocs = getDeptAllocations();
+    const allocs = await BudgetService.getDeptAllocations();
     const idx    = allocs.findIndex(d => d.department === dept);
     const prev   = idx >= 0 ? allocs[idx].allocatedAmount : 0;
     const isNew  = idx < 0;
@@ -1416,7 +1436,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
     } else {
       allocs[idx] = { ...allocs[idx], adminId, adminName, allocatedAmount: amount, purpose, effectiveDate, updatedAt: now };
     }
-    saveDeptAllocations(allocs);
+    await BudgetService.saveDeptAllocations(allocs);
 
     // Determine the correct audit action
     const amountChanged  = !isNew && amount !== prev;
@@ -1424,7 +1444,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
 
     if (!isNew && purposeChanged && !amountChanged) {
       // Purpose-only change
-      appendBudgetAuditEntry({
+      await BudgetService.appendBudgetAuditEntry({
         action: "BUDGET_PURPOSE_UPDATED",
         previousAmount: prev, newAmount: amount,
         performedById: user?.id ?? "", performedByName: user?.name ?? "", performedByRole: user?.role ?? "",
@@ -1433,7 +1453,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
         notes,
       });
     } else {
-      appendBudgetAuditEntry({
+      await BudgetService.appendBudgetAuditEntry({
         action: isNew ? "DEPT_ALLOCATED" : "DEPT_ALLOCATION_UPDATED",
         previousAmount: prev, newAmount: amount,
         performedById: user?.id ?? "", performedByName: user?.name ?? "", performedByRole: user?.role ?? "",
@@ -1444,14 +1464,14 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
     }
 
     notifyBudgetAllocatedToDept(user?.id ?? "", user?.name ?? "", adminId, adminName, dept, amount, !isNew);
-    reload();
+    await reload();
     setAssignTarget(null);
     showToast(`Budget ${isNew ? "assigned to" : "updated for"} ${dept} (${adminName}).`, "success");
   };
 
   // ── Budget Transfer ────────────────────────────────────────────────────────
-  const handleTransfer = (fromDept: string, toDept: string, amount: number, notes: string) => {
-    const allocs   = getDeptAllocations();
+  const handleTransfer = async (fromDept: string, toDept: string, amount: number, notes: string) => {
+    const allocs   = await BudgetService.getDeptAllocations();
     const fromIdx  = allocs.findIndex(d => d.department === fromDept);
     const toIdx    = allocs.findIndex(d => d.department === toDept);
     if (fromIdx < 0 || toIdx < 0) return;
@@ -1462,9 +1482,9 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
 
     allocs[fromIdx] = { ...allocs[fromIdx], allocatedAmount: fromPrev - amount, updatedAt: now };
     allocs[toIdx]   = { ...allocs[toIdx],   allocatedAmount: toPrev  + amount, updatedAt: now };
-    saveDeptAllocations(allocs);
+    await BudgetService.saveDeptAllocations(allocs);
 
-    appendBudgetAuditEntry({
+    await BudgetService.appendBudgetAuditEntry({
       action: "BUDGET_REALLOCATED",
       previousAmount: fromPrev, newAmount: fromPrev - amount,
       performedById: user?.id ?? "", performedByName: user?.name ?? "", performedByRole: user?.role ?? "",
@@ -1473,13 +1493,13 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
     });
 
     notifyBudgetAllocatedToDept(user?.id ?? "", user?.name ?? "", allocs[toIdx].adminId, allocs[toIdx].adminName, toDept, allocs[toIdx].allocatedAmount, true);
-    reload();
+    await reload();
     setShowTransfer(false);
     showToast(`${fmtRs(amount)} transferred from ${fromDept} to ${toDept}.`, "success");
   };
 
   // ── Budget Request Action (SA approves/rejects) ───────────────────────────
-  const handleRequestAction = (
+  const handleRequestAction = async (
     id: string, status: "Approved" | "Rejected" | "Partially Approved", approvedAmount: number, actionNotes: string
   ) => {
     const req = allRequests.find(r => r.id === id);
@@ -1494,7 +1514,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
 
     // L7: Cap approval against the company's unallocated pool
     if (status === "Approved" || status === "Partially Approved") {
-      const companyPool = getCompanyUnallocated();
+      const companyPool = await BudgetService.getCompanyUnallocated();
       if (approvedAmount > companyPool) {
         showToast(
           `Cannot approve ${fmtRs(approvedAmount)} — only ${fmtRs(companyPool)} remains in the company unallocated pool. Reduce the approved amount or increase the company budget first.`,
@@ -1504,7 +1524,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
       }
     }
 
-    updateBudgetRequest(id, {
+    await BudgetService.updateBudgetRequest(id, {
       status,
       approvedAmount,
       actionedById:   user?.id ?? "",
@@ -1515,13 +1535,13 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
 
     if (status === "Approved" || status === "Partially Approved") {
       const amt   = approvedAmount;
-      const allocs = getDeptAllocations();
+      const allocs = await BudgetService.getDeptAllocations();
       const idx    = allocs.findIndex(d => d.department === req.department);
       if (idx >= 0) {
         const prev = allocs[idx].allocatedAmount;
         allocs[idx] = { ...allocs[idx], allocatedAmount: prev + amt, updatedAt: new Date().toISOString() };
-        saveDeptAllocations(allocs);
-        appendBudgetAuditEntry({
+        await BudgetService.saveDeptAllocations(allocs);
+        await BudgetService.appendBudgetAuditEntry({
           action: status === "Approved" ? "BUDGET_REQUEST_APPROVED" : "BUDGET_REQUEST_PARTIAL",
           previousAmount: prev, newAmount: prev + amt,
           performedById: user?.id ?? "", performedByName: user?.name ?? "", performedByRole: user?.role ?? "",
@@ -1530,7 +1550,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
         });
       }
     } else {
-      appendBudgetAuditEntry({
+      await BudgetService.appendBudgetAuditEntry({
         action: "BUDGET_REQUEST_REJECTED",
         previousAmount: 0, newAmount: 0,
         performedById: user?.id ?? "", performedByName: user?.name ?? "", performedByRole: user?.role ?? "",
@@ -1545,7 +1565,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
       req.requestedAmount, approvedAmount, id
     );
 
-    reload();
+    await reload();
     setActioningRequest(null);
     showToast(
       status === "Approved"  ? `Budget request approved — ${fmtRs(approvedAmount)} added to ${req.department}.`
@@ -1562,6 +1582,9 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
     { id: "requests",    label: `Budget Requests${pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ""}` },
     { id: "audit",       label: "Audit Log" },
   ] as const;
+
+  if (isLoading) return <LoadingState label="Loading budget data..." />;
+  if (loadError) return <ErrorState message={loadError} onRetry={reload} />;
 
   return (
     <div>
@@ -1752,7 +1775,12 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
                           <span className="text-sm font-medium text-gray-900 dark:text-white">{d.department}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{d.adminName}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center gap-1.5">
+                          <Avatar name={d.adminName} size="xs" />
+                          <span>{d.adminName}</span>
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         {alloc?.purpose
                           ? <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DEPT_SOFT[d.department] ?? "bg-gray-100 text-gray-600"}`}>{alloc.purpose}</span>
@@ -1790,7 +1818,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">All Member Allocations</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Assigned by Department Admins · Used/Spent values are read-only</p>
+            <p className="text-xs text-gray-400 mt-0.5">Assigned by Department Admins · "Used" is not yet linked to real invoice/expense data — it stays at its last recorded value until that integration exists</p>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
@@ -1807,8 +1835,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
                 ) : members.map(m => (
                   <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
                     <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{m.employeeName}</p>
-                      <p className="text-xs text-gray-400">{m.employeeRole}</p>
+                      <EmployeeIdentity name={m.employeeName} designation={m.employeeRole} size="sm" />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
@@ -1827,7 +1854,12 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
                     </td>
                     <td className="px-4 py-3 text-sm text-green-600">{fmtRs(m.allocatedAmount - m.usedAmount)}</td>
                     <td className="px-4 py-3 w-36"><UtilBar used={m.usedAmount} total={m.allocatedAmount} /></td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{m.allocatedByName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      <div className="flex items-center gap-1.5">
+                        <Avatar name={m.allocatedByName} size="xs" />
+                        <span>{m.allocatedByName}</span>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1898,7 +1930,7 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {allRequests.length === 0 ? (
                     <tr><td colSpan={8} className="py-10 text-center text-sm text-gray-400">No budget requests yet.</td></tr>
-                  ) : [...allRequests].sort((a,b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()).map(req => {
+                  ) : sortedAllRequests.map(req => {
                     const STATUS_COLORS: Record<BudgetRequestStatus, string> = {
                       Pending:            "bg-amber-100 text-amber-700",
                       Approved:           "bg-emerald-100 text-emerald-700",
@@ -1913,7 +1945,12 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
                             <span className="text-sm text-gray-900 dark:text-white">{req.department}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{req.adminName}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                          <div className="flex items-center gap-1.5">
+                            <Avatar name={req.adminName} size="xs" />
+                            <span>{req.adminName}</span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-sm font-semibold text-sky-600 whitespace-nowrap">{fmtRs(req.requestedAmount)}</td>
                         <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
                           {req.approvedAmount > 0 ? fmtRs(req.approvedAmount) : "—"}
@@ -1930,7 +1967,14 @@ function SuperAdminView({ isSA }: { isSA: boolean }) {
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[req.status]}`}>{req.status}</span>
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{new Date(req.submittedAt).toLocaleDateString()}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{req.actionedByName ?? "—"}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {req.actionedByName ? (
+                            <div className="flex items-center gap-1.5">
+                              <Avatar name={req.actionedByName} size="xs" />
+                              <span>{req.actionedByName}</span>
+                            </div>
+                          ) : "—"}
+                        </td>
                       </tr>
                     );
                   })}
@@ -2000,28 +2044,46 @@ function DeptAdminView() {
   const [showRequest,  setShowRequest]  = useState(false);
   const [tab,          setTab]          = useState<"overview" | "members" | "returns" | "requests" | "audit">("overview");
 
-  const availableMembers = getMembersForDept(dept);
+  const [availableMembers, setAvailableMembers] = useState<{ id: string; name: string; role: string }[]>([]);
+  useEffect(() => { BudgetService.getMembersForDept(dept).then(setAvailableMembers).catch(() => {}); }, [dept]);
 
-  const reload = () => {
-    const allocs = getDeptAllocations();
-    setDeptAlloc(allocs.find(d => d.department === dept) ?? null);
-    setMyMembers(getMemberAllocations().filter(m => m.department === dept));
-    setAuditLog(getBudgetAuditLog().filter(e => e.department === dept || e.fromDepartment === dept || e.toDepartment === dept));
-    setMyReturns(getBudgetReturnsByDept(dept));
-    setMyRequests(getBudgetRequestsByDept(dept));
-  };
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => { reload(); }, [dept]);
+  const reload = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [allocs, members, audit, returns, requests] = await Promise.all([
+        BudgetService.getDeptAllocations(),
+        BudgetService.getMemberAllocations(),
+        BudgetService.getBudgetAuditLog(),
+        BudgetService.getBudgetReturnsByDept(dept),
+        BudgetService.getBudgetRequestsByDept(dept),
+      ]);
+      setDeptAlloc(allocs.find(d => d.department === dept) ?? null);
+      setMyMembers(members.filter(m => m.department === dept));
+      setAuditLog(audit.filter(e => e.department === dept || e.fromDepartment === dept || e.toDepartment === dept));
+      setMyReturns(returns);
+      setMyRequests(requests);
+    } catch {
+      setLoadError("Failed to load budget data. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [dept]);
+
+  useEffect(() => { reload(); }, [reload]);
 
   const memberAllocTotal  = myMembers.reduce((s, m) => s + m.allocatedAmount, 0);
   const usedTotal         = myMembers.reduce((s, m) => s + m.usedAmount, 0);
   const availableForAlloc = (deptAlloc?.allocatedAmount ?? 0) - memberAllocTotal;
 
-  const handleAllocate = (employeeId: string, amount: number, notes: string) => {
+  const handleAllocate = async (employeeId: string, amount: number, notes: string) => {
     const memberInfo = availableMembers.find(m => m.id === employeeId);
     if (!memberInfo) return;
 
-    const all  = getMemberAllocations();
+    const all  = await BudgetService.getMemberAllocations();
     const idx  = all.findIndex(m => m.employeeId === employeeId);
     const prev = idx >= 0 ? all[idx].allocatedAmount : 0;
     const now  = new Date().toISOString();
@@ -2041,9 +2103,9 @@ function DeptAdminView() {
     };
 
     if (idx >= 0) { all[idx] = entry; } else { all.push(entry); }
-    saveMemberAllocations(all);
+    await BudgetService.saveMemberAllocations(all);
 
-    appendBudgetAuditEntry({
+    await BudgetService.appendBudgetAuditEntry({
       action: idx >= 0 ? "MEMBER_ALLOCATION_UPDATED" : "MEMBER_ALLOCATED",
       previousAmount: prev, newAmount: amount,
       performedById: user?.id ?? "", performedByName: user?.name ?? "", performedByRole: user?.role ?? "",
@@ -2053,25 +2115,23 @@ function DeptAdminView() {
     });
 
     notifyBudgetAllocatedToMember(user?.id ?? "", user?.name ?? "", user?.role ?? "", employeeId, memberInfo.name, dept, amount, idx >= 0);
-    reload();
+    await reload();
     setShowModal(false);
     showToast(`Budget allocated to ${memberInfo.name}.`, "success");
   };
 
-  const handleReturn = (amount: number, reason: string, notes: string) => {
-    const alloc = getDeptAllocations().find(d => d.department === dept);
-    if (!alloc) return;
-
-    const prev     = alloc.allocatedAmount;
-    const newAlloc = prev - amount;
-    const allocs   = getDeptAllocations();
-    const idx      = allocs.findIndex(d => d.department === dept);
+  const handleReturn = async (amount: number, reason: string, notes: string) => {
+    const allocs = await BudgetService.getDeptAllocations();
+    const idx    = allocs.findIndex(d => d.department === dept);
     if (idx < 0) return;
 
-    allocs[idx] = { ...allocs[idx], allocatedAmount: newAlloc, updatedAt: new Date().toISOString() };
-    saveDeptAllocations(allocs);
+    const prev     = allocs[idx].allocatedAmount;
+    const newAlloc = prev - amount;
 
-    appendBudgetReturn({
+    allocs[idx] = { ...allocs[idx], allocatedAmount: newAlloc, updatedAt: new Date().toISOString() };
+    await BudgetService.saveDeptAllocations(allocs);
+
+    await BudgetService.appendBudgetReturn({
       department:        dept,
       adminId:           user?.id ?? "",
       adminName:         user?.name ?? "",
@@ -2083,7 +2143,7 @@ function DeptAdminView() {
       notes: notes || undefined,
     });
 
-    appendBudgetAuditEntry({
+    await BudgetService.appendBudgetAuditEntry({
       action:           "BUDGET_RETURNED",
       previousAmount:   prev,
       newAmount:        newAlloc,
@@ -2099,13 +2159,13 @@ function DeptAdminView() {
       dept, amount, newAlloc
     );
 
-    reload();
+    await reload();
     setShowReturn(false);
     showToast(`${fmtRs(amount)} returned to company pool. New dept allocation: ${fmtRs(newAlloc)}.`, "success");
   };
 
-  const handleRequest = (amount: number, justification: string, priority: BudgetRequestPriority, notes: string) => {
-    const req = appendBudgetRequest({
+  const handleRequest = async (amount: number, justification: string, priority: BudgetRequestPriority, notes: string) => {
+    const req = await BudgetService.appendBudgetRequest({
       department:      dept,
       adminId:         user?.id ?? "",
       adminName:       user?.name ?? "",
@@ -2118,7 +2178,7 @@ function DeptAdminView() {
       notes: notes || undefined,
     });
 
-    appendBudgetAuditEntry({
+    await BudgetService.appendBudgetAuditEntry({
       action:           "BUDGET_REQUEST_SUBMITTED",
       previousAmount:   deptAlloc?.allocatedAmount ?? 0,
       newAmount:        (deptAlloc?.allocatedAmount ?? 0) + amount,
@@ -2134,7 +2194,7 @@ function DeptAdminView() {
       dept, amount, priority, req.id
     );
 
-    reload();
+    await reload();
     setShowRequest(false);
     showToast("Budget request submitted. The Super Admin will review it shortly.", "success");
   };
@@ -2146,6 +2206,9 @@ function DeptAdminView() {
     { id: "requests",  label: `Requests${myRequests.filter(r => r.status === "Pending").length > 0 ? ` (${myRequests.filter(r => r.status === "Pending").length})` : ""}` },
     { id: "audit",     label: "Activity Log" },
   ] as const;
+
+  if (isLoading) return <LoadingState label="Loading budget data..." />;
+  if (loadError) return <ErrorState message={loadError} onRetry={reload} />;
 
   return (
     <div>
@@ -2265,7 +2328,7 @@ function DeptAdminView() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Team Member Allocations</h3>
-              <p className="text-xs text-gray-400">Minimum allowed per member = their spent amount (protected)</p>
+              <p className="text-xs text-gray-400">Minimum allowed per member = their spent amount (protected) · "Used" is not yet linked to real invoice/expense data</p>
             </div>
             {deptAlloc && (
               <button onClick={() => setShowModal(true)}

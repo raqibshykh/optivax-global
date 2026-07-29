@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { useAuth } from "../../context/AuthContext";
 import {
-  getAdvanceRequests, saveAdvanceRequests, canViewRequest, canApproveRequest,
-  appendAdvanceAuditEntry,
+  PayrollService, canViewRequest, canApproveRequest,
   type AdvanceSalaryRequest, type AdvanceStatus,
-} from "../../mock/payrollData";
+} from "../../services/payrollService";
 import { useToast } from "../../context/ToastContext";
 import { notifyAdvanceSalaryDecision } from "../../services/notificationHelpers";
 
@@ -52,7 +53,13 @@ function DetailModal({ req, canApprove, onClose, onAction }: {
         <div className="overflow-y-auto flex-1 p-6 space-y-4">
           {/* Summary */}
           <div className="grid grid-cols-2 gap-3 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 text-sm">
-            <div><span className="text-xs text-gray-400 block">Employee</span><span className="font-semibold text-gray-900 dark:text-white">{req.employeeName}</span></div>
+            <div>
+              <span className="text-xs text-gray-400 block">Employee</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Avatar name={req.employeeName} size="xs" />
+                <span className="font-semibold text-gray-900 dark:text-white">{req.employeeName}</span>
+              </div>
+            </div>
             <div><span className="text-xs text-gray-400 block">Department</span><span className="font-medium">{req.department}</span></div>
             <div><span className="text-xs text-gray-400 block">Role</span><span className="font-medium text-xs text-brand-600 dark:text-brand-400">{req.employeeRole}</span></div>
             <div><span className="text-xs text-gray-400 block">Request Date</span><span className="font-medium">{new Date(req.requestDate).toLocaleDateString()}</span></div>
@@ -73,7 +80,12 @@ function DetailModal({ req, canApprove, onClose, onAction }: {
           {/* Previous action details */}
           {req.approvedByName && (
             <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-sm">
-              <p className="text-xs text-gray-400 mb-1">Action by {req.approvedByName} on {new Date(req.approvedAt!).toLocaleDateString()}</p>
+              <p className="text-xs text-gray-400 mb-1 flex items-center gap-1.5">
+                Action by
+                <Avatar name={req.approvedByName} size="xs" />
+                <span>{req.approvedByName}</span>
+                on {new Date(req.approvedAt!).toLocaleDateString()}
+              </p>
               {req.rejectionReason && <p className="text-red-600 dark:text-red-400 text-xs">Rejection reason: {req.rejectionReason}</p>}
               {req.notes && <p className="text-gray-600 dark:text-gray-400 text-xs">Notes: {req.notes}</p>}
             </div>
@@ -149,7 +161,9 @@ export default function AdvanceSalary() {
   const viewerId   = user?.id ?? "";
   const isApprover = ["super_admin", "management", "hr_admin"].includes(viewerRole);
 
-  useEffect(() => { setRequests(getAdvanceRequests()); }, []);
+  useEffect(() => {
+    PayrollService.getAdvanceRequests().then(setRequests).catch(() => setRequests([]));
+  }, []);
 
   const visible = useMemo(() => {
     let list = requests.filter(r => canViewRequest(viewerRole, viewerId, r));
@@ -172,13 +186,13 @@ export default function AdvanceSalary() {
   const pending  = requests.filter(r => canViewRequest(viewerRole, viewerId, r) && r.status === "pending");
   const approved = requests.filter(r => canViewRequest(viewerRole, viewerId, r) && r.status === "approved");
 
-  const handleAction = (id: string, action: "approved" | "rejected" | "paid", note: string) => {
+  const handleAction = async (id: string, action: "approved" | "rejected" | "paid", note: string) => {
     const req = requests.find(r => r.id === id);
     if (!req) return;
 
     // Self-approval security check — log attempt even if UI should have blocked it
     if (user?.id === req.employeeId) {
-      appendAdvanceAuditEntry({
+      await PayrollService.appendAdvanceAuditEntry({
         action:          "SELF_APPROVAL_ATTEMPT",
         requestId:       req.id,
         employeeId:      req.employeeId,
@@ -207,13 +221,13 @@ export default function AdvanceSalary() {
         ...(action === "rejected" ? { rejectionReason: note } : { notes: note }),
       };
     });
-    saveAdvanceRequests(updated);
+    await PayrollService.saveAdvanceRequests(updated);
     setRequests(updated);
     setSelected(null);
 
     // Audit log
     const auditAction = action === "approved" ? "APPROVED" : action === "rejected" ? "REJECTED" : "MARKED_PAID";
-    appendAdvanceAuditEntry({
+    await PayrollService.appendAdvanceAuditEntry({
       action:          auditAction,
       requestId:       req.id,
       employeeId:      req.employeeId,
@@ -296,8 +310,7 @@ export default function AdvanceSalary() {
               ) : visible.map(req => (
                 <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{req.employeeName}</p>
-                    <p className="text-xs text-gray-400">{req.employeeRole}</p>
+                    <EmployeeIdentity name={req.employeeName} designation={req.employeeRole} size="sm" />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{req.department}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
@@ -310,9 +323,12 @@ export default function AdvanceSalary() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {req.approvedByName ? (
-                      <div>
-                        <p className="text-xs text-gray-700 dark:text-gray-300">{req.approvedByName}</p>
-                        {req.approvedAt && <p className="text-xs text-gray-400">{new Date(req.approvedAt).toLocaleDateString()}</p>}
+                      <div className="flex items-center gap-1.5">
+                        <Avatar name={req.approvedByName} size="xs" />
+                        <div>
+                          <p className="text-xs text-gray-700 dark:text-gray-300">{req.approvedByName}</p>
+                          {req.approvedAt && <p className="text-xs text-gray-400">{new Date(req.approvedAt).toLocaleDateString()}</p>}
+                        </div>
                       </div>
                     ) : <span className="text-xs text-gray-400">—</span>}
                   </td>

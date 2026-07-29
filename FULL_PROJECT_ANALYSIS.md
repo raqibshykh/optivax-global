@@ -3,6 +3,8 @@
 **Version:** 2.3.0  
 **Framework:** React 19 + TypeScript 5.7 + Vite 6 + Tailwind CSS v4
 
+> **2026-07-04 update (Phase 1 migration):** The entire in-browser mock backend (`src/mock/`, `src/lib/devSeed.ts`, all `mock_*`/`optivax_*` localStorage keys) has been removed. Every domain now goes through a thin Service class (`src/services/`) calling a real REST API over HTTP; the backend itself is a Phase 2 deliverable — the app will not be functional against real data until then. **Section 10 (Mock Backend & Data Layer) below describes the pre-migration architecture and is kept for historical/schema-reference purposes only** — see `README.md` for the current architecture and `PHASE1_IMPLEMENTATION_REPORT.md` for the full migration record. All module descriptions in §11 onward still describe correct UI/business behavior; only their data-access mechanism changed (mock/localStorage → Service/HTTP).
+>
 > **2026-07-03 update:** Added the Employee Activity & Break Tracking module (login/logout session tracking, Dinner Break + Casual Break Balance Rule, live employee status dashboard, historical activity reports). See §13. All other sections below reflect the state as of 2026-06-25 except where explicitly annotated.
 
 ---
@@ -509,10 +511,10 @@ Types: `"success" | "error" | "warning" | "info"`
 
 ---
 
-## 10. MOCK BACKEND & DATA LAYER
+## 10. MOCK BACKEND & DATA LAYER *(historical — removed 2026-07-04, see update note at top of document)*
 
-### Architecture
-The app runs entirely in the browser. There is no real backend. Two mechanisms provide fake server behaviour:
+### Architecture (as it was)
+The app ran entirely in the browser. There was no real backend. Two mechanisms provided fake server behaviour:
 
 **1. Mock Server (`src/mock/server.ts`)**  
 Overrides `window.fetch`. Intercepts requests to `/saas/v1/*` pathnames. Routes include:

@@ -1,26 +1,19 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { RequirePermission } from "../../components/auth/RequirePermission";
 import Placeholder from "../../components/common/Placeholder";
+import Avatar from "../../components/common/Avatar";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { getCampaigns, getTargets, getSalesTasks } from "../../mock/salesData";
-import { safeParse } from "../../lib/storage";
-import { StoredClient } from "../../types";
+import { CampaignService, SalesTargetService, SalesTaskService } from "../../services/salesOpsService";
+import { CampaignBudget, SalesTarget, SalesTask, Client } from "../../types";
 import { UserService } from "../../services/userService";
 import { ClientService } from "../../services/clientService";
 import { notifyClientCreated } from "../../services/notificationHelpers";
-import { storeMockPassword } from "../../lib/client";
-import { getBudgets, getBudgetStats } from "../../mock/budgetData";
-
-const CLIENTS_KEY = "optivax_clients";
-
-// Local types for leads/deals/commissions (not shared with global types)
-interface SalesLead { id: string; name: string; email: string; company: string; status: "New" | "Contacted" | "Qualified" | "Lost"; estimated_value: number; }
-interface SalesDeal { id: string; title: string; client: string; amount: number; stage: "Proposal" | "Negotiation" | "Won" | "Lost"; }
-interface SalesCommission { id: string; amount: number; deal_id: string; status: "Pending" | "Paid"; date: string; }
+import { BudgetService, getBudgetStats } from "../../services/budgetService";
+import { SalesWidgetService, type SalesLead, type SalesDeal, type SalesCommission } from "../../services/salesWidgetService";
 
 interface ClientForm {
   companyName: string; contactName: string; email: string;
@@ -36,16 +29,14 @@ export default function SalesPanel() {
   const [activeTab, setActiveTab] = useState("leads");
 
   // ── Stored clients ────────────────────────────────────────────────────────
-  const [storedClients, setStoredClients] = useState<StoredClient[]>(() =>
-    safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), [])
-  );
+  const [storedClients, setStoredClients] = useState<Client[]>([]);
+
+  const refreshClients = () => {
+    ClientService.getAll().then(setStoredClients).catch(() => setStoredClients([]));
+  };
 
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === CLIENTS_KEY) setStoredClients(safeParse<StoredClient[]>(e.newValue, []));
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    refreshClients();
   }, []);
 
   // ── Client creation form ──────────────────────────────────────────────────
@@ -55,7 +46,6 @@ export default function SalesPanel() {
   const [clientFormLoading, setClientFormLoading] = useState(false);
   const [clientFormError, setClientFormError]     = useState("");
   const [clientFormSuccess, setClientFormSuccess] = useState("");
-  const [editingClientStatus, setEditingClientStatus] = useState<string | null>(null);
 
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,8 +65,8 @@ export default function SalesPanel() {
         company: companyName,
         role: "client",
         created_at: new Date().toISOString(),
+        password,
       });
-      storeMockPassword(email, password);
 
       // Create unified client record via mock server (writes to optivax_clients with all fields)
       await ClientService.create({
@@ -98,8 +88,7 @@ export default function SalesPanel() {
         notifyClientCreated(user.id, user.name, user.role, contactName, newProfile.id);
       }
 
-      // Re-read from localStorage (mock server wrote the unified record there)
-      setStoredClients(safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []));
+      refreshClients();
       setClientFormSuccess(`Client "${contactName}" created successfully!`);
       setClientForm({ companyName: "", contactName: "", email: "", phone: "", password: "" });
     } catch {
@@ -115,18 +104,24 @@ export default function SalesPanel() {
     const newStatus: "active" | "inactive" = current.status === "active" ? "inactive" : "active";
     try {
       await ClientService.update(id, { status: newStatus });
-      setStoredClients(safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []));
+      refreshClients();
     } catch {
       showToast("Failed to update client status", "error");
     }
-    setEditingClientStatus(null);
   };
 
   // ── Real sales data KPIs ──────────────────────────────────────────────────
-  const targets   = useMemo(() => getTargets(), []);
-  const campaigns = useMemo(() => getCampaigns(), []);
-  const tasks     = useMemo(() => getSalesTasks(), []);
-  const budgetStats = useMemo(() => getBudgetStats(getBudgets()), []);
+  const [targets, setTargets] = useState<SalesTarget[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignBudget[]>([]);
+  const [tasks, setTasks] = useState<SalesTask[]>([]);
+  const [budgetStats, setBudgetStats] = useState(() => getBudgetStats([]));
+
+  useEffect(() => {
+    SalesTargetService.getAll().then(setTargets).catch(() => {});
+    CampaignService.getAll().then(setCampaigns).catch(() => {});
+    SalesTaskService.getAll().then(setTasks).catch(() => {});
+    BudgetService.getBudgets().then((b) => setBudgetStats(getBudgetStats(b))).catch(() => {});
+  }, []);
 
   const teamRevenue  = targets.reduce((s, t) => s + t.achievedAmount, 0);
   const teamTarget   = targets.reduce((s, t) => s + t.monthlyTarget, 0);
@@ -141,49 +136,29 @@ export default function SalesPanel() {
   const activeTasks = myTasks.filter(t => t.status === "in-progress" || t.status === "todo").length;
   const doneTasks   = myTasks.filter(t => t.status === "done").length;
 
-  const DEFAULT_LEADS: SalesLead[] = [
-    { id: "l1", name: "Mike Ross",       email: "mike@pearson.com",    company: "Pearson Specter", status: "Qualified", estimated_value: 50000 },
-    { id: "l2", name: "Harvey Specter",  email: "harvey@pearson.com",  company: "Pearson Specter", status: "New",       estimated_value: 120000 },
-    { id: "l3", name: "Rachel Zane",     email: "rachel@pearson.com",  company: "Pearson Specter", status: "Contacted", estimated_value: 30000 },
-  ];
-  const DEFAULT_DEALS: SalesDeal[] = [
-    { id: "d1", title: "Enterprise Software License", client: "Acme Corp",  amount: 75000,  stage: "Negotiation" },
-    { id: "d2", title: "Cloud Migration Service",     client: "Globex",     amount: 150000, stage: "Proposal" },
-    { id: "d3", title: "Security Audit",              client: "Stark Ind",  amount: 45000,  stage: "Won" },
-  ];
-  const DEFAULT_COMMISSIONS: SalesCommission[] = [
-    { id: "cm1", amount: 4500, deal_id: "d3", status: "Paid",    date: "2026-05-20" },
-    { id: "cm2", amount: 7500, deal_id: "d1", status: "Pending", date: "2026-06-10" },
-  ];
-
-  // ── Local state — persisted to localStorage so data survives navigation ───
-  const [leads, setLeads] = useState<SalesLead[]>(() =>
-    safeParse<SalesLead[]>(localStorage.getItem("sales_leads"), DEFAULT_LEADS)
-  );
-  const [deals] = useState<SalesDeal[]>(() =>
-    safeParse<SalesDeal[]>(localStorage.getItem("sales_deals"), DEFAULT_DEALS)
-  );
-  const [commissions] = useState<SalesCommission[]>(() =>
-    safeParse<SalesCommission[]>(localStorage.getItem("sales_commissions"), DEFAULT_COMMISSIONS)
-  );
+  const [leads, setLeads] = useState<SalesLead[]>([]);
+  const [deals, setDeals] = useState<SalesDeal[]>([]);
+  const [commissions, setCommissions] = useState<SalesCommission[]>([]);
 
   useEffect(() => {
-    localStorage.setItem("sales_leads", JSON.stringify(leads));
-  }, [leads]);
+    SalesWidgetService.getLeads().then(setLeads).catch(() => setLeads([]));
+    SalesWidgetService.getDeals().then(setDeals).catch(() => setDeals([]));
+    SalesWidgetService.getCommissions().then(setCommissions).catch(() => setCommissions([]));
+  }, []);
 
   const [newLead, setNewLead] = useState({ name: "", company: "", estimated_value: 0 });
 
-  const handleAddLead = (e: React.FormEvent) => {
+  const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLead.name || !newLead.company) return;
-    setLeads(prev => [...prev, {
-      id: `l${Date.now()}`,
+    const created = await SalesWidgetService.createLead({
       name: newLead.name,
       email: `${newLead.name.split(" ")[0].toLowerCase()}@example.com`,
       company: newLead.company,
       status: "New",
       estimated_value: newLead.estimated_value,
-    }]);
+    });
+    setLeads(prev => [...prev, created]);
     setNewLead({ name: "", company: "", estimated_value: 0 });
     showToast("Lead added successfully!", "success");
   };
@@ -241,9 +216,7 @@ export default function SalesPanel() {
             return (
               <div key={t.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="h-8 w-8 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-xs font-bold text-brand-600 dark:text-brand-400">
-                    {t.memberName.split(" ").map(n => n[0]).join("")}
-                  </div>
+                  <Avatar name={t.memberName} size="sm" />
                   <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">{t.memberName}</div>
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-1">
@@ -427,12 +400,17 @@ export default function SalesPanel() {
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                       {storedClients.map((c) => (
                         <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                          <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{c.contactName}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <Avatar src={c.avatar} name={c.contactName} size="xs" />
+                              <span className="font-medium text-gray-900 dark:text-white">{c.contactName}</span>
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{c.companyName}</td>
                           <td className="px-4 py-3 text-brand-500 whitespace-nowrap">{c.email}</td>
                           <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{c.phone}</td>
                           <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                            {new Date(c.createdAt).toLocaleDateString()}
+                            {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "—"}
                           </td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${

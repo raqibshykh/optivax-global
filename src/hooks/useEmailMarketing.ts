@@ -43,7 +43,13 @@ export function useCampaigns() {
     setCampaigns((prev) => prev.filter((c) => c.id !== id));
   };
 
-  return { campaigns, isLoading, fetchCampaigns, addCampaign, updateCampaign, deleteCampaign };
+  const sendCampaign = async (id: string) => {
+    const sent = await EmailService.sendCampaign(id);
+    setCampaigns((prev) => prev.map((c) => (c.id === id ? sent : c)));
+    return sent;
+  };
+
+  return { campaigns, isLoading, fetchCampaigns, addCampaign, updateCampaign, deleteCampaign, sendCampaign };
 }
 
 export function useTemplates() {

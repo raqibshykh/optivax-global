@@ -1,23 +1,23 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useActivity } from "../../context/ActivityContext";
-import { BreakType, BREAK_LABELS, getRemainingCasualBalance } from "../../mock/activityData";
+import { BreakType, BREAK_LABELS } from "../../types/activity";
 
 const BREAK_OPTIONS: { type: BreakType; label: string }[] = [
   { type: "meal_dinner", label: BREAK_LABELS.meal_dinner },
   { type: "casual_5",    label: BREAK_LABELS.casual_5 },
 ];
 
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+function formatElapsed(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
 export default function BreakWidget() {
   const { user } = useAuth();
-  const { activeSession, activeBreak, startBreak, endBreak, isLoading } = useActivity();
+  const { activeBreak, breakStatus, startBreak, endBreak, isLoading } = useActivity();
 
   const [isOpen, setIsOpen]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -25,8 +25,19 @@ export default function BreakWidget() {
   const [, forceTick]         = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Local re-render tick only — the countdown value itself is always derived
-  // fresh from the server-provided activeBreak.startTime, never stored locally.
+  // Cosmetic-only local ticker: the server recomputes elapsedSeconds fresh
+  // from the DB's start_time on every 30s heartbeat/sync. Between syncs we
+  // interpolate a smoothly-ticking display value from that last-synced
+  // number, purely so the UI doesn't look frozen for 30 seconds at a time —
+  // isOverdue/warningLevel are never derived from this local tick, only from
+  // the server's own breakStatus.
+  const syncedElapsedRef = useRef(0);
+  const syncedAtRef = useRef(Date.now());
+  useEffect(() => {
+    syncedElapsedRef.current = breakStatus?.elapsedSeconds ?? 0;
+    syncedAtRef.current = Date.now();
+  }, [breakStatus?.elapsedSeconds]);
+
   useEffect(() => {
     if (!activeBreak) return;
     const id = setInterval(() => forceTick((n) => n + 1), 1000);
@@ -43,13 +54,13 @@ export default function BreakWidget() {
 
   if (!user || user.role === "client") return null;
 
-  const todaysBreaks = activeSession?.date === new Date().toISOString().slice(0, 10)
-    ? activeSession.breaks
-    : [];
-  const takenMealTypes = new Set(todaysBreaks.filter((b) => b.category === "meal").map((b) => b.type));
-  // Casual Break Balance Rule: a 15-minute daily pool, not a fixed count — this is
-  // only a UX hint (recomputed live from storage); the server call is authoritative.
-  const remainingCasualBalance = getRemainingCasualBalance(user.id);
+  const remainingBalance = breakStatus?.remainingBalance ?? 0;
+  const mealTaken = breakStatus?.mealTaken ?? false;
+  const isOverdue = breakStatus?.isOverdue ?? false;
+  const warningLevel = breakStatus?.warningLevel ?? "none";
+  const displayedElapsedSeconds = activeBreak
+    ? syncedElapsedRef.current + Math.floor((Date.now() - syncedAtRef.current) / 1000)
+    : 0;
 
   const handleStart = async (type: BreakType) => {
     setError(null);
@@ -73,10 +84,6 @@ export default function BreakWidget() {
     }
   };
 
-  const elapsedMs   = activeBreak ? Date.now() - new Date(activeBreak.startTime).getTime() : 0;
-  const allowedMs   = (activeBreak?.allowedMinutes ?? 0) * 60000;
-  const isOverdue   = activeBreak ? elapsedMs > allowedMs : false;
-
   return (
     <div ref={ref} className="relative">
       {activeBreak ? (
@@ -84,14 +91,16 @@ export default function BreakWidget() {
           onClick={handleEnd}
           disabled={isLoading}
           className={`flex items-center gap-2 rounded-full border px-3 h-11 text-sm font-medium transition-colors ${
-            isOverdue
+            warningLevel === "critical"
               ? "border-red-300 bg-red-50 text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+              : warningLevel === "warning"
+              ? "border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400"
               : "border-brand-300 bg-brand-50 text-brand-600 dark:border-brand-800 dark:bg-brand-900/20 dark:text-brand-400"
           }`}
           title={`${BREAK_LABELS[activeBreak.type]} — click to return`}
         >
           <span>{BREAK_LABELS[activeBreak.type]}</span>
-          <span className="font-mono">{formatElapsed(elapsedMs)}</span>
+          <span className="font-mono">{formatElapsed(displayedElapsedSeconds)}</span>
           {isOverdue && <span className="text-xs">Overdue</span>}
         </button>
       ) : (
@@ -108,7 +117,7 @@ export default function BreakWidget() {
         <div className="absolute right-0 mt-2 w-64 rounded-2xl border border-gray-200 bg-white p-2 shadow-lg z-50 dark:border-gray-800 dark:bg-gray-900">
           {BREAK_OPTIONS.map((opt) => {
             const isMeal   = opt.type.startsWith("meal_");
-            const disabled = isMeal ? takenMealTypes.has(opt.type) : remainingCasualBalance <= 0;
+            const disabled = isMeal ? mealTaken : remainingBalance <= 0;
             return (
               <button
                 key={opt.type}
@@ -125,7 +134,7 @@ export default function BreakWidget() {
                   disabled && <span className="block text-xs text-gray-400">Already taken today</span>
                 ) : (
                   <span className="block text-xs text-gray-400">
-                    {disabled ? "Daily casual balance used up" : `${remainingCasualBalance} min left today`}
+                    {disabled ? "Daily casual balance used up" : `${remainingBalance} min left today`}
                   </span>
                 )}
               </button>

@@ -72,7 +72,7 @@ export default function MarketingLeads() {
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await api.get<{ leads: Lead[] }>("/saas/v1/leads");
+      const res = await api.get<{ leads: Lead[] }>("/saas/v1/leads/list");
       setLeads(res.leads ?? []);
     } catch {
       showToast("Failed to load leads", "error");

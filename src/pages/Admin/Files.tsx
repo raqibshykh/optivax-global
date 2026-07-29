@@ -3,10 +3,12 @@ import { FileIcon, DownloadIcon } from "../../icons";
 import { useFiles } from "../../hooks/useFiles";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { useRef, useState, useEffect } from "react";
-import { safeParse } from "../../lib/storage";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { FileVisibility } from "../../types";
 import { notifyDeliverableUploaded } from "../../services/notificationHelpers";
+import { ClientService } from "../../services/clientService";
+import { ProjectService } from "../../services/projectService";
+import { UserService } from "../../services/userService";
 
 interface SimpleClient {
   id: string;
@@ -29,10 +31,6 @@ interface UserProfile {
   departmentId?: string;
 }
 
-const CLIENTS_KEY  = "optivax_clients";
-const PROJECTS_KEY = "mock_projects";
-const PROFILES_KEY = "mock_profiles";
-
 const VISIBILITY_OPTIONS: { value: FileVisibility; label: string; description: string }[] = [
   { value: "private",      label: "Private",        description: "Only you can see this file" },
   { value: "department",   label: "Department",      description: "Everyone in your department" },
@@ -41,15 +39,6 @@ const VISIBILITY_OPTIONS: { value: FileVisibility; label: string; description: s
   { value: "client",       label: "Client",          description: "The client attached to this file" },
 ];
 
-function loadClients(): SimpleClient[] {
-  return safeParse<SimpleClient[]>(localStorage.getItem(CLIENTS_KEY) ?? "[]", []);
-}
-function loadProjects(): SimpleProject[] {
-  return safeParse<SimpleProject[]>(localStorage.getItem(PROJECTS_KEY) ?? "[]", []);
-}
-function loadProfiles(): UserProfile[] {
-  return safeParse<UserProfile[]>(localStorage.getItem(PROFILES_KEY) ?? "[]", []);
-}
 function clientLabel(c: SimpleClient): string {
   return c.name || c.contactName || c.companyName || c.company || c.id;
 }
@@ -88,9 +77,16 @@ export default function Files() {
 
   useEffect(() => {
     if (showUploadModal) {
-      setClients(loadClients());
-      setAllProjects(loadProjects());
-      setAllProfiles(loadProfiles());
+      (async () => {
+        const [clientsData, projectsData, profilesData] = await Promise.all([
+          ClientService.getAll(),
+          ProjectService.getAll(),
+          UserService.getAll(),
+        ]);
+        setClients(clientsData as SimpleClient[]);
+        setAllProjects(projectsData as SimpleProject[]);
+        setAllProfiles(profilesData as UserProfile[]);
+      })();
       setStep(1);
       setSelectedClientId("");
       setSelectedProjectId("");
@@ -102,21 +98,21 @@ export default function Files() {
     }
   }, [showUploadModal]);
 
-  const clientProjects  = allProjects.filter((p) => p.clientId === selectedClientId);
-  const selectedClient  = clients.find((c) => c.id === selectedClientId);
-  const selectedProject = allProjects.find((p) => p.id === selectedProjectId);
+  const clientProjects  = useMemo(() => allProjects.filter((p) => p.clientId === selectedClientId), [allProjects, selectedClientId]);
+  const selectedClient  = useMemo(() => clients.find((c) => c.id === selectedClientId), [clients, selectedClientId]);
+  const selectedProject = useMemo(() => allProjects.find((p) => p.id === selectedProjectId), [allProjects, selectedProjectId]);
 
   // For "specific" visibility: show all staff (not clients)
-  const pickableUsers = allProfiles.filter(
-    (p) => p.role && p.role !== "client" && p.id !== user?.id
+  const pickableUsers = useMemo(
+    () => allProfiles.filter((p) => p.role && p.role !== "client" && p.id !== user?.id),
+    [allProfiles, user?.id]
   );
-  const filteredUsers = userSearch.trim()
-    ? pickableUsers.filter(
-        (p) =>
-          (p.full_name || "").toLowerCase().includes(userSearch.toLowerCase()) ||
-          (p.role || "").toLowerCase().includes(userSearch.toLowerCase())
-      )
-    : pickableUsers;
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    return q
+      ? pickableUsers.filter((p) => (p.full_name || "").toLowerCase().includes(q) || (p.role || "").toLowerCase().includes(q))
+      : pickableUsers;
+  }, [pickableUsers, userSearch]);
 
   const toggleUser = (uid: string) => {
     setVisibleTo((prev) =>

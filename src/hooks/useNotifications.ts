@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Notification } from "../types";
 import { NotificationService } from "../services/notificationService";
+import { ClientService } from "../services/clientService";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../lib/client"; // 👈 API client import kiya
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -19,20 +19,8 @@ export function useNotifications() {
       if (user.role === 'super_admin') {
         data = await NotificationService.getAll();
       } else if (user.role === 'client') {
-        if (user.email) {
-          // 👈 Client table se sahi ID lookup karne ke liye email query lagayi
-          const clients = await api.get<{ id: string }[]>(
-            `/saas/v1/clients/list?email=${encodeURIComponent(user.email)}`
-          );
-          const clientId = clients?.[0]?.id;
-          if (clientId) {
-            data = await NotificationService.getByUserId(clientId);
-          } else {
-            data = await NotificationService.getByUserId(user.id);
-          }
-        } else {
-          data = await NotificationService.getByUserId(user.id);
-        }
+        const client = user.email ? await ClientService.getByEmail(user.email) : null;
+        data = await NotificationService.getByUserId(client?.id ?? user.id);
       } else {
         data = await NotificationService.getByUserId(user.id);
       }
@@ -55,11 +43,11 @@ export function useNotifications() {
     let bc: BroadcastChannel | null = null;
     const storageKey = "__saas_notifications_update";
 
-    const onMessage = (ev: MessageEvent) => {
+    const onMessage = (_ev: MessageEvent) => {
       try {
         // payload can be anything; refresh list to keep authoritative state
         fetchNotifications();
-      } catch {}
+      } catch { /* refresh best-effort — a failed refetch here isn't user-actionable */ }
     };
 
     try {
@@ -67,21 +55,20 @@ export function useNotifications() {
         bc = new BroadcastChannel("saas_notifications");
         bc.addEventListener("message", onMessage);
       }
-    } catch {}
+    } catch { /* BroadcastChannel unsupported in this browser — cross-tab sync degrades to the storage-event fallback below */ }
 
     const onStorage = (ev: StorageEvent) => {
       try {
         if (ev.key === storageKey) fetchNotifications();
-      } catch {}
+      } catch { /* refresh best-effort — a failed refetch here isn't user-actionable */ }
     };
 
     window.addEventListener("storage", onStorage);
 
     return () => {
-      try { bc?.removeEventListener("message", onMessage); bc?.close(); } catch {}
-      try { window.removeEventListener("storage", onStorage); } catch {}
+      try { bc?.removeEventListener("message", onMessage); bc?.close(); } catch { /* channel already closed/never opened */ }
+      try { window.removeEventListener("storage", onStorage); } catch { /* listener already removed */ }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchNotifications]);
 
   const markAsRead = async (id: string) => {
@@ -99,13 +86,10 @@ export function useNotifications() {
   const markAllAsRead = async () => {
     if (!user) return;
     try {
-      // client lookup for marking all as read
       let targetId = user.id;
       if (user.role === 'client' && user.email) {
-        const clients = await api.get<{ id: string }[]>(
-          `/saas/v1/clients/list?email=${encodeURIComponent(user.email)}`
-        );
-        if (clients?.[0]?.id) targetId = clients[0].id;
+        const client = await ClientService.getByEmail(user.email);
+        if (client?.id) targetId = client.id;
       }
 
       await NotificationService.markAllAsRead(targetId);

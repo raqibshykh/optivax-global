@@ -3,9 +3,10 @@ import { Outlet } from "react-router-dom";
 import AppHeader from "./AppHeader";
 import Backdrop from "./Backdrop";
 import AppSidebar from "./AppSidebar";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 
 const LayoutContent: React.FC = () => {
-  const { isExpanded, isHovered, isMobileOpen } = useSidebar();
+  const { isExpanded, isHovered } = useSidebar();
 
   return (
     <div className="min-h-screen lg:flex overflow-x-hidden">
@@ -20,7 +21,13 @@ const LayoutContent: React.FC = () => {
       >
         <AppHeader />
         <div className="p-4 mx-auto max-w-[--breakpoint-2xl] md:p-6">
-          <Outlet />
+          {/* Scoped to just the routed page content — a crash in one page
+              no longer has to take the sidebar/header down with it; the
+              top-level boundary in App.tsx remains as the outer safety net
+              for anything outside this layout (e.g. AppSidebar itself). */}
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </div>
     </div>

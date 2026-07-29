@@ -5,26 +5,31 @@ import { UserService, UserProfile } from "../../services/userService";
 import EmployeeHierarchy from "../../components/dashboard/EmployeeHierarchy";
 import ActivityFeed from "../../components/dashboard/ActivityFeed";
 import { safeParse } from "../../lib/storage";
-import { StoredClient, Deliverable } from "../../types";
-import { getBudgets, getBudgetStats } from "../../mock/budgetData";
-import { getAdvanceRequests } from "../../mock/payrollData";
+import { Client, Deliverable, Project } from "../../types";
+import { BudgetService, getBudgetStats } from "../../services/budgetService";
+import { PayrollService } from "../../services/payrollService";
+import { LeaveRequestService } from "../../services/leaveRequestService";
+import { EmployeeExtraService } from "../../services/employeeExtraService";
+import { ClientService } from "../../services/clientService";
+import { DeliverableService } from "../../services/deliverableService";
+import { TaskService } from "../../services/taskService";
+import { SalesTaskService } from "../../services/salesOpsService";
+import { MarketingCampaignService } from "../../services/marketingCampaignService";
+import { ProjectService } from "../../services/projectService";
+import { PaymentService } from "../../services/paymentService";
+import { ITTicketService, DeviceService } from "../../services/itSupportService";
 
-const CLIENTS_KEY   = "optivax_clients";
-const DELIVS_KEY    = "optivax_deliverables";
-const TASKS_KEY     = "mock_tasks";
-const EXTRA_KEY     = "optivax_employee_extra";
-const LEAVES_KEY    = "optivax_leave_requests";
-const ATTEND_KEY    = "mock_attendance";
-const CAMPAIGNS_KEY = "marketing_campaigns";
-const PROJECTS_KEY  = "mock_projects";
-const PAYMENTS_KEY  = "mock_payments";
-const SALES_TASKS_KEY = "sales_tasks";
+// "mock_attendance" here is a distinct, still-orphaned per-day admin
+// attendance-marking widget (Present/Absent/Late per employee per date) with
+// no backend route yet — separate from HR/Attendance.tsx's self-check-in log
+// (already migrated) and the yearly AttendanceService report data. Left
+// reading localStorage directly; tracked as remaining work.
+const ATTEND_KEY = "mock_attendance";
 
 interface ExtraData   { userId: string; leavesTaken: number; salary: number; salaryStatus: string; workMode: string; }
 interface MockTask    { id: string; status: string; assigneeId?: string; budget?: number; budgetUsed?: number; }
 interface LeaveReq   { status: string; }
 interface Campaign   { id: string; name: string; budget: number; spent: number; status: string; }
-interface MockProject { id: string; name: string; clientId: string; status: string; priority: string; progress: number; budget: number; spent: number; deadline: string; description?: string; }
 
 function KPI({ title, value, sub, color = "blue" }: { title: string; value: string | number; sub?: string; color?: string }) {
   const ring: Record<string, string> = {
@@ -64,13 +69,13 @@ const DEPT_LABELS: Record<string, string> = {
 export default function ManagementPanel() {
   const [tab, setTab] = useState("overview");
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-  const [clients, setClients] = useState<StoredClient[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [tasks, setTasks] = useState<MockTask[]>([]);
   const [extras, setExtras] = useState<Record<string, ExtraData>>({});
   const [leaves, setLeaves] = useState<LeaveReq[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [projects, setProjects] = useState<MockProject[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [payments, setPayments] = useState<{ amount: number }[]>([]);
   const [budgetStats, setBudgetStats] = useState({ total: 0, used: 0, remaining: 0, utilPct: 0, active: 0, overspent: 0, count: 0 });
   const [advancePending, setAdvancePending] = useState({ count: 0, total: 0 });
@@ -79,22 +84,26 @@ export default function ManagementPanel() {
 
   useEffect(() => {
     UserService.getAll().then(setAllUsers).catch(() => {});
-    setBudgetStats(getBudgetStats(getBudgets()));
-    const advReqs = getAdvanceRequests().filter(r => r.status === "pending");
-    setAdvancePending({ count: advReqs.length, total: advReqs.reduce((s, r) => s + r.requestedAmount, 0) });
-    setClients(safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []));
-    setDeliverables(safeParse<Deliverable[]>(localStorage.getItem(DELIVS_KEY), []));
-    const generalTasks = safeParse<MockTask[]>(localStorage.getItem(TASKS_KEY), []);
-    const salesRaw = safeParse<{ id: string; status: string; assignedTo?: string; }[]>(localStorage.getItem(SALES_TASKS_KEY), []);
-    const salesAsMockTasks: MockTask[] = salesRaw.map(t => ({ id: t.id, status: t.status, assigneeId: t.assignedTo }));
-    setTasks([...generalTasks, ...salesAsMockTasks]);
-    setExtras(safeParse<Record<string, ExtraData>>(localStorage.getItem(EXTRA_KEY), {}));
-    setLeaves(safeParse<LeaveReq[]>(localStorage.getItem(LEAVES_KEY), []));
-    setCampaigns(safeParse<Campaign[]>(localStorage.getItem(CAMPAIGNS_KEY), []));
-    setProjects(safeParse<MockProject[]>(localStorage.getItem(PROJECTS_KEY), []));
-    setPayments(safeParse<{ amount: number }[]>(localStorage.getItem(PAYMENTS_KEY), []));
-    setItTickets(safeParse<{ status: string }[]>(localStorage.getItem("mock_it_tickets"), []));
-    setItDevices(safeParse<{ status: string }[]>(localStorage.getItem("mock_biometric_devices"), []));
+    BudgetService.getBudgets().then((b) => setBudgetStats(getBudgetStats(b))).catch(() => {});
+    PayrollService.getAdvanceRequests().then((all) => {
+      const advReqs = all.filter(r => r.status === "pending");
+      setAdvancePending({ count: advReqs.length, total: advReqs.reduce((s, r) => s + r.requestedAmount, 0) });
+    }).catch(() => {});
+    ClientService.getAll().then(setClients).catch(() => setClients([]));
+    DeliverableService.getAll().then(setDeliverables).catch(() => setDeliverables([]));
+    Promise.all([TaskService.getAll(), SalesTaskService.getAll()])
+      .then(([generalTasks, salesTasks]) => {
+        const salesAsMockTasks: MockTask[] = salesTasks.map(t => ({ id: t.id, status: t.status, assigneeId: t.assignedTo }));
+        setTasks([...generalTasks, ...salesAsMockTasks]);
+      })
+      .catch(() => setTasks([]));
+    EmployeeExtraService.getAll().then(setExtras).catch(() => setExtras({}));
+    LeaveRequestService.getEmployeeRequests().then(setLeaves).catch(() => setLeaves([]));
+    MarketingCampaignService.getAll().then(setCampaigns).catch(() => setCampaigns([]));
+    ProjectService.getAll().then(setProjects).catch(() => setProjects([]));
+    PaymentService.getAll().then(setPayments).catch(() => setPayments([]));
+    ITTicketService.getAll().then(setItTickets).catch(() => setItTickets([]));
+    DeviceService.getAll().then(setItDevices).catch(() => setItDevices([]));
   }, []);
 
   const employees = allUsers.filter((u) => u.role !== "client");

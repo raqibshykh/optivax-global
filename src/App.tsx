@@ -1,120 +1,136 @@
+import { lazy, Suspense } from "react";
 import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import SignIn from "./pages/AuthPages/SignIn";
-import SignUp from "./pages/AuthPages/SignUp";
 import ResetPassword from "./pages/AuthPages/ResetPassword";
+import ChangePassword from "./pages/AuthPages/ChangePassword";
 import NotFound from "./pages/OtherPage/NotFound";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import LoadingState from "./components/common/LoadingState";
 
 // ── Dashboard panels ─────────────────────────────────────────────────────
-import AdminPanel from "./pages/Dashboard/AdminPanel";
-import ClientPanel from "./pages/Dashboard/ClientPanel";
-import SuperAdminPanel from "./pages/Dashboard/SuperAdminPanel";
-import SalesPanel from "./pages/Dashboard/SalesPanel";
-import ProductionPanel from "./pages/Dashboard/ProductionPanel";
-import MarketingPanel from "./pages/Dashboard/MarketingPanel";
-import HRPanel from "./pages/Dashboard/HRPanel";
-import ManagementPanel from "./pages/Dashboard/ManagementPanel";
-import ITSupportPanel from "./pages/Dashboard/ITSupportPanel";
+const AdminPanel = lazy(() => import("./pages/Dashboard/AdminPanel"));
+const ClientPanel = lazy(() => import("./pages/Dashboard/ClientPanel"));
+const SuperAdminPanel = lazy(() => import("./pages/Dashboard/SuperAdminPanel"));
+const SalesPanel = lazy(() => import("./pages/Dashboard/SalesPanel"));
+const ProductionPanel = lazy(() => import("./pages/Dashboard/ProductionPanel"));
+const MarketingPanel = lazy(() => import("./pages/Dashboard/MarketingPanel"));
+const HRPanel = lazy(() => import("./pages/Dashboard/HRPanel"));
+const ManagementPanel = lazy(() => import("./pages/Dashboard/ManagementPanel"));
+const ITSupportPanel = lazy(() => import("./pages/Dashboard/ITSupportPanel"));
 
 // ── HR pages ─────────────────────────────────────────────────────────────
-import Employees from "./pages/HR/Employees";
-import Payroll from "./pages/HR/Payroll";
-import LeaveRequests from "./pages/HR/LeaveRequests";
-import Attendance from "./pages/HR/Attendance";
-import AttendanceMonthly from "./pages/HR/AttendanceMonthly";
-import AttendanceYearly from "./pages/HR/AttendanceYearly";
-import AttendanceAnalytics from "./pages/HR/AttendanceAnalytics";
-import AttendanceCalendar from "./pages/HR/AttendanceCalendar";
-import AttendancePayroll from "./pages/HR/AttendancePayroll";
-import AttendanceCorrections from "./pages/HR/AttendanceCorrections";
+const Employees = lazy(() => import("./pages/HR/Employees"));
+const Payroll = lazy(() => import("./pages/HR/Payroll"));
+const LeaveRequests = lazy(() => import("./pages/HR/LeaveRequests"));
+const Attendance = lazy(() => import("./pages/HR/Attendance"));
+const AttendanceMonthly = lazy(() => import("./pages/HR/AttendanceMonthly"));
+const AttendanceYearly = lazy(() => import("./pages/HR/AttendanceYearly"));
+const AttendanceAnalytics = lazy(() => import("./pages/HR/AttendanceAnalytics"));
+const AttendanceCalendar = lazy(() => import("./pages/HR/AttendanceCalendar"));
+const AttendancePayroll = lazy(() => import("./pages/HR/AttendancePayroll"));
+const AttendanceCorrections = lazy(() => import("./pages/HR/AttendanceCorrections"));
+const AttendanceImport = lazy(() => import("./pages/HR/AttendanceImport"));
 
 // ── Admin / shared pages ──────────────────────────────────────────────────
-import Clients from "./pages/Admin/Clients";
-import Projects from "./pages/Admin/Projects";
-import AdminBilling from "./pages/Admin/Billing";
-import AdminFiles from "./pages/Admin/Files";
-import AdminNotifications from "./pages/Admin/Notifications";
-import AdminRevisions from "./pages/Admin/Revisions";
-import Settings from "./pages/Admin/Settings";
-import AuditLogs from "./pages/Admin/AuditLogs";
+const Clients = lazy(() => import("./pages/Admin/Clients"));
+const Projects = lazy(() => import("./pages/Admin/Projects"));
+const AdminBilling = lazy(() => import("./pages/Admin/Billing"));
+const AdminFiles = lazy(() => import("./pages/Admin/Files"));
+const AdminNotifications = lazy(() => import("./pages/Admin/Notifications"));
+const AdminRevisions = lazy(() => import("./pages/Admin/Revisions"));
+const Settings = lazy(() => import("./pages/Admin/Settings"));
+const AuditLogs = lazy(() => import("./pages/Admin/AuditLogs"));
+const SecurityAuditLogs = lazy(() => import("./pages/Admin/SecurityAuditLogs"));
 
 // ── Email marketing pages ─────────────────────────────────────────────────
-import Campaigns from "./pages/Admin/Email/Campaigns";
-import Templates from "./pages/Admin/Email/Templates";
-import Audience from "./pages/Admin/Email/Audience";
-import Analytics from "./pages/Admin/Email/Analytics";
-import Automation from "./pages/Admin/Email/Automation";
+const Campaigns = lazy(() => import("./pages/Admin/Email/Campaigns"));
+const Templates = lazy(() => import("./pages/Admin/Email/Templates"));
+const Audience = lazy(() => import("./pages/Admin/Email/Audience"));
+const Analytics = lazy(() => import("./pages/Admin/Email/Analytics"));
+const Automation = lazy(() => import("./pages/Admin/Email/Automation"));
 
 // ── Common feature pages ──────────────────────────────────────────────────
-import Reports from "./pages/Common/Reports";
-import Tasks from "./pages/Common/Tasks";
-import ActivityReports from "./pages/Common/ActivityReports";
-import LiveActivityDashboard from "./pages/Common/LiveActivityDashboard";
+const Reports = lazy(() => import("./pages/Common/Reports"));
+const Tasks = lazy(() => import("./pages/Common/Tasks"));
+const ActivityReports = lazy(() => import("./pages/Common/ActivityReports"));
+const LiveActivityDashboard = lazy(() => import("./pages/Common/LiveActivityDashboard"));
 
 // ── Sales management pages ────────────────────────────────────────────────
-import CampaignBudgets from "./pages/Sales/CampaignBudgets";
-import SalesLeads from "./pages/Sales/Leads";
-import SalesTargets from "./pages/Sales/SalesTargets";
-import SalesTasks from "./pages/Sales/SalesTasks";
-import TeamPerformance from "./pages/Sales/TeamPerformance";
-import Commissions from "./pages/Sales/Commissions";
+const CampaignBudgets = lazy(() => import("./pages/Sales/CampaignBudgets"));
+const SalesLeads = lazy(() => import("./pages/Sales/Leads"));
+const SalesTargets = lazy(() => import("./pages/Sales/SalesTargets"));
+const SalesTasks = lazy(() => import("./pages/Sales/SalesTasks"));
+const TeamPerformance = lazy(() => import("./pages/Sales/TeamPerformance"));
+const Commissions = lazy(() => import("./pages/Sales/Commissions"));
 
 // ── Production pages ──────────────────────────────────────────────────────
-import Deliverables from "./pages/Production/Deliverables";
-import ClientOwnership from "./pages/Production/ClientOwnership";
-import MyClients from "./pages/Production/MyClients";
+const Deliverables = lazy(() => import("./pages/Production/Deliverables"));
+const ClientOwnership = lazy(() => import("./pages/Production/ClientOwnership"));
+const MyClients = lazy(() => import("./pages/Production/MyClients"));
 
 // ── Marketing pages ───────────────────────────────────────────────────────
-import SocialTracking from "./pages/Marketing/SocialTracking";
-import MarketingLeads from "./pages/Marketing/Leads";
-import ContentCalendar from "./pages/Marketing/ContentCalendar";
+const SocialTracking = lazy(() => import("./pages/Marketing/SocialTracking"));
+const MarketingLeads = lazy(() => import("./pages/Marketing/Leads"));
+const ContentCalendar = lazy(() => import("./pages/Marketing/ContentCalendar"));
 
 // ── Client Communication pages ────────────────────────────────────────────
-import ClientConversations from "./pages/Conversations/ClientConversations";
-import ClientMessages from "./pages/Client/Messages";
+const ClientConversations = lazy(() => import("./pages/Conversations/ClientConversations"));
+const ClientMessages = lazy(() => import("./pages/Client/Messages"));
 
 // ── Budget Management ─────────────────────────────────────────────────────
-import BudgetManagement from "./pages/Budget/BudgetManagement";
+const BudgetManagement = lazy(() => import("./pages/Budget/BudgetManagement"));
 
 // ── Payroll & Salary ──────────────────────────────────────────────────────
-import SalarySlips from "./pages/HR/SalarySlips";
-import BulkSalarySlips from "./pages/HR/BulkSalarySlips";
-import AdvanceSalary from "./pages/HR/AdvanceSalary";
-import AdvanceSalaryAuditLog from "./pages/HR/AdvanceSalaryAuditLog";
-import MySalarySlips from "./pages/Employee/MySalarySlips";
-import MyBudget from "./pages/Employee/MyBudget";
-import AdvanceSalaryRequest from "./pages/Employee/AdvanceSalaryRequest";
+const SalarySlips = lazy(() => import("./pages/HR/SalarySlips"));
+const BulkSalarySlips = lazy(() => import("./pages/HR/BulkSalarySlips"));
+const AdvanceSalary = lazy(() => import("./pages/HR/AdvanceSalary"));
+const AdvanceSalaryAuditLog = lazy(() => import("./pages/HR/AdvanceSalaryAuditLog"));
+const MySalarySlips = lazy(() => import("./pages/Employee/MySalarySlips"));
+const MyBudget = lazy(() => import("./pages/Employee/MyBudget"));
+const AdvanceSalaryRequest = lazy(() => import("./pages/Employee/AdvanceSalaryRequest"));
 
 // ── IT Support pages ─────────────────────────────────────────────────────
-import AttendanceDashboard from "./pages/ITSupport/AttendanceDashboard";
-import Devices from "./pages/ITSupport/Devices";
-import DeviceLogs from "./pages/ITSupport/DeviceLogs";
-import AttendanceExceptions from "./pages/ITSupport/AttendanceExceptions";
-import AttendanceReports from "./pages/ITSupport/AttendanceReports";
-import ITTickets from "./pages/ITSupport/Tickets";
+const AttendanceDashboard = lazy(() => import("./pages/ITSupport/AttendanceDashboard"));
+const Devices = lazy(() => import("./pages/ITSupport/Devices"));
+const DeviceLogs = lazy(() => import("./pages/ITSupport/DeviceLogs"));
+const AttendanceExceptions = lazy(() => import("./pages/ITSupport/AttendanceExceptions"));
+const AttendanceReports = lazy(() => import("./pages/ITSupport/AttendanceReports"));
+const ITTickets = lazy(() => import("./pages/ITSupport/Tickets"));
+const Punches = lazy(() => import("./pages/ITSupport/Punches"));
+const BiometricMapping = lazy(() => import("./pages/ITSupport/BiometricMapping"));
 
 // ── Admin feature pages ───────────────────────────────────────────────────
-import Departments from "./pages/Admin/Departments";
+const Departments = lazy(() => import("./pages/Admin/Departments"));
 
 // ── Client pages ──────────────────────────────────────────────────────────
-import MyProjects from "./pages/Client/MyProjects";
-import ClientBilling from "./pages/Client/Billing";
-import ClientFiles from "./pages/Client/Files";
-import ClientNotifications from "./pages/Client/Notifications";
-import MyRevisions from "./pages/Client/MyRevisions";
-import Profile from "./pages/Client/Profile";
+const MyProjects = lazy(() => import("./pages/Client/MyProjects"));
+const ClientBilling = lazy(() => import("./pages/Client/Billing"));
+const ClientFiles = lazy(() => import("./pages/Client/Files"));
+const ClientNotifications = lazy(() => import("./pages/Client/Notifications"));
+const MyRevisions = lazy(() => import("./pages/Client/MyRevisions"));
+const Profile = lazy(() => import("./pages/Client/Profile"));
 
 // ── Auth guards ───────────────────────────────────────────────────────────
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { PublicRoute } from "./components/auth/PublicRoute";
+
+/** Full-page fallback while a lazy route chunk loads — matches the loading UI already used elsewhere (LoadingState), so a first visit to any route reads like a normal load, not a redesign. */
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <LoadingState label="Loading page..." />
+    </div>
+  );
+}
 
 export default function App() {
   return (
     <ErrorBoundary>
     <Router>
       <ScrollToTop />
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         {/* Root → login */}
         <Route path="/" element={<Navigate to="/login" replace />} />
@@ -122,8 +138,13 @@ export default function App() {
         {/* ── Public ──────────────────────────────────────────────────── */}
         <Route element={<PublicRoute />}>
           <Route path="/login"          element={<SignIn />} />
-          <Route path="/signup"         element={<SignUp />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+        </Route>
+
+        {/* Any authenticated user, regardless of role — reachable even
+            while must-change-password is blocking every other route. */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/change-password" element={<ChangePassword />} />
         </Route>
 
         {/* ── Protected (inside AppLayout) ─────────────────────────── */}
@@ -149,6 +170,7 @@ export default function App() {
             <Route path="/admin/settings"              element={<Settings />} />
             <Route path="/admin/reports"               element={<Reports />} />
             <Route path="/admin/audit-logs"            element={<AuditLogs />} />
+            <Route path="/admin/security-audit-logs"   element={<SecurityAuditLogs />} />
             <Route path="/admin/commissions"          element={<Commissions />} />
             <Route path="/admin/email/campaigns"       element={<Campaigns />} />
             <Route path="/admin/email/templates"       element={<Templates />} />
@@ -256,6 +278,9 @@ export default function App() {
             <Route element={<ProtectedRoute allowedDomain="hr" allowedRoles={["super_admin"]} />}>
               <Route path="/hr/attendance/corrections" element={<AttendanceCorrections />} />
             </Route>
+            <Route element={<ProtectedRoute allowedDomain="hr" allowedRoles={["super_admin", "hr_admin"]} />}>
+              <Route path="/hr/attendance/import" element={<AttendanceImport />} />
+            </Route>
             <Route path="/hr/tasks"          element={<Tasks />} />
             <Route path="/hr/files"          element={<AdminFiles />} />
             <Route element={<ProtectedRoute allowedDomain="hr" allowedRoles={["hr_admin", "super_admin"]} />}>
@@ -286,8 +311,9 @@ export default function App() {
             </Route>
           </Route>
 
-          {/* ── CLIENT CONVERSATIONS — all client-facing depts + management/super_admin ── */}
-          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "sales_admin", "sales_member", "marketing_admin", "marketing_member", "production_admin", "production_member"]} />}>
+          {/* ── CLIENT CONVERSATIONS — management/super_admin + marketing/production depts only.
+               Sales Admin/Sales Member explicitly excluded from viewing client messages/history. ── */}
+          <Route element={<ProtectedRoute allowedRoles={["super_admin", "management", "marketing_admin", "marketing_member", "production_admin", "production_member"]} />}>
             <Route path="/conversations" element={<ClientConversations />} />
           </Route>
 
@@ -346,6 +372,8 @@ export default function App() {
             <Route path="/it/attendance"    element={<AttendanceDashboard />} />
             <Route path="/it/devices"       element={<Devices />} />
             <Route path="/it/device-logs"   element={<DeviceLogs />} />
+            <Route path="/it/punches"       element={<Punches />} />
+            <Route path="/it/biometric-mapping" element={<BiometricMapping />} />
             <Route path="/it/exceptions"    element={<AttendanceExceptions />} />
             <Route path="/it/reports"       element={<AttendanceReports />} />
             <Route path="/it/notifications" element={<AdminNotifications />} />
@@ -370,6 +398,7 @@ export default function App() {
         {/* Fallback */}
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </Suspense>
     </Router>
     </ErrorBoundary>
   );

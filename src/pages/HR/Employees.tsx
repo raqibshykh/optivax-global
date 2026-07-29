@@ -1,12 +1,14 @@
 import PageMeta from "../../components/common/PageMeta";
 import { UserService, UserProfile } from "../../services/userService";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
-import { safeParse } from "../../lib/storage";
-import { storeMockPassword } from "../../lib/client";
 import { DESIGNATIONS_BY_ROLE, UserRole } from "../../types";
+import { EmployeeExtraService } from "../../services/employeeExtraService";
+import { DepartmentService, Department } from "../../services/departmentService";
+import Avatar from "../../components/common/Avatar";
+import { resolveDepartmentName, UNKNOWN_DEPARTMENT } from "../../domain/department/calculations";
 
 interface EmployeeExtraData {
   userId: string;
@@ -16,6 +18,13 @@ interface EmployeeExtraData {
   workMode: "Onsite" | "Remote";
 }
 
+// Fallback shown only if the real departments table (Admin/Departments.tsx)
+// has nothing configured yet, or its fetch fails — keeps the form usable
+// even on a fresh install. Values MUST stay in lockstep with the backend's
+// helpers/DepartmentMapper.php::ROLE_TO_DEPT_SLUG — every employee-department
+// scoping check (RBAC, attendance, activity, budget) reads this exact slug
+// shape, so the dropdown's VALUEs can never change format, only their LABEL
+// source (see departmentOptions below, which prefers real department names).
 const DEPARTMENTS = [
   { value: "dept-marketing",   label: "Marketing" },
   { value: "dept-sales",       label: "Sales" },
@@ -24,6 +33,55 @@ const DEPARTMENTS = [
   { value: "dept-management",  label: "Management" },
   { value: "dept-it-support",  label: "IT Support" },
 ];
+
+// Mirrors the backend's DepartmentMapper::ROLE_TO_DEPT_SLUG exactly. The
+// naive `dept-${role.split("_")[0]}` this used to be replaced with produced
+// "dept-it" for it_admin/it_member — silently different from the backend's
+// authoritative "dept-it-support" (the value actually stamped onto the
+// employee record server-side; see ProfileController::create()'s forced-
+// department branch). That mismatch only affected this page's own display
+// (the "(auto-assigned)" label and the "Scope:" badge below both looked up
+// the wrong department slug) — but it's exactly the kind of "employee's
+// shown department disagrees with reality" confusion this fix closes.
+const ROLE_TO_DEPT_SLUG: Partial<Record<UserRole, string>> = {
+  sales_admin: "dept-sales", sales_member: "dept-sales",
+  production_admin: "dept-production", production_member: "dept-production",
+  marketing_admin: "dept-marketing", marketing_member: "dept-marketing",
+  hr_admin: "dept-hr", hr_member: "dept-hr",
+  it_admin: "dept-it-support", it_member: "dept-it-support",
+};
+
+const ROLE_LABELS: Partial<Record<UserRole, string>> = {
+  management: "Management",
+  sales_admin: "Sales Admin",
+  sales_member: "Sales Member",
+  production_admin: "Production Admin",
+  production_member: "Production Member",
+  marketing_admin: "Marketing Admin",
+  marketing_member: "Marketing Member",
+  hr_admin: "HR Admin",
+  hr_member: "HR Member",
+  it_admin: "IT Admin",
+  it_member: "IT Member",
+  client: "Client",
+  super_admin: "Super Admin",
+};
+
+// Mirrors the backend's UserHierarchy::creatableRoles() — who may create/
+// assign which role. Client-side only for a better error message; the
+// server enforces this independently and is the real authority.
+const CREATABLE_ROLES: Partial<Record<UserRole, UserRole[]>> = {
+  super_admin: [
+    "management", "sales_admin", "sales_member", "production_admin", "production_member",
+    "marketing_admin", "marketing_member", "hr_admin", "hr_member", "it_admin", "it_member", "client",
+  ],
+  sales_admin: ["sales_member", "client"],
+  production_admin: ["production_member"],
+  marketing_admin: ["marketing_member"],
+  hr_admin: ["hr_member"],
+  it_admin: ["it_member"],
+  management: ["client"],
+};
 
 export default function Employees() {
   const [employees, setEmployees]     = useState<UserProfile[]>([]);
@@ -44,6 +102,10 @@ export default function Employees() {
   const [formWorkMode, setFormWorkMode]         = useState<"Onsite" | "Remote">("Onsite");
   const [formSalaryStatus, setFormSalaryStatus] = useState<"Paid" | "Unpaid">("Unpaid");
   const [formDepartment, setFormDepartment]     = useState<string>("");
+  const [realDepartments, setRealDepartments]   = useState<Department[]>([]);
+  const [isCreateDeptOpen, setIsCreateDeptOpen] = useState(false);
+  const [newDeptName, setNewDeptName]           = useState("");
+  const [newDeptDomain, setNewDeptDomain]       = useState<string>("sales");
 
   // Search, Filter & Pagination
   const [searchQuery, setSearchQuery]           = useState("");
@@ -69,12 +131,19 @@ export default function Employees() {
   const canEditEmployee   = () => canEdit("hr");
   const canDeleteEmployee = () => canDelete("hr");
 
-  // When dept admin creates employee, lock department to their own
-  const forcedDept = isDeptAdmin && viewerDomain ? `dept-${viewerDomain}` : null;
+  // When dept admin creates employee, lock department to their own —
+  // resolved via ROLE_TO_DEPT_SLUG (matches the backend's authoritative
+  // DepartmentMapper mapping exactly), not a naive `dept-${domain}` guess.
+  const forcedDept = isDeptAdmin && viewerRole ? ROLE_TO_DEPT_SLUG[viewerRole as UserRole] ?? null : null;
+
+  // Roles the viewer is permitted to assign — mirrors the backend hierarchy
+  // check; the server is the real authority, this only drives the dropdown
+  // and gives a clear client-side error instead of a raw 403.
+  const creatableRoles: UserRole[] = (viewerRole ? CREATABLE_ROLES[viewerRole as UserRole] : undefined) ?? [];
 
   const designationOptions = DESIGNATIONS_BY_ROLE[formRole as UserRole] ?? [];
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
     setIsLoading(true);
     try {
       const allUsers = await UserService.getAll();
@@ -89,31 +158,54 @@ export default function Employees() {
       }
       setEmployees(visible);
 
-      const stored = localStorage.getItem("optivax_employee_extra");
-      if (stored) {
-        setExtraData(safeParse<Record<string, EmployeeExtraData>>(stored, {}));
-      } else {
-        const defaults: Record<string, EmployeeExtraData> = {};
-        for (const emp of visible) {
-          defaults[emp.id] = { userId: emp.id, leavesTaken: 2, salary: 45000, salaryStatus: "Unpaid", workMode: "Onsite" };
-        }
-        localStorage.setItem("optivax_employee_extra", JSON.stringify(defaults));
-        setExtraData(defaults);
-      }
+      const extras = await EmployeeExtraService.getAll();
+      setExtraData(extras);
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Failed to fetch employees", "error");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [routerLocation.pathname, showToast]);
 
-  useEffect(() => { fetchEmployees(); }, [routerLocation.pathname]);
+  useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+
+  // Real departments (Admin/Departments.tsx) — previously invisible to this
+  // form entirely, which was the root cause of employees not landing in the
+  // department an admin actually created/manages (see departmentOptions
+  // below). Fetched once; failure is non-fatal, falls back to DEPARTMENTS.
+  useEffect(() => {
+    DepartmentService.getAll().then(setRealDepartments).catch(() => setRealDepartments([]));
+  }, []);
+
+  // Builds one dropdown option per domain that the RBAC/attendance/activity
+  // scoping system actually understands (dept-sales, dept-marketing, ...) —
+  // the stored value never changes shape — but prefers the REAL department
+  // name(s) an admin configured for that domain over the generic fallback
+  // label, so departments created via Admin/Departments.tsx are finally
+  // visible here instead of only existing in a page nobody creating an
+  // employee ever sees.
+  const departmentOptions = useMemo(() => {
+    const byDomain = new Map<string, string[]>();
+    for (const dept of realDepartments) {
+      if (dept.status === "inactive") continue; // deactivated departments never appear here — see Admin/Departments.tsx
+      const slug = `dept-${dept.domain}`;
+      const names = byDomain.get(slug) ?? [];
+      names.push(dept.name);
+      byDomain.set(slug, names);
+    }
+    return DEPARTMENTS.map((fallback) => {
+      const realNames = byDomain.get(fallback.value);
+      return realNames && realNames.length > 0
+        ? { value: fallback.value, label: realNames.join(", ") }
+        : fallback;
+    });
+  }, [realDepartments]);
 
   const handleAdd = () => {
     setEditingEmployee(null);
     setFormName(""); setFormEmail(""); setFormRole("production_member");
     setFormDesignation(""); setFormPassword("");
-    setFormDepartment(forcedDept || (viewerDomain ? `dept-${viewerDomain}` : ""));
+    setFormDepartment(forcedDept || (viewerRole ? ROLE_TO_DEPT_SLUG[viewerRole as UserRole] ?? "" : ""));
     setFormSalary(35000); setFormLeavesTaken(0);
     setFormWorkMode("Onsite"); setFormSalaryStatus("Unpaid");
     setIsModalOpen(true);
@@ -125,7 +217,7 @@ export default function Employees() {
     setFormEmail(emp.email);
     setFormRole(emp.role || "production_member");
     setFormDesignation((emp as any).designation || "");
-    setFormDepartment(emp.departmentId || (forcedDept ?? (viewerDomain ? `dept-${viewerDomain}` : "")));
+    setFormDepartment(emp.departmentId || (forcedDept ?? (viewerRole ? ROLE_TO_DEPT_SLUG[viewerRole as UserRole] ?? "" : "")));
     setIsModalOpen(true);
   };
 
@@ -141,11 +233,26 @@ export default function Employees() {
     }
   };
 
+  // Mirrors the backend's ProfileController::departmentDomainMismatch() — the "department
+  // admin must belong to that department" rule. Client-side only for a clear inline error
+  // instead of a raw 403; the server enforces this independently and is the real authority.
+  const departmentMismatchError = (role: UserRole, departmentSlug: string | undefined): string | null => {
+    const requiredSlug = ROLE_TO_DEPT_SLUG[role];
+    if (!requiredSlug || !departmentSlug) return null;
+    if (departmentSlug !== requiredSlug) {
+      const requiredLabel = departmentOptions.find((d) => d.value === requiredSlug)?.label ?? requiredSlug;
+      return `${ROLE_LABELS[role] ?? role} must belong to the ${requiredLabel} department`;
+    }
+    return null;
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       // When a dept admin creates, always force their department
-      const dept = forcedDept ?? formDepartment ?? (viewerDomain ? `dept-${viewerDomain}` : undefined);
+      const dept = forcedDept ?? formDepartment ?? (viewerRole ? ROLE_TO_DEPT_SLUG[viewerRole as UserRole] : undefined);
+      const mismatch = departmentMismatchError(formRole as UserRole, dept);
+      if (mismatch) { showToast(mismatch, "error"); return; }
       if (editingEmployee) {
         await UserService.update(editingEmployee.id, {
           full_name: formName,
@@ -157,6 +264,10 @@ export default function Employees() {
         showToast("Employee updated successfully", "success");
       } else {
         if (!formPassword) { showToast("Password is required", "error"); return; }
+        if (!creatableRoles.includes(formRole as UserRole)) {
+          showToast("You are not permitted to create a user with this role", "error");
+          return;
+        }
         const newEmp = await UserService.create({
           full_name: formName,
           email: formEmail,
@@ -166,12 +277,11 @@ export default function Employees() {
           company: "",
           departmentId: dept,
           created_at: new Date().toISOString(),
+          password: formPassword,
         } as any);
-        storeMockPassword(formEmail, formPassword);
-        const stored = localStorage.getItem("optivax_employee_extra");
-        const currentExtras = safeParse<Record<string, EmployeeExtraData>>(stored, {});
-        currentExtras[newEmp.id] = { userId: newEmp.id, leavesTaken: formLeavesTaken, salary: formSalary, salaryStatus: formSalaryStatus, workMode: formWorkMode };
-        localStorage.setItem("optivax_employee_extra", JSON.stringify(currentExtras));
+        await EmployeeExtraService.update(newEmp.id, {
+          leavesTaken: formLeavesTaken, salary: formSalary, salaryStatus: formSalaryStatus, workMode: formWorkMode,
+        });
         showToast("Employee created successfully", "success");
       }
       setIsModalOpen(false);
@@ -225,12 +335,20 @@ export default function Employees() {
             const extra = extraData[emp.id] || { leavesTaken: 0, salary: 30000, salaryStatus: "Unpaid", workMode: "Onsite" };
             const deduction = extra.leavesTaken > 0 ? Math.round(extra.leavesTaken * (extra.salary / 30)) : 0;
             const designation = (emp as any).designation as string | undefined;
+            const empDeptName = emp.departmentId ? resolveDepartmentName(emp.departmentId, realDepartments) : null;
             return (
               <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
                 <td className="px-4 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900 dark:text-white">{emp.full_name || "N/A"}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">{emp.email}</div>
-                  <div className="text-[10px] text-brand-600 dark:text-brand-400 mt-0.5">{emp.role || "—"}</div>
+                  <div className="flex items-center gap-3">
+                    <Avatar src={(emp as any).avatar_url} name={emp.full_name || emp.email} size="sm" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">{emp.full_name || "N/A"}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{emp.email}</div>
+                      <div className="text-[10px] text-brand-600 dark:text-brand-400 mt-0.5">
+                        {emp.role || "—"}{empDeptName ? ` · ${empDeptName}` : ""}
+                      </div>
+                    </div>
+                  </div>
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap">
                   {designation ? (
@@ -286,7 +404,11 @@ export default function Employees() {
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Manage employee accounts, designations, and department roles.</p>
           <div className="mt-2">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
-              Scope: {isGlobalViewer ? "All employees" : viewerDomain ? `${viewerDomain.charAt(0).toUpperCase() + viewerDomain.slice(1)} department` : "Restricted"}
+              Scope: {isGlobalViewer
+                ? "All employees"
+                : viewerRole && ROLE_TO_DEPT_SLUG[viewerRole as UserRole]
+                  ? `${DEPARTMENTS.find(d => d.value === ROLE_TO_DEPT_SLUG[viewerRole as UserRole])?.label ?? viewerDomain} department`
+                  : "Restricted"}
             </span>
           </div>
         </div>
@@ -333,7 +455,14 @@ export default function Employees() {
                   return (
                     <div className="space-y-6">
                       {Object.keys(groups).map((key) => {
-                        const label = key.startsWith("dept-") ? key.replace("dept-", "") : key;
+                        // `key` is either a real departmentId, a legacy "dept-<domain>" slug, or
+                        // (when an employee has neither) a short role-prefix fallback word like
+                        // "sales" — resolveDepartmentName() handles the first two; a long,
+                        // unresolvable key is treated as an orphaned id and never shown raw.
+                        const resolvedName = resolveDepartmentName(key, realDepartments);
+                        const label = resolvedName !== UNKNOWN_DEPARTMENT
+                          ? resolvedName
+                          : key.length > 20 ? UNKNOWN_DEPARTMENT : key.replace("dept-", "");
                         return (
                           <div key={key}>
                             <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2 capitalize">{label} Department</h4>
@@ -406,16 +535,9 @@ export default function Employees() {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
                     <select value={formRole} onChange={(e) => { setFormRole(e.target.value); setFormDesignation(""); }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                      <option value="management">Management</option>
-                      <option value="sales_admin">Sales Admin</option>
-                      <option value="sales_member">Sales Member</option>
-                      <option value="production_admin">Production Admin</option>
-                      <option value="production_member">Production Member</option>
-                      <option value="marketing_admin">Marketing Admin</option>
-                      <option value="marketing_member">Marketing Member</option>
-                      <option value="hr_admin">HR Admin</option>
-                      <option value="hr_member">HR Member</option>
-                      {isSuper && <option value="super_admin">Super Admin</option>}
+                      {creatableRoles.map((r) => (
+                        <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -435,13 +557,18 @@ export default function Employees() {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
                     {forcedDept ? (
                       <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300">
-                        {DEPARTMENTS.find(d => d.value === forcedDept)?.label ?? forcedDept} <span className="text-xs text-gray-400">(auto-assigned)</span>
+                        {departmentOptions.find(d => d.value === forcedDept)?.label ?? forcedDept} <span className="text-xs text-gray-400">(auto-assigned)</span>
                       </div>
                     ) : (
-                      <select value={formDepartment} onChange={(e) => setFormDepartment(e.target.value)}
+                      <select value={formDepartment}
+                        onChange={(e) => {
+                          if (e.target.value === "__create_new__") { setIsCreateDeptOpen(true); return; }
+                          setFormDepartment(e.target.value);
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                         <option value="">Unassigned</option>
-                        {DEPARTMENTS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                        {departmentOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                        {isSuper && <option value="__create_new__">+ Add New Department…</option>}
                       </select>
                     )}
                   </div>
@@ -492,6 +619,63 @@ export default function Employees() {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isCreateDeptOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-800">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">New Department</h3>
+              <button onClick={() => setIsCreateDeptOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl">✕</button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newDeptName.trim()) { showToast("Department name is required", "error"); return; }
+                try {
+                  const created = await DepartmentService.create({
+                    name: newDeptName.trim(),
+                    domain: newDeptDomain as any,
+                  });
+                  setRealDepartments((prev) => [...prev, created]);
+                  setFormDepartment(`dept-${created.domain}`);
+                  setNewDeptName("");
+                  setIsCreateDeptOpen(false);
+                  showToast("Department created", "success");
+                } catch (err: unknown) {
+                  showToast(err instanceof Error ? err.message : "Failed to create department", "error");
+                }
+              }}
+              className="p-5 space-y-4"
+            >
+              <div>
+                <label className="block mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Name *</label>
+                <input type="text" required value={newDeptName} onChange={(e) => setNewDeptName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+              </div>
+              <div>
+                <label className="block mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Permission Domain *</label>
+                <select value={newDeptDomain} onChange={(e) => setNewDeptDomain(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                  {DEPARTMENTS.map((d) => (
+                    <option key={d.value} value={d.value.replace(/^dept-/, "")}>{d.label}</option>
+                  ))}
+                  <option value="system">Other / General</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-400">Controls which staff role this department's employees/admins use.</p>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setIsCreateDeptOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                  Cancel
+                </button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600">
+                  Create
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

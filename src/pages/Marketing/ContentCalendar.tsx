@@ -4,14 +4,14 @@ import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import {
-  getContentEntries, appendContentEntry, deleteContentEntry,
+  ContentCalendarService,
   PLATFORMS, CONTENT_TYPES, MARKETING_STATUSES,
   PRODUCTION_REQUIREMENT_TYPES, PRODUCTION_STATUSES,
   STATUS_CHIP, STATUS_BADGE, STATUS_DOT, STATUS_BORDER, PLATFORM_ABBR, PLATFORM_COLOR,
-  PROD_STATUS_CHIP, PROD_STATUS_BADGE, PROD_STATUS_DOT,
+  PROD_STATUS_BADGE, PROD_STATUS_DOT,
   type ContentEntry, type Platform, type ContentType, type MarketingStatus,
   type ProductionRequirementType, type ProductionStatus,
-} from "../../mock/contentCalendarData";
+} from "../../services/contentCalendarService";
 
 // ── Role helpers ───────────────────────────────────────────────────────────────
 
@@ -45,10 +45,14 @@ const MONTH_NAMES = ["January","February","March","April","May","June",
 function padDate(y: number, m: number, d: number): string {
   return `${y}-${String(m + 1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
 }
-function fmtTime(t: string): string {
+function fmtTime(t: string | null | undefined): string {
+  if (!t) return "—";
   const [h, m] = t.split(":").map(Number);
   return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h < 12 ? "AM" : "PM"}`;
 }
+/** `scheduledTime` is nullable at the DB level (content_calendar.scheduled_time TIME NULL) even though every row created through this UI sets one — sorts must not assume it's always present. */
+const byScheduledTime = (a: ContentEntry, b: ContentEntry): number =>
+  (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? "");
 function fmtDateLong(dateStr: string): string {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US",{
     weekday:"long", month:"long", day:"numeric", year:"numeric",
@@ -401,7 +405,7 @@ function MonthView({
       <div className="grid grid-cols-7">
         {cells.map((day, idx) => {
           const dateStr   = day ? padDate(year, month, day) : "";
-          const dayEnts   = day ? (byDate[dateStr] ?? []).slice().sort((a,b) => a.scheduledTime.localeCompare(b.scheduledTime)) : [];
+          const dayEnts   = day ? (byDate[dateStr] ?? []).slice().sort(byScheduledTime) : [];
           const isToday   = dateStr === today;
           const isWeekend = idx % 7 === 0 || idx % 7 === 6;
           return (
@@ -476,7 +480,7 @@ function WeekView({
         const dateStr = d.toISOString().slice(0,10);
         const isToday = dateStr === today;
         const dayEnts = entries.filter(e => e.scheduledDate === dateStr)
-                               .sort((a,b) => a.scheduledTime.localeCompare(b.scheduledTime));
+                               .sort(byScheduledTime);
         return (
           <div key={dateStr} className={`bg-white dark:bg-gray-900 min-h-[200px] flex flex-col ${isToday ? "ring-2 ring-inset ring-brand-500" : ""}`}>
             <div className={`px-2 py-2 text-center border-b border-gray-100 dark:border-gray-800 ${canEdit ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50" : ""}`}
@@ -523,7 +527,7 @@ function DayView({
 }) {
   const dateStr = date.toISOString().slice(0,10);
   const dayEnts = entries.filter(e => e.scheduledDate === dateStr)
-                         .sort((a,b) => a.scheduledTime.localeCompare(b.scheduledTime));
+                         .sort(byScheduledTime);
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
@@ -682,7 +686,13 @@ export default function ContentCalendar() {
   const [viewEntry,   setViewEntry]   = useState<ContentEntry | null>(null);
   const [defaultDate, setDefaultDate] = useState(today);
 
-  useEffect(() => { setAllEntries(getContentEntries()); }, []);
+  const reload = () => {
+    ContentCalendarService.getAll()
+      .then(setAllEntries)
+      .catch(() => showToast("Failed to load content calendar", "error"));
+  };
+
+  useEffect(() => { reload(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Visibility: production sees only prod-required entries ─────────────────
   const visibleEntries = useMemo(() =>
@@ -765,48 +775,58 @@ export default function ContentCalendar() {
     setViewEntry(null); setEditEntry(entry); setDefaultDate(entry.scheduledDate); setShowForm(true);
   };
 
-  const handleSave = (form: FormState) => {
+  const handleSave = async (form: FormState) => {
     if (!user) return;
     const prodFields = form.productionSupportRequired
       ? { productionRequirementType: form.productionRequirementType, productionStatus: form.productionStatus }
       : { productionRequirementType: undefined, productionStatus: undefined };
 
-    if (editEntry) {
-      const updated: ContentEntry = {
-        ...editEntry, ...form, ...prodFields, updatedAt: new Date().toISOString(),
-      };
-      appendContentEntry(updated);
-      setAllEntries(getContentEntries());
-      showToast("Entry updated", "success");
-    } else {
-      const newEntry: ContentEntry = {
-        ...form, ...prodFields,
-        id: `cc-${Date.now()}`,
-        createdBy: user.id, createdByName: user.name,
-        createdAt: new Date().toISOString(),
-      };
-      appendContentEntry(newEntry);
-      setAllEntries(getContentEntries());
-      showToast("Entry added to calendar", "success");
+    try {
+      if (editEntry) {
+        const updated = await ContentCalendarService.update(editEntry.id, {
+          ...form, ...prodFields, updatedAt: new Date().toISOString(),
+        });
+        setAllEntries(prev => prev.map(e => (e.id === updated.id ? updated : e)));
+        showToast("Entry updated", "success");
+      } else {
+        const created = await ContentCalendarService.create({
+          ...form, ...prodFields,
+          createdBy: user.id, createdByName: user.name,
+          createdAt: new Date().toISOString(),
+        });
+        setAllEntries(prev => [created, ...prev]);
+        showToast("Entry added to calendar", "success");
+      }
+      setShowForm(false); setEditEntry(null);
+    } catch {
+      showToast("Failed to save entry", "error");
     }
-    setShowForm(false); setEditEntry(null);
   };
 
-  const handleDelete = (entry: ContentEntry) => {
+  const handleDelete = async (entry: ContentEntry) => {
     if (!window.confirm(`Delete "${entry.title}"?`)) return;
-    deleteContentEntry(entry.id);
-    setAllEntries(getContentEntries());
-    setViewEntry(null);
-    showToast("Entry deleted", "info");
+    try {
+      await ContentCalendarService.delete(entry.id);
+      setAllEntries(prev => prev.filter(e => e.id !== entry.id));
+      setViewEntry(null);
+      showToast("Entry deleted", "info");
+    } catch {
+      showToast("Failed to delete entry", "error");
+    }
   };
 
-  const handleProdStatusUpdate = (entry: ContentEntry, status: ProductionStatus) => {
-    const updated: ContentEntry = { ...entry, productionStatus: status, updatedAt: new Date().toISOString() };
-    appendContentEntry(updated);
-    setAllEntries(getContentEntries());
-    // update viewEntry if open
-    setViewEntry(updated);
-    showToast(`Production status → ${status}`, "success");
+  const handleProdStatusUpdate = async (entry: ContentEntry, status: ProductionStatus) => {
+    try {
+      const updated = await ContentCalendarService.update(entry.id, {
+        productionStatus: status, updatedAt: new Date().toISOString(),
+      });
+      setAllEntries(prev => prev.map(e => (e.id === updated.id ? updated : e)));
+      // update viewEntry if open
+      setViewEntry(updated);
+      showToast(`Production status → ${status}`, "success");
+    } catch {
+      showToast("Failed to update production status", "error");
+    }
   };
 
   // ── KPI cards config ────────────────────────────────────────────────────────

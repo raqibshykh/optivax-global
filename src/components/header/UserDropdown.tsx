@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
+import Avatar from "../common/Avatar";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -10,7 +11,7 @@ export default function UserDropdown() {
   const navigate = useNavigate();
 
   const displayUser = user || {
-    avatar: `${import.meta.env.BASE_URL}images/user/user-01.png`,
+    avatar: `${import.meta.env.BASE_URL}images/user/user-01.jpg`,
     name: "Guest User",
     email: "guest@example.com",
     role: "client" as const,
@@ -32,8 +33,8 @@ export default function UserDropdown() {
         onClick={toggleDropdown}
         className="flex items-center text-gray-700 dropdown-toggle dark:text-gray-400"
       >
-        <span className="mr-3 overflow-hidden rounded-full h-11 w-11">
-          <img src={displayUser.avatar || `${import.meta.env.BASE_URL}images/user/user-01.png`} alt={displayUser.name} />
+        <span className="mr-3">
+          <Avatar src={displayUser.avatar} name={displayUser.name} size="md" />
         </span>
 
         <span className="block mr-1 font-medium text-theme-sm">{displayUser.name}</span>

@@ -1,0 +1,1 @@
+import{i as e}from"./index-7RhE6BBj.js";const n="/saas/v1/payments";class r{static async getAll(){return(await e.get(`${n}/list`)||[]).filter(a=>a.stripePaymentIntentId)}static async getByInvoiceId(t){return(await e.get(`${n}/list?invoiceId=${encodeURIComponent(t)}`)||[]).filter(s=>s.stripePaymentIntentId)}}export{r as P};

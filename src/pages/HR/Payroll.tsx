@@ -1,13 +1,13 @@
 ﻿import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { UserService, UserProfile } from "../../services/userService";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useToast } from "../../context/ToastContext";
-import { safeParse } from "../../lib/storage";
 import { useAuth } from "../../context/AuthContext";
 import { AuditLogService } from "../../services/auditLogService";
-
-const EXTRA_KEY = "optivax_employee_extra";
+import { EmployeeExtraService } from "../../services/employeeExtraService";
+import { LeaveRequestService } from "../../services/leaveRequestService";
 
 interface EmployeeExtraData {
   userId: string;
@@ -33,24 +33,24 @@ const EMPTY_EDIT: Omit<EmployeeExtraData, "userId"> = {
   salaryStatus: "Unpaid", workMode: "Onsite",
 };
 
-const LEAVE_KEY = "mock_leave_requests";
-
-interface LeaveRecord { userId?: string; status: string; days?: number; }
-
-function countApprovedLeaves(employeeId: string): number {
-  try {
-    const raw = localStorage.getItem(LEAVE_KEY);
-    if (!raw) return 0;
-    const leaves = JSON.parse(raw) as LeaveRecord[];
-    return leaves
-      .filter(l => l.userId === employeeId && l.status === "approved")
-      .reduce((sum, l) => sum + (l.days ?? 1), 0);
-  } catch { return 0; }
+async function countApprovedLeaves(employeeId: string): Promise<number> {
+  const [hrLeaves, employeeLeaves] = await Promise.all([
+    LeaveRequestService.getAll(),
+    LeaveRequestService.getEmployeeRequests(),
+  ]);
+  const hrDays = hrLeaves
+    .filter(l => l.userId === employeeId && l.status === "approved")
+    .reduce((sum, l) => sum + (l.days ?? 1), 0);
+  const employeeDays = employeeLeaves
+    .filter(l => l.employeeId === employeeId && l.status === "Approved")
+    .reduce((sum, l) => sum + (l.days ?? 1), 0);
+  return hrDays + employeeDays;
 }
 
 export default function Payroll() {
   const [employees, setEmployees]   = useState<UserProfile[]>([]);
   const [extraData, setExtraData]   = useState<Record<string, EmployeeExtraData>>({});
+  const [autoLeavesByEmp, setAutoLeavesByEmp] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading]   = useState(true);
   const [search, setSearch]         = useState("");
   const [filterStatus, setFilter]   = useState<"all" | "Paid" | "Unpaid">("all");
@@ -67,96 +67,112 @@ export default function Payroll() {
         const staff    = allUsers.filter((u) => u.role !== "client");
         setEmployees(staff);
 
-        const stored = localStorage.getItem(EXTRA_KEY);
-        if (stored) {
-          const parsed = safeParse<Record<string, EmployeeExtraData>>(stored, {});
-          // Auto-sync leavesTaken from approved leave requests for any employee without a manual override
-          const synced = { ...parsed };
-          staff.forEach((emp) => {
-            if (!synced[emp.id]) {
-              const autoLeaves = countApprovedLeaves(emp.id);
-              synced[emp.id] = { userId: emp.id, leavesTaken: autoLeaves, salary: 45000, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
-            }
-          });
-          localStorage.setItem(EXTRA_KEY, JSON.stringify(synced));
-          setExtraData(synced);
-        } else {
-          const defaults: Record<string, EmployeeExtraData> = {};
-          staff.forEach((emp) => {
-            const autoLeaves = countApprovedLeaves(emp.id);
-            defaults[emp.id] = { userId: emp.id, leavesTaken: autoLeaves || 2, salary: 45000, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
-          });
-          localStorage.setItem(EXTRA_KEY, JSON.stringify(defaults));
-          setExtraData(defaults);
+        const data = await EmployeeExtraService.getAll();
+        const normalized: Record<string, EmployeeExtraData> = {};
+        for (const [id, d] of Object.entries(data)) {
+          normalized[id] = { ...d, extraDeduction: d.extraDeduction ?? 0 };
         }
+        setExtraData(normalized);
+
+        const [hrLeaves, employeeLeaves] = await Promise.all([
+          LeaveRequestService.getAll(),
+          LeaveRequestService.getEmployeeRequests(),
+        ]);
+        const autoLeaves: Record<string, number> = {};
+        for (const s of staff) {
+          const hrDays = hrLeaves
+            .filter(l => l.userId === s.id && l.status === "approved")
+            .reduce((sum, l) => sum + (l.days ?? 1), 0);
+          const employeeDays = employeeLeaves
+            .filter(l => l.employeeId === s.id && l.status === "Approved")
+            .reduce((sum, l) => sum + (l.days ?? 1), 0);
+          autoLeaves[s.id] = hrDays + employeeDays;
+        }
+        setAutoLeavesByEmp(autoLeaves);
       } catch (err: unknown) {
         showToast(err instanceof Error ? err.message : "Failed to load payroll", "error");
       } finally {
         setIsLoading(false);
       }
     })();
-  }, []);
+    // showToast is stable (memoized in ToastContext) — safe to include
+    // without turning this into anything but a mount-only effect.
+  }, [showToast]);
 
   const getExtra = (id: string): EmployeeExtraData =>
     extraData[id] ?? { userId: id, leavesTaken: 0, salary: 30000, extraDeduction: 0, salaryStatus: "Unpaid", workMode: "Onsite" };
 
   const handleEdit = (empId: string) => {
     const d = getExtra(empId);
-    const autoLeaves = countApprovedLeaves(empId);
     setEditingId(empId);
     setEditFields({ leavesTaken: d.leavesTaken, salary: d.salary, extraDeduction: d.extraDeduction ?? 0, salaryStatus: d.salaryStatus, workMode: d.workMode });
   };
 
-  const syncLeavesFromRecords = (empId: string) => {
-    const autoLeaves = countApprovedLeaves(empId);
+  const syncLeavesFromRecords = async (empId: string) => {
+    const autoLeaves = await countApprovedLeaves(empId);
     setEditFields((f) => ({ ...f, leavesTaken: autoLeaves }));
     showToast(`Synced: ${autoLeaves} approved leave day(s) from HR records`, "info");
   };
 
-  const handleSave = (empId: string) => {
+  const handleSave = async (empId: string) => {
     const emp = employees.find(e => e.id === empId);
-    const updated = { ...extraData, [empId]: { userId: empId, ...editFields } };
-    setExtraData(updated);
-    localStorage.setItem(EXTRA_KEY, JSON.stringify(updated));
-    setEditingId(null);
-    showToast("Payroll updated", "success");
-    if (user && emp) {
-      AuditLogService.add({
-        action: "PAYROLL_UPDATED",
-        entityType: "payroll",
-        entityId: emp.id,
-        entityName: emp.full_name || emp.email,
-        performedBy: user.id,
-        performedByName: user.name,
-        performedByRole: user.role,
-        description: `Updated payroll for ${emp.full_name || emp.email}: salary Rs.${editFields.salary.toLocaleString()}, status ${editFields.salaryStatus}`,
-      });
+    try {
+      await EmployeeExtraService.update(empId, editFields);
+      setExtraData((prev) => ({ ...prev, [empId]: { userId: empId, ...editFields } }));
+      setEditingId(null);
+      showToast("Payroll updated", "success");
+      if (user && emp) {
+        AuditLogService.add({
+          action: "PAYROLL_UPDATED",
+          entityType: "payroll",
+          entityId: emp.id,
+          entityName: emp.full_name || emp.email,
+          performedBy: user.id,
+          performedByName: user.name,
+          performedByRole: user.role,
+          description: `Updated payroll for ${emp.full_name || emp.email}: salary Rs.${editFields.salary.toLocaleString()}, status ${editFields.salaryStatus}`,
+        });
+      }
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to update payroll", "error");
     }
   };
 
-  const handleMarkAllPaid = () => {
+  const handleMarkAllPaid = async () => {
     const updated: Record<string, EmployeeExtraData> = {};
     for (const [id, d] of Object.entries(extraData)) {
       updated[id] = { ...d, salaryStatus: "Paid" };
     }
-    setExtraData(updated);
-    localStorage.setItem(EXTRA_KEY, JSON.stringify(updated));
-    showToast("All payroll marked as Paid for this period", "success");
+    try {
+      await EmployeeExtraService.saveAll(updated);
+      setExtraData(updated);
+      showToast("All payroll marked as Paid for this period", "success");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to mark payroll as paid", "error");
+    }
   };
 
-  const filtered = employees.filter((emp) => {
-    const d = getExtra(emp.id);
+  const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    const matchSearch = !q || (emp.full_name || "").toLowerCase().includes(q) || emp.email.toLowerCase().includes(q);
-    return matchSearch && (filterStatus === "all" || d.salaryStatus === filterStatus);
-  });
+    return employees.filter((emp) => {
+      const d = getExtra(emp.id);
+      const matchSearch = !q || (emp.full_name || "").toLowerCase().includes(q) || emp.email.toLowerCase().includes(q);
+      return matchSearch && (filterStatus === "all" || d.salaryStatus === filterStatus);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employees, extraData, search, filterStatus]);
 
   // ── Summary ────────────────────────────────────────────────────────────────────
-  const allData         = employees.map((e) => getExtra(e.id));
-  const totalPayroll    = allData.reduce((s, d) => s + calcNetSalary(d), 0);
-  const totalDeductions = allData.reduce((s, d) => s + calcLeaveDeduction(d.leavesTaken, d.salary) + (d.extraDeduction ?? 0), 0);
-  const paidCount       = allData.filter((d) => d.salaryStatus === "Paid").length;
-  const unpaidCount     = allData.filter((d) => d.salaryStatus === "Unpaid").length;
+  const { totalPayroll, totalDeductions, paidCount, unpaidCount } = useMemo(() => {
+    const allData = employees.map((e) => getExtra(e.id));
+    return {
+      totalPayroll: allData.reduce((s, d) => s + calcNetSalary(d), 0),
+      totalDeductions: allData.reduce((s, d) => s + calcLeaveDeduction(d.leavesTaken, d.salary) + (d.extraDeduction ?? 0), 0),
+      paidCount: allData.filter((d) => d.salaryStatus === "Paid").length,
+      unpaidCount: allData.filter((d) => d.salaryStatus === "Unpaid").length,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employees, extraData]);
 
   return (
     <>
@@ -178,19 +194,19 @@ export default function Payroll() {
         ))}
       </div>
 
-      {/* â"€â"€ Policy Note â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
+      {/* ---- Policy Note ---- */}
       <div className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
         <strong>Company Payroll Policy:</strong> Net Salary = Basic Salary − Leave Deductions − Other Deductions. All leaves are unpaid. Every leave day deducts (Basic Salary ÷ 30) from net pay.
       </div>
 
-      {/* â"€â"€ Payroll Register Table â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
+      {/* ---- Payroll Register Table ---- */}
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Payroll Register</h3>
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
-              placeholder="Search employeeâ€¦"
+              placeholder="Search employee..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-44 px-3 py-1.5 text-sm border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
@@ -248,9 +264,7 @@ export default function Payroll() {
                     <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                       {/* Employee */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <p className="font-medium text-gray-900 dark:text-white">{emp.full_name || "—"}</p>
-                        <p className="text-xs text-gray-400">{emp.email}</p>
-                        <p className="text-[10px] text-brand-600 dark:text-brand-400">{emp.role}</p>
+                        <EmployeeIdentity src={emp.avatar_url} name={emp.full_name || "—"} employeeId={emp.email} designation={emp.role} size="sm" />
                       </td>
 
                       {/* Leaves Taken */}
@@ -263,7 +277,7 @@ export default function Payroll() {
                             <button type="button" onClick={() => syncLeavesFromRecords(emp.id)}
                               title="Auto-fill from approved leave requests"
                               className="text-xs text-brand-600 dark:text-brand-400 hover:underline whitespace-nowrap">
-                              â†º Sync
+                              Sync
                             </button>
                           </div>
                         ) : (
@@ -271,7 +285,7 @@ export default function Payroll() {
                             <span className={`font-medium ${d.leavesTaken > 0 ? "text-orange-600 dark:text-orange-400" : "text-gray-900 dark:text-white"}`}>
                               {d.leavesTaken} day{d.leavesTaken !== 1 ? "s" : ""}
                             </span>
-                            {(() => { const auto = countApprovedLeaves(emp.id); return auto !== d.leavesTaken ? <p className="text-[10px] text-amber-500">{auto} in HR records</p> : null; })()}
+                            {(() => { const auto = autoLeavesByEmp[emp.id] ?? 0; return auto !== d.leavesTaken ? <p className="text-[10px] text-amber-500">{auto} in HR records</p> : null; })()}
                           </div>
                         )}
                       </td>
@@ -295,7 +309,7 @@ export default function Payroll() {
                             <p className="text-[10px] text-gray-400">{d.leavesTaken} unpaid day{d.leavesTaken !== 1 ? "s" : ""}</p>
                           </>
                         ) : (
-                          <span className="text-gray-400">â€"</span>
+                          <span className="text-gray-400">-</span>
                         )}
                       </td>
 

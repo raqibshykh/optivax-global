@@ -3,21 +3,22 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import {
-  loadYearData,
+  AttendanceService,
   computeMonthlyReport,
   computePayrollEntry,
-  exportCSV,
-  exportPrintHTML,
   fmtRs,
-  STAFF_USERS,
   MONTHS,
   monthLabel,
   getAccessibleDepts,
   ROLE_TO_DEPT,
   DEPT_IDS,
   DEPT_LABELS,
+  type AttendanceRecord,
   type PayrollEntry,
-} from "../../mock/attendanceData";
+  type StaffUser,
+} from "../../services/attendanceService";
+import { exportCSV, exportPrintHTML } from "../../lib/csvExport";
+import { EmployeeExtraService, type EmployeeExtraData } from "../../services/employeeExtraService";
 
 const TODAY     = new Date();
 const CUR_YEAR  = TODAY.getFullYear();
@@ -45,33 +46,43 @@ export default function AttendancePayroll() {
   const [search,     setSearch]     = useState("");
   const [sortKey,    setSortKey]    = useState<SortKey>("userName");
   const [sortDir,    setSortDir]    = useState<SortDir>("asc");
-  const [records,    setRecords]    = useState<ReturnType<typeof loadYearData>>([]);
+  const [records,    setRecords]    = useState<AttendanceRecord[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [page,       setPage]       = useState(1);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [employeeExtra, setEmployeeExtra] = useState<Record<string, EmployeeExtraData>>({});
   const PAGE_SIZE = 15;
 
   useEffect(() => {
     setLoading(true);
-    setTimeout(() => { setRecords(loadYearData(year)); setLoading(false); }, 0);
+    AttendanceService.getYearData(year).then((data) => { setRecords(data); setLoading(false); });
   }, [year]);
+
+  useEffect(() => {
+    AttendanceService.getStaffUsers().then(setStaffUsers);
+  }, []);
+
+  useEffect(() => {
+    EmployeeExtraService.getAll().then(setEmployeeExtra).catch(() => {});
+  }, []);
 
   useEffect(() => { setPage(1); }, [deptFilter, search, month, year]);
 
   const visibleUsers = useMemo(() => {
     const depts: string[] = deptFilter !== "all" ? [deptFilter]
       : accessibleDepts === "all" ? DEPT_IDS : (accessibleDepts as string[]);
-    return STAFF_USERS.filter((u) => {
-      const d = (u as { departmentId?: string }).departmentId || ROLE_TO_DEPT[u.role] || "";
+    return staffUsers.filter((u) => {
+      const d = u.departmentId || ROLE_TO_DEPT[u.role] || "";
       return depts.length === 0 || depts.includes(d);
     });
-  }, [accessibleDepts, deptFilter]);
+  }, [accessibleDepts, deptFilter, staffUsers]);
 
   const payrollEntries = useMemo<PayrollEntry[]>(() => {
     return visibleUsers.map((u) => {
       const report = computeMonthlyReport(u.id, u.name, u.role, month, year, records);
-      return computePayrollEntry(report);
+      return computePayrollEntry(report, employeeExtra);
     });
-  }, [visibleUsers, month, year, records]);
+  }, [visibleUsers, month, year, records, employeeExtra]);
 
   const filtered = useMemo(() => {
     let list = payrollEntries;

@@ -5,15 +5,10 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { ClientService } from "../../services/clientService";
 import { UserService } from "../../services/userService";
-import {
-  getAllOwnerships, getClientOwnership, getOwnershipHistory,
-  assignClientOwner, removeClientOwner,
-  type ClientOwnership, type ClientOwnershipHistoryEntry,
-} from "../../mock/clientOwnershipData";
+import { ClientOwnershipService } from "../../services/clientOwnershipService";
 import { AuditLogService } from "../../services/auditLogService";
 import { NotificationService } from "../../services/notificationService";
-import { safeParse } from "../../lib/storage";
-import type { Client } from "../../types";
+import type { Client, ClientOwnership, ClientOwnershipHistoryEntry } from "../../types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,10 +32,6 @@ const ACTION_BADGE: Record<string, string> = {
   reassigned: "bg-blue-100  text-blue-700  dark:bg-blue-900/30  dark:text-blue-400",
   removed:    "bg-red-100   text-red-700   dark:bg-red-900/30   dark:text-red-400",
 };
-
-function getProfiles(): { id: string; role: string; full_name: string; email: string }[] {
-  return safeParse(localStorage.getItem("mock_profiles"), []);
-}
 
 // ── Assign / Reassign Modal ───────────────────────────────────────────────────
 
@@ -69,6 +60,10 @@ function AssignModal({
 
   useEffect(() => {
     if (currentOwner) setMemberId(currentOwner.ownerId);
+    // Deliberately depends on the primitive `currentOwner?.ownerId`, not the
+    // `currentOwner` object — it's recomputed fresh every render (a `.find()`
+    // call), so depending on the object itself would re-run this every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOwner?.ownerId]);
 
   const isReassign = !!currentOwner;
@@ -269,17 +264,34 @@ export default function ClientOwnership() {
   const [search,      setSearch]      = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "assigned" | "unassigned">("all");
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [recentActivity, setRecentActivity] = useState<ClientOwnershipHistoryEntry[]>([]);
 
   const canAssign = user ? ALLOWED_TO_ASSIGN.has(user.role) : false;
+
+  const refreshRecentActivity = useCallback(async () => {
+    const all = await ClientOwnershipService.getHistory();
+    setRecentActivity(all.slice(0, 10));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [cls] = await Promise.all([ClientService.getAll()]);
-      setClients(cls);
-      setOwnerships(getAllOwnerships());
+      // allSettled (not all): the ownership assignments are secondary data
+      // for this page — if that fetch fails, the client list (the primary
+      // data) must still render rather than the whole page going blank.
+      const [clsResult, ownsResult] = await Promise.allSettled([
+        ClientService.getAll(),
+        ClientOwnershipService.getAll(),
+      ]);
+      if (clsResult.status === "fulfilled") {
+        setClients(clsResult.value);
+      }
+      if (ownsResult.status === "fulfilled") {
+        setOwnerships(ownsResult.value);
+      }
+      await refreshRecentActivity();
 
-      const profiles = getProfiles();
+      const profiles = await UserService.getAll();
       const prodMembers: ProductionMember[] = profiles
         .filter(p => p.role === "production_admin" || p.role === "production_member")
         .map(p => ({ id: p.id, name: p.full_name, email: p.email, role: p.role }));
@@ -287,7 +299,7 @@ export default function ClientOwnership() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshRecentActivity]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -309,7 +321,7 @@ export default function ClientOwnership() {
     return list;
   }, [clients, ownerships, search, filterStatus]);
 
-  const handleAssign = useCallback((clientId: string, memberId: string, notes: string) => {
+  const handleAssign = useCallback(async (clientId: string, memberId: string, notes: string) => {
     if (!user) return;
 
     const client  = clients.find(c => c.id === clientId);
@@ -332,8 +344,9 @@ export default function ClientOwnership() {
       notes:          notes || undefined,
     };
 
-    assignClientOwner(ownership);
-    setOwnerships(getAllOwnerships());
+    await ClientOwnershipService.assign(ownership);
+    setOwnerships(await ClientOwnershipService.getAll());
+    refreshRecentActivity();
     setShowAssign(false);
     setPrefillId(null);
 
@@ -374,7 +387,7 @@ export default function ClientOwnership() {
       description:     `${user.name} ${isReassign ? "reassigned" : "assigned"} "${client.name}" owner to ${member.name}`,
       oldValue:        existing ? { ownerId: existing.ownerId, ownerName: existing.ownerName } : undefined,
       newValue:        { ownerId: member.id, ownerName: member.name },
-    });
+    }).catch(() => {});
 
     showToast(
       isReassign
@@ -382,9 +395,9 @@ export default function ClientOwnership() {
         : `"${client.name}" assigned to ${member.name}`,
       "success"
     );
-  }, [user, clients, members, ownerships, showToast]);
+  }, [user, clients, members, ownerships, showToast, refreshRecentActivity]);
 
-  const handleRemove = useCallback((clientId: string) => {
+  const handleRemove = useCallback(async (clientId: string) => {
     if (!user) return;
     if (confirmRemoveId !== clientId) {
       setConfirmRemoveId(clientId);
@@ -396,10 +409,11 @@ export default function ClientOwnership() {
     const existing = ownerships.find(o => o.clientId === clientId);
     if (!client) return;
 
-    const entry = removeClientOwner(clientId, client.name, user.id, user.name, user.role);
+    const entry = await ClientOwnershipService.remove(clientId, client.name, user.id, user.name, user.role);
     if (!entry) return;
 
-    setOwnerships(getAllOwnerships());
+    setOwnerships(await ClientOwnershipService.getAll());
+    refreshRecentActivity();
 
     if (existing) {
       NotificationService.create({
@@ -423,14 +437,14 @@ export default function ClientOwnership() {
       performedByRole: user.role,
       description:     `${user.name} removed ownership of "${client.name}" from ${existing?.ownerName ?? "unknown"}`,
       oldValue:        existing ? { ownerId: existing.ownerId, ownerName: existing.ownerName } : undefined,
-    });
+    }).catch(() => {});
 
     showToast(`Ownership removed for "${client.name}"`, "success");
-  }, [user, clients, ownerships, confirmRemoveId, showToast]);
+  }, [user, clients, ownerships, confirmRemoveId, showToast, refreshRecentActivity]);
 
   const openHistory = useCallback((client: Client) => {
     setHistoryClient({ id: client.id, name: client.name });
-    setHistory(getOwnershipHistory(client.id));
+    ClientOwnershipService.getHistory(client.id).then(setHistory);
   }, []);
 
   // KPI counts
@@ -583,7 +597,7 @@ export default function ClientOwnership() {
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Recent Assignment Activity</h3>
         <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 overflow-hidden shadow-sm">
           {(() => {
-            const recent = getOwnershipHistory().slice(0, 10);
+            const recent = recentActivity;
             if (recent.length === 0) {
               return <p className="p-8 text-center text-sm text-gray-400">No assignment activity yet.</p>;
             }

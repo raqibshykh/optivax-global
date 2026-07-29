@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import { AuditLogService } from "../../services/auditLogService";
 import { AuditLog } from "../../types";
@@ -67,17 +67,21 @@ export default function AuditLogs() {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
 
-  const allLogs = useMemo(() => AuditLogService.getAll(), []);
+  const [allLogs, setAllLogs] = useState<AuditLog[]>([]);
+  const [filtered, setFiltered] = useState<AuditLog[]>([]);
 
-  const filtered = useMemo(() =>
+  useEffect(() => {
+    AuditLogService.getAll().then(setAllLogs).catch(() => setAllLogs([]));
+  }, []);
+
+  useEffect(() => {
     AuditLogService.search(search, {
       action: filterAction || undefined,
       entityType: filterEntityType || undefined,
       dateFrom: filterDateFrom || undefined,
       dateTo: filterDateTo || undefined,
-    }),
-    [search, filterAction, filterEntityType, filterDateFrom, filterDateTo]
-  );
+    }).then(setFiltered).catch(() => setFiltered([]));
+  }, [search, filterAction, filterEntityType, filterDateFrom, filterDateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageLogs = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

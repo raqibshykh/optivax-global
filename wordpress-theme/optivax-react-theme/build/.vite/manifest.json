@@ -1,0 +1,1390 @@
+{
+  "_Badge-Cen76Poz.js": {
+    "file": "assets/Badge-Cen76Poz.js",
+    "name": "Badge",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "_emailService-CA7Y9DyW.js",
+      "index.html"
+    ]
+  },
+  "_EmployeeIdentity-CnW3V_En.js": {
+    "file": "assets/EmployeeIdentity-CnW3V_En.js",
+    "name": "EmployeeIdentity",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html"
+    ]
+  },
+  "_ErrorState-BTnLT9UR.js": {
+    "file": "assets/ErrorState-BTnLT9UR.js",
+    "name": "ErrorState",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js"
+    ]
+  },
+  "_MetricCard-nYWPwwQF.js": {
+    "file": "assets/MetricCard-nYWPwwQF.js",
+    "name": "MetricCard",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js"
+    ]
+  },
+  "_PageBreadCrumb-BY2AxzZZ.js": {
+    "file": "assets/PageBreadCrumb-BY2AxzZZ.js",
+    "name": "PageBreadCrumb",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js"
+    ]
+  },
+  "_RequirePermission-CUP9Ypba.js": {
+    "file": "assets/RequirePermission-CUP9Ypba.js",
+    "name": "RequirePermission",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html"
+    ]
+  },
+  "_attendanceService-CtKRhfJ9.js": {
+    "file": "assets/attendanceService-CtKRhfJ9.js",
+    "name": "attendanceService",
+    "imports": [
+      "index.html",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "_budgetService-CYLyu1fY.js": {
+    "file": "assets/budgetService-CYLyu1fY.js",
+    "name": "budgetService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_calculations-Bl6GveqK.js": {
+    "file": "assets/calculations-Bl6GveqK.js",
+    "name": "calculations"
+  },
+  "_clientOwnershipService-Dk4-xHTF.js": {
+    "file": "assets/clientOwnershipService-Dk4-xHTF.js",
+    "name": "clientOwnershipService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_companySettingsService-CMD6rQSy.js": {
+    "file": "assets/companySettingsService-CMD6rQSy.js",
+    "name": "companySettingsService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_contentCalendarService-DRLORCN-.js": {
+    "file": "assets/contentCalendarService-DRLORCN-.js",
+    "name": "contentCalendarService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_conversationService-ByEv61BO.js": {
+    "file": "assets/conversationService-ByEv61BO.js",
+    "name": "conversationService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_csvExport-DtZdQr9B.js": {
+    "file": "assets/csvExport-DtZdQr9B.js",
+    "name": "csvExport"
+  },
+  "_deliverableService-fLh2n7Bg.js": {
+    "file": "assets/deliverableService-fLh2n7Bg.js",
+    "name": "deliverableService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_emailService-CA7Y9DyW.js": {
+    "file": "assets/emailService-CA7Y9DyW.js",
+    "name": "emailService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_employeeExtraService-BPTWI9Dh.js": {
+    "file": "assets/employeeExtraService-BPTWI9Dh.js",
+    "name": "employeeExtraService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_index-DzWn982R.js": {
+    "file": "assets/index-DzWn982R.js",
+    "name": "index",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js"
+    ]
+  },
+  "_invoiceService-CW0jq5OO.js": {
+    "file": "assets/invoiceService-CW0jq5OO.js",
+    "name": "invoiceService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_itSupportService-C-U-KVIp.js": {
+    "file": "assets/itSupportService-C-U-KVIp.js",
+    "name": "itSupportService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_leaveRequestService-BdHkh97m.js": {
+    "file": "assets/leaveRequestService-BdHkh97m.js",
+    "name": "leaveRequestService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_marketingCampaignService-CSg4EvEr.js": {
+    "file": "assets/marketingCampaignService-CSg4EvEr.js",
+    "name": "marketingCampaignService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_paymentService-D1BdtIaz.js": {
+    "file": "assets/paymentService-D1BdtIaz.js",
+    "name": "paymentService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_payrollService-DLtCGlvL.js": {
+    "file": "assets/payrollService-DLtCGlvL.js",
+    "name": "payrollService",
+    "imports": [
+      "index.html",
+      "_leaveRequestService-BdHkh97m.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "_pencil-B_dWoCIY.js": {
+    "file": "assets/pencil-B_dWoCIY.js",
+    "name": "pencil",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js"
+    ]
+  },
+  "_projectService-hhFoEyNj.js": {
+    "file": "assets/projectService-hhFoEyNj.js",
+    "name": "projectService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_revisionService-bEkwPb90.js": {
+    "file": "assets/revisionService-bEkwPb90.js",
+    "name": "revisionService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_salesOpsService-CgEP6t-Y.js": {
+    "file": "assets/salesOpsService-CgEP6t-Y.js",
+    "name": "salesOpsService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_securityAuditLogService-D1NsBstI.js": {
+    "file": "assets/securityAuditLogService-D1NsBstI.js",
+    "name": "securityAuditLogService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_shiftService-BMQ31ddG.js": {
+    "file": "assets/shiftService-BMQ31ddG.js",
+    "name": "shiftService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_taskService-B4_Q2OjQ.js": {
+    "file": "assets/taskService-B4_Q2OjQ.js",
+    "name": "taskService",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_trash-DEPRjsyA.js": {
+    "file": "assets/trash-DEPRjsyA.js",
+    "name": "trash",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js"
+    ]
+  },
+  "_useClients-nmrmmdQ9.js": {
+    "file": "assets/useClients-nmrmmdQ9.js",
+    "name": "useClients",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html"
+    ]
+  },
+  "_useFiles-CqfxVUUq.js": {
+    "file": "assets/useFiles-CqfxVUUq.js",
+    "name": "useFiles",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html"
+    ]
+  },
+  "_useInvoices-hhaFjSPn.js": {
+    "file": "assets/useInvoices-hhaFjSPn.js",
+    "name": "useInvoices",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "_invoiceService-CW0jq5OO.js",
+      "index.html"
+    ]
+  },
+  "_useProjects-XXiuuO8N.js": {
+    "file": "assets/useProjects-XXiuuO8N.js",
+    "name": "useProjects",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "_projectService-hhFoEyNj.js",
+      "index.html"
+    ]
+  },
+  "_vendor-charts-Cmws0M90.js": {
+    "file": "assets/vendor-charts-Cmws0M90.js",
+    "name": "vendor-charts",
+    "imports": [
+      "_vendor-react-D_CQBhJw.js"
+    ]
+  },
+  "_vendor-react-D_CQBhJw.js": {
+    "file": "assets/vendor-react-D_CQBhJw.js",
+    "name": "vendor-react"
+  },
+  "_visibility-Bv0pV_QA.js": {
+    "file": "assets/visibility-Bv0pV_QA.js",
+    "name": "visibility"
+  },
+  "index.html": {
+    "file": "assets/index-7RhE6BBj.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js"
+    ],
+    "dynamicImports": [
+      "src/pages/Dashboard/AdminPanel.tsx",
+      "src/pages/Dashboard/ClientPanel.tsx",
+      "src/pages/Dashboard/SuperAdminPanel.tsx",
+      "src/pages/Dashboard/SalesPanel.tsx",
+      "src/pages/Dashboard/ProductionPanel.tsx",
+      "src/pages/Dashboard/MarketingPanel.tsx",
+      "src/pages/Dashboard/HRPanel.tsx",
+      "src/pages/Dashboard/ManagementPanel.tsx",
+      "src/pages/Dashboard/ITSupportPanel.tsx",
+      "src/pages/HR/Employees.tsx",
+      "src/pages/HR/Payroll.tsx",
+      "src/pages/HR/LeaveRequests.tsx",
+      "src/pages/HR/Attendance.tsx",
+      "src/pages/HR/AttendanceMonthly.tsx",
+      "src/pages/HR/AttendanceYearly.tsx",
+      "src/pages/HR/AttendanceAnalytics.tsx",
+      "src/pages/HR/AttendanceCalendar.tsx",
+      "src/pages/HR/AttendancePayroll.tsx",
+      "src/pages/HR/AttendanceCorrections.tsx",
+      "src/pages/HR/AttendanceImport.tsx",
+      "src/pages/Admin/Clients.tsx",
+      "src/pages/Admin/Projects.tsx",
+      "src/pages/Admin/Billing.tsx",
+      "src/pages/Admin/Files.tsx",
+      "src/pages/Admin/Notifications.tsx",
+      "src/pages/Admin/Revisions.tsx",
+      "src/pages/Admin/Settings.tsx",
+      "src/pages/Admin/AuditLogs.tsx",
+      "src/pages/Admin/SecurityAuditLogs.tsx",
+      "src/pages/Admin/Email/Campaigns.tsx",
+      "src/pages/Admin/Email/Templates.tsx",
+      "src/pages/Admin/Email/Audience.tsx",
+      "src/pages/Admin/Email/Analytics.tsx",
+      "src/pages/Admin/Email/Automation.tsx",
+      "src/pages/Common/Reports.tsx",
+      "src/pages/Common/Tasks.tsx",
+      "src/pages/Common/ActivityReports.tsx",
+      "src/pages/Common/LiveActivityDashboard.tsx",
+      "src/pages/Sales/CampaignBudgets.tsx",
+      "src/pages/Sales/Leads.tsx",
+      "src/pages/Sales/SalesTargets.tsx",
+      "src/pages/Sales/SalesTasks.tsx",
+      "src/pages/Sales/TeamPerformance.tsx",
+      "src/pages/Sales/Commissions.tsx",
+      "src/pages/Production/Deliverables.tsx",
+      "src/pages/Production/ClientOwnership.tsx",
+      "src/pages/Production/MyClients.tsx",
+      "src/pages/Marketing/SocialTracking.tsx",
+      "src/pages/Marketing/Leads.tsx",
+      "src/pages/Marketing/ContentCalendar.tsx",
+      "src/pages/Conversations/ClientConversations.tsx",
+      "src/pages/Client/Messages.tsx",
+      "src/pages/Budget/BudgetManagement.tsx",
+      "src/pages/HR/SalarySlips.tsx",
+      "src/pages/HR/BulkSalarySlips.tsx",
+      "src/pages/HR/AdvanceSalary.tsx",
+      "src/pages/HR/AdvanceSalaryAuditLog.tsx",
+      "src/pages/Employee/MySalarySlips.tsx",
+      "src/pages/Employee/MyBudget.tsx",
+      "src/pages/Employee/AdvanceSalaryRequest.tsx",
+      "src/pages/ITSupport/AttendanceDashboard.tsx",
+      "src/pages/ITSupport/Devices.tsx",
+      "src/pages/ITSupport/DeviceLogs.tsx",
+      "src/pages/ITSupport/AttendanceExceptions.tsx",
+      "src/pages/ITSupport/AttendanceReports.tsx",
+      "src/pages/ITSupport/Tickets.tsx",
+      "src/pages/ITSupport/Punches.tsx",
+      "src/pages/ITSupport/BiometricMapping.tsx",
+      "src/pages/Admin/Departments.tsx",
+      "src/pages/Client/MyProjects.tsx",
+      "src/pages/Client/Billing.tsx",
+      "src/pages/Client/Files.tsx",
+      "src/pages/Client/Notifications.tsx",
+      "src/pages/Client/MyRevisions.tsx",
+      "src/pages/Client/Profile.tsx"
+    ],
+    "css": [
+      "assets/index-J3f1XIn8.css"
+    ]
+  },
+  "src/pages/Admin/AuditLogs.tsx": {
+    "file": "assets/AuditLogs-CLPDTpAl.js",
+    "name": "AuditLogs",
+    "src": "src/pages/Admin/AuditLogs.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html"
+    ]
+  },
+  "src/pages/Admin/Billing.tsx": {
+    "file": "assets/Billing-ypUl29lW.js",
+    "name": "Billing",
+    "src": "src/pages/Admin/Billing.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_useInvoices-hhaFjSPn.js",
+      "_useClients-nmrmmdQ9.js",
+      "_index-DzWn982R.js",
+      "_invoiceService-CW0jq5OO.js"
+    ]
+  },
+  "src/pages/Admin/Clients.tsx": {
+    "file": "assets/Clients-dB6KC1_5.js",
+    "name": "Clients",
+    "src": "src/pages/Admin/Clients.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_useClients-nmrmmdQ9.js",
+      "_index-DzWn982R.js"
+    ]
+  },
+  "src/pages/Admin/Departments.tsx": {
+    "file": "assets/Departments-DhIpUbMc.js",
+    "name": "Departments",
+    "src": "src/pages/Admin/Departments.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_shiftService-BMQ31ddG.js",
+      "_budgetService-CYLyu1fY.js",
+      "_projectService-hhFoEyNj.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_securityAuditLogService-D1NsBstI.js",
+      "_pencil-B_dWoCIY.js",
+      "_trash-DEPRjsyA.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/Admin/Email/Analytics.tsx": {
+    "file": "assets/Analytics-BhjuyFZz.js",
+    "name": "Analytics",
+    "src": "src/pages/Admin/Email/Analytics.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_vendor-charts-Cmws0M90.js",
+      "_Badge-Cen76Poz.js",
+      "_emailService-CA7Y9DyW.js"
+    ]
+  },
+  "src/pages/Admin/Email/Audience.tsx": {
+    "file": "assets/Audience-xzaPFJpa.js",
+    "name": "Audience",
+    "src": "src/pages/Admin/Email/Audience.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_useClients-nmrmmdQ9.js"
+    ]
+  },
+  "src/pages/Admin/Email/Automation.tsx": {
+    "file": "assets/Automation-BZpAcPmj.js",
+    "name": "Automation",
+    "src": "src/pages/Admin/Email/Automation.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_Badge-Cen76Poz.js",
+      "_emailService-CA7Y9DyW.js"
+    ]
+  },
+  "src/pages/Admin/Email/Campaigns.tsx": {
+    "file": "assets/Campaigns-Djj4DGrY.js",
+    "name": "Campaigns",
+    "src": "src/pages/Admin/Email/Campaigns.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_Badge-Cen76Poz.js",
+      "_trash-DEPRjsyA.js",
+      "_emailService-CA7Y9DyW.js"
+    ]
+  },
+  "src/pages/Admin/Email/Templates.tsx": {
+    "file": "assets/Templates-tsKUA5LD.js",
+    "name": "Templates",
+    "src": "src/pages/Admin/Email/Templates.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_Badge-Cen76Poz.js",
+      "_pencil-B_dWoCIY.js",
+      "_trash-DEPRjsyA.js",
+      "_emailService-CA7Y9DyW.js"
+    ]
+  },
+  "src/pages/Admin/Files.tsx": {
+    "file": "assets/Files-DG2TYLs9.js",
+    "name": "Files",
+    "src": "src/pages/Admin/Files.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_useFiles-CqfxVUUq.js",
+      "_projectService-hhFoEyNj.js"
+    ]
+  },
+  "src/pages/Admin/Notifications.tsx": {
+    "file": "assets/Notifications-vcoATldQ.js",
+    "name": "Notifications",
+    "src": "src/pages/Admin/Notifications.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_useClients-nmrmmdQ9.js",
+      "_index-DzWn982R.js"
+    ]
+  },
+  "src/pages/Admin/Projects.tsx": {
+    "file": "assets/Projects-y8tgXILM.js",
+    "name": "Projects",
+    "src": "src/pages/Admin/Projects.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_useProjects-XXiuuO8N.js",
+      "_useClients-nmrmmdQ9.js",
+      "_index-DzWn982R.js",
+      "_revisionService-bEkwPb90.js",
+      "_projectService-hhFoEyNj.js",
+      "_taskService-B4_Q2OjQ.js"
+    ]
+  },
+  "src/pages/Admin/Revisions.tsx": {
+    "file": "assets/Revisions-CqNkVz4B.js",
+    "name": "Revisions",
+    "src": "src/pages/Admin/Revisions.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_revisionService-bEkwPb90.js",
+      "_projectService-hhFoEyNj.js",
+      "_useClients-nmrmmdQ9.js"
+    ]
+  },
+  "src/pages/Admin/SecurityAuditLogs.tsx": {
+    "file": "assets/SecurityAuditLogs-LjFLtoBJ.js",
+    "name": "SecurityAuditLogs",
+    "src": "src/pages/Admin/SecurityAuditLogs.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_securityAuditLogService-D1NsBstI.js"
+    ]
+  },
+  "src/pages/Admin/Settings.tsx": {
+    "file": "assets/Settings-D2-1ovg-.js",
+    "name": "Settings",
+    "src": "src/pages/Admin/Settings.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_companySettingsService-CMD6rQSy.js"
+    ]
+  },
+  "src/pages/Budget/BudgetManagement.tsx": {
+    "file": "assets/BudgetManagement-hCZ6lQFo.js",
+    "name": "BudgetManagement",
+    "src": "src/pages/Budget/BudgetManagement.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_ErrorState-BTnLT9UR.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_budgetService-CYLyu1fY.js"
+    ]
+  },
+  "src/pages/Client/Billing.tsx": {
+    "file": "assets/Billing-7URZHxvE.js",
+    "name": "Billing",
+    "src": "src/pages/Client/Billing.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_index-DzWn982R.js",
+      "_useInvoices-hhaFjSPn.js",
+      "_invoiceService-CW0jq5OO.js",
+      "_vendor-charts-Cmws0M90.js"
+    ]
+  },
+  "src/pages/Client/Files.tsx": {
+    "file": "assets/Files-CLWWU6vq.js",
+    "name": "Files",
+    "src": "src/pages/Client/Files.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_useFiles-CqfxVUUq.js"
+    ]
+  },
+  "src/pages/Client/Messages.tsx": {
+    "file": "assets/Messages-DkKq7L5l.js",
+    "name": "Messages",
+    "src": "src/pages/Client/Messages.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_conversationService-ByEv61BO.js",
+      "_ErrorState-BTnLT9UR.js"
+    ]
+  },
+  "src/pages/Client/MyProjects.tsx": {
+    "file": "assets/MyProjects-Ce81rOeZ.js",
+    "name": "MyProjects",
+    "src": "src/pages/Client/MyProjects.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_index-DzWn982R.js",
+      "_useProjects-XXiuuO8N.js",
+      "_projectService-hhFoEyNj.js"
+    ]
+  },
+  "src/pages/Client/MyRevisions.tsx": {
+    "file": "assets/MyRevisions-IifxcIgL.js",
+    "name": "MyRevisions",
+    "src": "src/pages/Client/MyRevisions.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_useProjects-XXiuuO8N.js",
+      "_projectService-hhFoEyNj.js"
+    ]
+  },
+  "src/pages/Client/Notifications.tsx": {
+    "file": "assets/Notifications-CvjGjwLl.js",
+    "name": "Notifications",
+    "src": "src/pages/Client/Notifications.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_conversationService-ByEv61BO.js"
+    ]
+  },
+  "src/pages/Client/Profile.tsx": {
+    "file": "assets/Profile-DSkPMFuM.js",
+    "name": "Profile",
+    "src": "src/pages/Client/Profile.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_conversationService-ByEv61BO.js",
+      "_leaveRequestService-BdHkh97m.js",
+      "_clientOwnershipService-Dk4-xHTF.js"
+    ]
+  },
+  "src/pages/Common/ActivityReports.tsx": {
+    "file": "assets/ActivityReports--cbjiTey.js",
+    "name": "ActivityReports",
+    "src": "src/pages/Common/ActivityReports.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_csvExport-DtZdQr9B.js"
+    ]
+  },
+  "src/pages/Common/LiveActivityDashboard.tsx": {
+    "file": "assets/LiveActivityDashboard-DzDHBHVS.js",
+    "name": "LiveActivityDashboard",
+    "src": "src/pages/Common/LiveActivityDashboard.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js"
+    ]
+  },
+  "src/pages/Common/Reports.tsx": {
+    "file": "assets/Reports-dKD62gDF.js",
+    "name": "Reports",
+    "src": "src/pages/Common/Reports.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_ErrorState-BTnLT9UR.js",
+      "_csvExport-DtZdQr9B.js",
+      "_projectService-hhFoEyNj.js",
+      "_taskService-B4_Q2OjQ.js",
+      "_invoiceService-CW0jq5OO.js",
+      "_budgetService-CYLyu1fY.js",
+      "_payrollService-DLtCGlvL.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_leaveRequestService-BdHkh97m.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/Common/Tasks.tsx": {
+    "file": "assets/Tasks-CIrLL4t8.js",
+    "name": "Tasks",
+    "src": "src/pages/Common/Tasks.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_taskService-B4_Q2OjQ.js",
+      "_projectService-hhFoEyNj.js",
+      "_revisionService-bEkwPb90.js",
+      "_ErrorState-BTnLT9UR.js"
+    ]
+  },
+  "src/pages/Conversations/ClientConversations.tsx": {
+    "file": "assets/ClientConversations-D-tAmp5A.js",
+    "name": "ClientConversations",
+    "src": "src/pages/Conversations/ClientConversations.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_conversationService-ByEv61BO.js",
+      "_visibility-Bv0pV_QA.js"
+    ]
+  },
+  "src/pages/Dashboard/AdminPanel.tsx": {
+    "file": "assets/AdminPanel-DZftd5B4.js",
+    "name": "AdminPanel",
+    "src": "src/pages/Dashboard/AdminPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_MetricCard-nYWPwwQF.js",
+      "_useClients-nmrmmdQ9.js",
+      "_useProjects-XXiuuO8N.js",
+      "_useInvoices-hhaFjSPn.js",
+      "_projectService-hhFoEyNj.js",
+      "_invoiceService-CW0jq5OO.js"
+    ]
+  },
+  "src/pages/Dashboard/ClientPanel.tsx": {
+    "file": "assets/ClientPanel-C_1l4vWA.js",
+    "name": "ClientPanel",
+    "src": "src/pages/Dashboard/ClientPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_MetricCard-nYWPwwQF.js",
+      "_useProjects-XXiuuO8N.js",
+      "_useInvoices-hhaFjSPn.js",
+      "_projectService-hhFoEyNj.js",
+      "_invoiceService-CW0jq5OO.js"
+    ]
+  },
+  "src/pages/Dashboard/HRPanel.tsx": {
+    "file": "assets/HRPanel-_pPW8Dkg.js",
+    "name": "HRPanel",
+    "src": "src/pages/Dashboard/HRPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_RequirePermission-CUP9Ypba.js",
+      "_leaveRequestService-BdHkh97m.js",
+      "_employeeExtraService-BPTWI9Dh.js",
+      "_payrollService-DLtCGlvL.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/Dashboard/ITSupportPanel.tsx": {
+    "file": "assets/ITSupportPanel-_xPRNRLa.js",
+    "name": "ITSupportPanel",
+    "src": "src/pages/Dashboard/ITSupportPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_itSupportService-C-U-KVIp.js"
+    ]
+  },
+  "src/pages/Dashboard/ManagementPanel.tsx": {
+    "file": "assets/ManagementPanel-Glnc7HL_.js",
+    "name": "ManagementPanel",
+    "src": "src/pages/Dashboard/ManagementPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_budgetService-CYLyu1fY.js",
+      "_payrollService-DLtCGlvL.js",
+      "_leaveRequestService-BdHkh97m.js",
+      "_employeeExtraService-BPTWI9Dh.js",
+      "_deliverableService-fLh2n7Bg.js",
+      "_taskService-B4_Q2OjQ.js",
+      "_salesOpsService-CgEP6t-Y.js",
+      "_marketingCampaignService-CSg4EvEr.js",
+      "_projectService-hhFoEyNj.js",
+      "_paymentService-D1BdtIaz.js",
+      "_itSupportService-C-U-KVIp.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/Dashboard/MarketingPanel.tsx": {
+    "file": "assets/MarketingPanel-BLLrhTtm.js",
+    "name": "MarketingPanel",
+    "src": "src/pages/Dashboard/MarketingPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_taskService-B4_Q2OjQ.js",
+      "_marketingCampaignService-CSg4EvEr.js",
+      "_contentCalendarService-DRLORCN-.js"
+    ]
+  },
+  "src/pages/Dashboard/ProductionPanel.tsx": {
+    "file": "assets/ProductionPanel-o_z1C4Lj.js",
+    "name": "ProductionPanel",
+    "src": "src/pages/Dashboard/ProductionPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_RequirePermission-CUP9Ypba.js",
+      "_projectService-hhFoEyNj.js",
+      "_taskService-B4_Q2OjQ.js",
+      "_conversationService-ByEv61BO.js",
+      "_contentCalendarService-DRLORCN-.js",
+      "_visibility-Bv0pV_QA.js"
+    ]
+  },
+  "src/pages/Dashboard/SalesPanel.tsx": {
+    "file": "assets/SalesPanel-Dxxi1OkX.js",
+    "name": "SalesPanel",
+    "src": "src/pages/Dashboard/SalesPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_RequirePermission-CUP9Ypba.js",
+      "_salesOpsService-CgEP6t-Y.js",
+      "_budgetService-CYLyu1fY.js"
+    ]
+  },
+  "src/pages/Dashboard/SuperAdminPanel.tsx": {
+    "file": "assets/SuperAdminPanel-BJABChXu.js",
+    "name": "SuperAdminPanel",
+    "src": "src/pages/Dashboard/SuperAdminPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_vendor-charts-Cmws0M90.js",
+      "_projectService-hhFoEyNj.js",
+      "_paymentService-D1BdtIaz.js",
+      "_invoiceService-CW0jq5OO.js",
+      "_emailService-CA7Y9DyW.js",
+      "_leaveRequestService-BdHkh97m.js",
+      "_employeeExtraService-BPTWI9Dh.js",
+      "_taskService-B4_Q2OjQ.js",
+      "_deliverableService-fLh2n7Bg.js",
+      "_marketingCampaignService-CSg4EvEr.js",
+      "_salesOpsService-CgEP6t-Y.js",
+      "_contentCalendarService-DRLORCN-.js"
+    ]
+  },
+  "src/pages/Employee/AdvanceSalaryRequest.tsx": {
+    "file": "assets/AdvanceSalaryRequest-BF4aqQu2.js",
+    "name": "AdvanceSalaryRequest",
+    "src": "src/pages/Employee/AdvanceSalaryRequest.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_payrollService-DLtCGlvL.js",
+      "_leaveRequestService-BdHkh97m.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/Employee/MyBudget.tsx": {
+    "file": "assets/MyBudget-9_wujFX1.js",
+    "name": "MyBudget",
+    "src": "src/pages/Employee/MyBudget.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_budgetService-CYLyu1fY.js"
+    ]
+  },
+  "src/pages/Employee/MySalarySlips.tsx": {
+    "file": "assets/MySalarySlips-DGbwI1iC.js",
+    "name": "MySalarySlips",
+    "src": "src/pages/Employee/MySalarySlips.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_payrollService-DLtCGlvL.js",
+      "_companySettingsService-CMD6rQSy.js",
+      "_leaveRequestService-BdHkh97m.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/AdvanceSalary.tsx": {
+    "file": "assets/AdvanceSalary-bUq6B1LE.js",
+    "name": "AdvanceSalary",
+    "src": "src/pages/HR/AdvanceSalary.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_payrollService-DLtCGlvL.js",
+      "_leaveRequestService-BdHkh97m.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/AdvanceSalaryAuditLog.tsx": {
+    "file": "assets/AdvanceSalaryAuditLog-Bjmztx0V.js",
+    "name": "AdvanceSalaryAuditLog",
+    "src": "src/pages/HR/AdvanceSalaryAuditLog.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_payrollService-DLtCGlvL.js",
+      "_leaveRequestService-BdHkh97m.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/Attendance.tsx": {
+    "file": "assets/Attendance-3Mp4s2wC.js",
+    "name": "Attendance",
+    "src": "src/pages/HR/Attendance.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_shiftService-BMQ31ddG.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/AttendanceAnalytics.tsx": {
+    "file": "assets/AttendanceAnalytics-DmiI47_l.js",
+    "name": "AttendanceAnalytics",
+    "src": "src/pages/HR/AttendanceAnalytics.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "_vendor-charts-Cmws0M90.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/AttendanceCalendar.tsx": {
+    "file": "assets/AttendanceCalendar-BvNlTX8J.js",
+    "name": "AttendanceCalendar",
+    "src": "src/pages/HR/AttendanceCalendar.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/AttendanceCorrections.tsx": {
+    "file": "assets/AttendanceCorrections-gnRf6g5y.js",
+    "name": "AttendanceCorrections",
+    "src": "src/pages/HR/AttendanceCorrections.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_csvExport-DtZdQr9B.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/AttendanceImport.tsx": {
+    "file": "assets/AttendanceImport-Dx4eceGL.js",
+    "name": "AttendanceImport",
+    "src": "src/pages/HR/AttendanceImport.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/AttendanceMonthly.tsx": {
+    "file": "assets/AttendanceMonthly-qPIsQzUK.js",
+    "name": "AttendanceMonthly",
+    "src": "src/pages/HR/AttendanceMonthly.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_csvExport-DtZdQr9B.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/AttendancePayroll.tsx": {
+    "file": "assets/AttendancePayroll-D5QEywiC.js",
+    "name": "AttendancePayroll",
+    "src": "src/pages/HR/AttendancePayroll.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_csvExport-DtZdQr9B.js",
+      "_employeeExtraService-BPTWI9Dh.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/AttendanceYearly.tsx": {
+    "file": "assets/AttendanceYearly-ImuEbtLD.js",
+    "name": "AttendanceYearly",
+    "src": "src/pages/HR/AttendanceYearly.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_csvExport-DtZdQr9B.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/HR/BulkSalarySlips.tsx": {
+    "file": "assets/BulkSalarySlips-BcGXqrNA.js",
+    "name": "BulkSalarySlips",
+    "src": "src/pages/HR/BulkSalarySlips.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_payrollService-DLtCGlvL.js",
+      "_companySettingsService-CMD6rQSy.js",
+      "_employeeExtraService-BPTWI9Dh.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_calculations-Bl6GveqK.js",
+      "_leaveRequestService-BdHkh97m.js"
+    ]
+  },
+  "src/pages/HR/Employees.tsx": {
+    "file": "assets/Employees-Dqw-kykI.js",
+    "name": "Employees",
+    "src": "src/pages/HR/Employees.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_employeeExtraService-BPTWI9Dh.js"
+    ]
+  },
+  "src/pages/HR/LeaveRequests.tsx": {
+    "file": "assets/LeaveRequests-B6HwkG_Y.js",
+    "name": "LeaveRequests",
+    "src": "src/pages/HR/LeaveRequests.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_calculations-Bl6GveqK.js",
+      "_leaveRequestService-BdHkh97m.js"
+    ]
+  },
+  "src/pages/HR/Payroll.tsx": {
+    "file": "assets/Payroll-DuwULIys.js",
+    "name": "Payroll",
+    "src": "src/pages/HR/Payroll.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_employeeExtraService-BPTWI9Dh.js",
+      "_leaveRequestService-BdHkh97m.js"
+    ]
+  },
+  "src/pages/HR/SalarySlips.tsx": {
+    "file": "assets/SalarySlips-CfwxMqUk.js",
+    "name": "SalarySlips",
+    "src": "src/pages/HR/SalarySlips.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_payrollService-DLtCGlvL.js",
+      "_companySettingsService-CMD6rQSy.js",
+      "_employeeExtraService-BPTWI9Dh.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_calculations-Bl6GveqK.js",
+      "_leaveRequestService-BdHkh97m.js"
+    ]
+  },
+  "src/pages/ITSupport/AttendanceDashboard.tsx": {
+    "file": "assets/AttendanceDashboard-DmmNZkg9.js",
+    "name": "AttendanceDashboard",
+    "src": "src/pages/ITSupport/AttendanceDashboard.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_ErrorState-BTnLT9UR.js",
+      "_itSupportService-C-U-KVIp.js"
+    ]
+  },
+  "src/pages/ITSupport/AttendanceExceptions.tsx": {
+    "file": "assets/AttendanceExceptions-DVvZC72r.js",
+    "name": "AttendanceExceptions",
+    "src": "src/pages/ITSupport/AttendanceExceptions.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_itSupportService-C-U-KVIp.js"
+    ]
+  },
+  "src/pages/ITSupport/AttendanceReports.tsx": {
+    "file": "assets/AttendanceReports-CP85mXou.js",
+    "name": "AttendanceReports",
+    "src": "src/pages/ITSupport/AttendanceReports.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_ErrorState-BTnLT9UR.js",
+      "_itSupportService-C-U-KVIp.js",
+      "_attendanceService-CtKRhfJ9.js",
+      "_calculations-Bl6GveqK.js"
+    ]
+  },
+  "src/pages/ITSupport/BiometricMapping.tsx": {
+    "file": "assets/BiometricMapping-44QwGPwU.js",
+    "name": "BiometricMapping",
+    "src": "src/pages/ITSupport/BiometricMapping.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_ErrorState-BTnLT9UR.js",
+      "_itSupportService-C-U-KVIp.js"
+    ]
+  },
+  "src/pages/ITSupport/DeviceLogs.tsx": {
+    "file": "assets/DeviceLogs-CVjoEaeg.js",
+    "name": "DeviceLogs",
+    "src": "src/pages/ITSupport/DeviceLogs.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_itSupportService-C-U-KVIp.js"
+    ]
+  },
+  "src/pages/ITSupport/Devices.tsx": {
+    "file": "assets/Devices-CZuoKzh6.js",
+    "name": "Devices",
+    "src": "src/pages/ITSupport/Devices.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_ErrorState-BTnLT9UR.js",
+      "_itSupportService-C-U-KVIp.js"
+    ]
+  },
+  "src/pages/ITSupport/Punches.tsx": {
+    "file": "assets/Punches-B6zsOOo_.js",
+    "name": "Punches",
+    "src": "src/pages/ITSupport/Punches.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_itSupportService-C-U-KVIp.js"
+    ]
+  },
+  "src/pages/ITSupport/Tickets.tsx": {
+    "file": "assets/Tickets-CUQnGJS7.js",
+    "name": "Tickets",
+    "src": "src/pages/ITSupport/Tickets.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_itSupportService-C-U-KVIp.js"
+    ]
+  },
+  "src/pages/Marketing/ContentCalendar.tsx": {
+    "file": "assets/ContentCalendar-C8s7v74a.js",
+    "name": "ContentCalendar",
+    "src": "src/pages/Marketing/ContentCalendar.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_contentCalendarService-DRLORCN-.js"
+    ]
+  },
+  "src/pages/Marketing/Leads.tsx": {
+    "file": "assets/Leads-ObtZii42.js",
+    "name": "Leads",
+    "src": "src/pages/Marketing/Leads.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js"
+    ]
+  },
+  "src/pages/Marketing/SocialTracking.tsx": {
+    "file": "assets/SocialTracking-VjYFOzyP.js",
+    "name": "SocialTracking",
+    "src": "src/pages/Marketing/SocialTracking.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js"
+    ]
+  },
+  "src/pages/Production/ClientOwnership.tsx": {
+    "file": "assets/ClientOwnership-B6zJCi1U.js",
+    "name": "ClientOwnership",
+    "src": "src/pages/Production/ClientOwnership.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_clientOwnershipService-Dk4-xHTF.js"
+    ]
+  },
+  "src/pages/Production/Deliverables.tsx": {
+    "file": "assets/Deliverables-BaSnk8tc.js",
+    "name": "Deliverables",
+    "src": "src/pages/Production/Deliverables.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_ErrorState-BTnLT9UR.js",
+      "_deliverableService-fLh2n7Bg.js",
+      "_projectService-hhFoEyNj.js"
+    ]
+  },
+  "src/pages/Production/MyClients.tsx": {
+    "file": "assets/MyClients-Ct_4sXhF.js",
+    "name": "MyClients",
+    "src": "src/pages/Production/MyClients.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_ErrorState-BTnLT9UR.js",
+      "_projectService-hhFoEyNj.js",
+      "_clientOwnershipService-Dk4-xHTF.js"
+    ]
+  },
+  "src/pages/Sales/CampaignBudgets.tsx": {
+    "file": "assets/CampaignBudgets-DJlG1Pr2.js",
+    "name": "CampaignBudgets",
+    "src": "src/pages/Sales/CampaignBudgets.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_salesOpsService-CgEP6t-Y.js"
+    ]
+  },
+  "src/pages/Sales/Commissions.tsx": {
+    "file": "assets/Commissions-Io_2DFTv.js",
+    "name": "Commissions",
+    "src": "src/pages/Sales/Commissions.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js"
+    ]
+  },
+  "src/pages/Sales/Leads.tsx": {
+    "file": "assets/Leads-CfcKS-yZ.js",
+    "name": "Leads",
+    "src": "src/pages/Sales/Leads.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_pencil-B_dWoCIY.js",
+      "_trash-DEPRjsyA.js"
+    ]
+  },
+  "src/pages/Sales/SalesTargets.tsx": {
+    "file": "assets/SalesTargets-Bevej66y.js",
+    "name": "SalesTargets",
+    "src": "src/pages/Sales/SalesTargets.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_ErrorState-BTnLT9UR.js",
+      "_salesOpsService-CgEP6t-Y.js"
+    ]
+  },
+  "src/pages/Sales/SalesTasks.tsx": {
+    "file": "assets/SalesTasks-C2EggS0D.js",
+    "name": "SalesTasks",
+    "src": "src/pages/Sales/SalesTasks.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_salesOpsService-CgEP6t-Y.js"
+    ]
+  },
+  "src/pages/Sales/TeamPerformance.tsx": {
+    "file": "assets/TeamPerformance-Cmge6VQS.js",
+    "name": "TeamPerformance",
+    "src": "src/pages/Sales/TeamPerformance.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_vendor-react-D_CQBhJw.js",
+      "index.html",
+      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_ErrorState-BTnLT9UR.js",
+      "_EmployeeIdentity-CnW3V_En.js",
+      "_salesOpsService-CgEP6t-Y.js"
+    ]
+  }
+}

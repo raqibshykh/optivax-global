@@ -1,14 +1,19 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Invoice } from "../types";
 import { InvoiceService } from "../services/invoiceService";
+import { ClientService } from "../services/clientService";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../lib/client";
 
 export function useInvoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const fetchInvoices = useCallback(async () => {
     setIsLoading(true);
@@ -16,27 +21,16 @@ export function useInvoices() {
     try {
       let data: Invoice[] = [];
       if (user?.role === "client") {
-        if (user.email) {
-          const clients = await api.get<{ id: string }[]>(
-            `/saas/v1/clients/list?email=${encodeURIComponent(user.email)}`
-          );
-          const clientId = clients?.[0]?.id;
-          if (clientId) {
-            data = await InvoiceService.getByClientId(clientId);
-          } else {
-            data = await InvoiceService.getByClientId(user.id);
-          }
-        } else {
-          data = await InvoiceService.getByClientId(user.id);
-        }
+        const client = user.email ? await ClientService.getByEmail(user.email) : null;
+        data = await InvoiceService.getByClientId(client?.id ?? user.id);
       } else {
         data = await InvoiceService.getAll();
       }
-      setInvoices(data);
+      if (mountedRef.current) setInvoices(data);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to fetch invoices");
+      if (mountedRef.current) setError(err instanceof Error ? err.message : "Failed to fetch invoices");
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, [user]);
 

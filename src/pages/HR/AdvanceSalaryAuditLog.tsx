@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { useAuth } from "../../context/AuthContext";
 import {
-  getAdvanceAuditLog,
+  PayrollService,
   type AdvanceSalaryAuditEntry,
   type AdvanceAuditAction,
-} from "../../mock/payrollData";
+} from "../../services/payrollService";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ export default function AdvanceSalaryAuditLog() {
   const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
-    setEntries(getAdvanceAuditLog());
+    PayrollService.getAdvanceAuditLog().then(setEntries).catch(() => setEntries([]));
   }, []);
 
   const allowed = user?.role === "super_admin" || user?.role === "hr_admin";
@@ -257,16 +258,14 @@ export default function AdvanceSalaryAuditLog() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{e.employeeName}</p>
-                      <p className="text-xs text-gray-400">{e.employeeRole}</p>
+                      <EmployeeIdentity name={e.employeeName} designation={e.employeeRole} size="sm" />
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{e.department}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">
                       {fmtRs(e.amount)}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-sm text-gray-700 dark:text-gray-300">{e.performedByName}</p>
-                      <p className="text-xs text-gray-400">{e.performedByRole}</p>
+                      <EmployeeIdentity name={e.performedByName} designation={e.performedByRole} size="sm" />
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 max-w-xs truncate" title={e.notes}>
                       {e.notes ?? "—"}

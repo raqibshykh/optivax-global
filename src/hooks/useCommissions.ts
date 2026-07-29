@@ -1,56 +1,47 @@
-import { useState, useEffect, useCallback } from "react";
-import { api } from "../lib/client";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { CommissionService, type Commission } from "../services/commissionService";
 
-export interface Commission {
-  id: string;
-  userId: string;
-  userName: string;
-  type: "percentage" | "fixed";
-  value: number;
-  projectId?: string;
-  projectName?: string;
-  invoiceId?: string;
-  amount: number;
-  status: "pending" | "approved" | "paid";
-  notes?: string;
-  createdAt: string;
-}
+export type { Commission };
 
 export const useCommissions = () => {
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const fetchCommissions = useCallback(async (params?: Record<string, string>) => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await api.get<{ commissions: Commission[] }>("/saas/v1/commissions", { params });
-      setCommissions(res.commissions ?? []);
+      const data = await CommissionService.getAll(params);
+      if (mountedRef.current) setCommissions(data);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to fetch commissions";
-      setError(msg);
+      if (mountedRef.current) setError(err instanceof Error ? err.message : "Failed to fetch commissions");
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchCommissions(); }, [fetchCommissions]);
 
   const addCommission = async (data: Omit<Commission, "id" | "createdAt">) => {
-    const res = await api.post<{ commission: Commission }>("/saas/v1/commissions", data);
-    setCommissions((prev) => [res.commission, ...prev]);
-    return res.commission;
+    const commission = await CommissionService.create(data);
+    setCommissions((prev) => [commission, ...prev]);
+    return commission;
   };
 
   const updateCommission = async (id: string, data: Partial<Commission>) => {
-    const res = await api.put<{ commission: Commission }>("/saas/v1/commissions", { id, ...data });
-    setCommissions((prev) => prev.map((c) => (c.id === id ? res.commission : c)));
-    return res.commission;
+    const commission = await CommissionService.update(id, data);
+    setCommissions((prev) => prev.map((c) => (c.id === id ? commission : c)));
+    return commission;
   };
 
   const deleteCommission = async (id: string) => {
-    await api.delete("/saas/v1/commissions", { id });
+    await CommissionService.delete(id);
     setCommissions((prev) => prev.filter((c) => c.id !== id));
   };
 

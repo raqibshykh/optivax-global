@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import { MailIcon } from "../../icons";
+import Avatar from "../../components/common/Avatar";
 import { useNotifications } from "../../hooks/useNotifications";
 import { useAuth } from "../../context/AuthContext";
-import { getConversations, type Conversation } from "../../mock/conversationsData";
+import { ConversationService, type Conversation } from "../../services/conversationService";
 
 function timeAgo(dateStr: string): string {
   const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -40,12 +41,16 @@ export default function Notifications() {
 
   useEffect(() => {
     if (!user) return;
-    const all = getConversations();
-    const mine = all
-      .filter(c => c.clientId === user.id)
-      .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
-      .slice(0, 5);
-    setMyConvs(mine);
+    let cancelled = false;
+    ConversationService.getAll().then((all) => {
+      if (cancelled) return;
+      const mine = all
+        .filter(c => c.clientId === user.id)
+        .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
+        .slice(0, 5);
+      setMyConvs(mine);
+    }).catch(() => { if (!cancelled) setMyConvs([]); });
+    return () => { cancelled = true; };
   }, [user]);
 
   const unreadMsgCount = myConvs.reduce((sum, c) => sum + c.unreadByClient, 0);
@@ -233,9 +238,7 @@ export default function Notifications() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-xs font-semibold text-blue-700 dark:text-blue-300">
-                          {conv.assignedUserName.charAt(0)}
-                        </div>
+                        <Avatar name={conv.assignedUserName} size="xs" />
                         <span className="text-xs text-gray-500">{conv.assignedUserName}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded-full ${DEPT_COLOR[conv.assignedDept] ?? "bg-gray-100 text-gray-600"}`}>
                           {conv.assignedDept}

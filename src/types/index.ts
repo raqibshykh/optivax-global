@@ -38,6 +38,7 @@ export interface User {
   joinDate: string;
   lastLogin?: string;
   departmentId?: string;
+  mustChangePassword?: boolean;
 }
 
 export const DESIGNATIONS_BY_ROLE: Partial<Record<UserRole, string[]>> = {
@@ -127,9 +128,18 @@ export interface Task {
   description?: string;
   status: "todo" | "in-progress" | "done" | "blocked";
   priority: "low" | "medium" | "high";
+  assignee: string;
+  assigneeId?: string;
   assignedTo?: string;
-  projectId?: string;
   dueDate?: string;
+  budget?: number;
+  budgetUsed?: number;
+  category?: "general" | "campaign" | "content" | "analytics";
+  projectId?: string;
+  projectName?: string;
+  assigneeDept?: string;
+  assigneeRole?: string;
+  createdBy?: string;
   createdAt: string;
   updatedAt?: string;
 }

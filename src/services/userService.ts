@@ -1,5 +1,4 @@
 import { api } from "../lib/client";
-import { mockUsers } from "../mock/users";
 
 export interface UserProfile {
   id: string;
@@ -9,48 +8,21 @@ export interface UserProfile {
   company: string;
   role: string;
   departmentId?: string;
+  designation?: string;
   created_at: string;
+  notificationPreferences?: { emailNotifs: boolean; paymentReminders: boolean };
+}
+
+export interface CreateUserProfile extends Omit<UserProfile, "id"> {
+  password: string;
 }
 
 const BASE = "/saas/v1/profiles";
-const MOCK_STORAGE_KEY = "mock_profiles";
-
-const toProfile = (u: typeof mockUsers[number]): UserProfile => ({
-  id: u.id,
-  email: u.email,
-  full_name: u.name,
-  avatar_url: u.avatar || "",
-  company: u.company || "",
-  role: u.role,
-  departmentId: u.departmentId,
-  created_at: (u.joinDate as string) || new Date().toISOString(),
-});
 
 export class UserService {
   static async getAll(): Promise<UserProfile[]> {
-    // A: Try the API / mock server
-    try {
-      const data = await api.get<UserProfile[]>(`${BASE}/list`);
-      if (Array.isArray(data) && data.length > 0) return data;
-    } catch {
-      // API unavailable — continue to local fallback
-    }
-
-    // B: Check localStorage (seeded by mock server on first load)
-    const stored = localStorage.getItem(MOCK_STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as UserProfile[];
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch {
-        // corrupt JSON — fall through to seed
-      }
-    }
-
-    // C: Seed localStorage from mockUsers and return them
-    const seeded = mockUsers.map(toProfile);
-    localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(seeded));
-    return seeded;
+    const data = await api.get<UserProfile[]>(`${BASE}/list`);
+    return data || [];
   }
 
   static async getById(id: string): Promise<UserProfile | null> {
@@ -65,7 +37,12 @@ export class UserService {
     return data?.[0] ?? null;
   }
 
-  static async create(user: Omit<UserProfile, "id">): Promise<UserProfile> {
+  static async listByRole(...roles: string[]): Promise<UserProfile[]> {
+    const all = await UserService.getAll();
+    return all.filter((u) => roles.includes(u.role));
+  }
+
+  static async create(user: CreateUserProfile): Promise<UserProfile> {
     return api.post<UserProfile>(`${BASE}/create`, user);
   }
 

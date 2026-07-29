@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import LoadingState from "../../components/common/LoadingState";
+import ErrorState from "../../components/common/ErrorState";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { getTargets, saveTargets, SALES_MEMBERS } from "../../mock/salesData";
+import { SalesTargetService } from "../../services/salesOpsService";
+import { UserService } from "../../services/userService";
 import { SalesTarget } from "../../types";
 
 const pctBarColor = (pct: number) =>
@@ -22,11 +25,12 @@ export default function SalesTargets() {
   const isAdmin = checkPermission("sales", "APPROVE") || user?.role === "management";
 
   const [targets, setTargets] = useState<SalesTarget[]>([]);
+  const [salesMembers, setSalesMembers] = useState<{ id: string; name: string }[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<SalesTarget | null>(null);
   const [form, setForm] = useState({
-    memberId: SALES_MEMBERS[0]?.id || "",
-    memberName: SALES_MEMBERS[0]?.name || "",
+    memberId: "",
+    memberName: "",
     period: "2026-Q3",
     monthlyTarget: 0,
     quarterlyTarget: 0,
@@ -34,22 +38,46 @@ export default function SalesTargets() {
     achievedAmount: 0,
   });
 
-  const loadData = () => {
-    const all = getTargets();
-    if (!isAdmin && user) {
-      setTargets(all.filter(t => t.memberId === user.id));
-    } else {
-      setTargets(all);
-    }
-  };
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => { loadData(); }, [isAdmin, user?.id]);
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const all = await SalesTargetService.getAll();
+      if (!isAdmin && user) {
+        setTargets(all.filter(t => t.memberId === user.id));
+      } else {
+        setTargets(all);
+      }
+    } catch (err: unknown) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load sales targets");
+    } finally {
+      setIsLoading(false);
+    }
+    // Deliberately depends on the primitive `user?.id`, not the `user`
+    // object reference — only the id is read inside, and this avoids
+    // recreating (and re-running the effect below) on every unrelated
+    // re-render that produces a new `user` object with the same id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, user?.id]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Sales team members are real users (role "sales_member"), sourced from
+  // UserService rather than a separate mock member list.
+  useEffect(() => {
+    UserService.listByRole("sales_member")
+      .then(profiles => setSalesMembers(profiles.map(p => ({ id: p.id, name: p.full_name }))))
+      .catch(() => {});
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
     setForm({
-      memberId: SALES_MEMBERS[0]?.id || "",
-      memberName: SALES_MEMBERS[0]?.name || "",
+      memberId: salesMembers[0]?.id || "",
+      memberName: salesMembers[0]?.name || "",
       period: "2026-Q3",
       monthlyTarget: 0,
       quarterlyTarget: 0,
@@ -74,28 +102,21 @@ export default function SalesTargets() {
   };
 
   const handleMemberChange = (id: string) => {
-    const member = SALES_MEMBERS.find(m => m.id === id);
+    const member = salesMembers.find(m => m.id === id);
     setForm(f => ({ ...f, memberId: id, memberName: member?.name || id }));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const all = getTargets();
     if (editing) {
-      saveTargets(all.map(t =>
-        t.id === editing.id
-          ? { ...t, ...form, updatedAt: new Date().toISOString() }
-          : t
-      ));
+      await SalesTargetService.update(editing.id, { ...form, updatedAt: new Date().toISOString() });
       showToast("Target updated", "success");
     } else {
-      const next: SalesTarget = {
-        id: `st${Date.now()}`,
+      await SalesTargetService.create({
         ...form,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      };
-      saveTargets([...all, next]);
+      });
       showToast("Target assigned", "success");
     }
     setIsModalOpen(false);
@@ -152,6 +173,11 @@ export default function SalesTargets() {
           )}
         </div>
 
+        {isLoading ? (
+          <LoadingState label="Loading sales targets..." />
+        ) : loadError ? (
+          <ErrorState message={loadError} onRetry={loadData} />
+        ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead>
@@ -221,6 +247,7 @@ export default function SalesTargets() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* Modal */}
@@ -243,7 +270,7 @@ export default function SalesTargets() {
                   disabled={!!editing}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:opacity-60"
                 >
-                  {SALES_MEMBERS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {salesMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </div>
               <div>

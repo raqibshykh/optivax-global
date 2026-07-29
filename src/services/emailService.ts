@@ -41,6 +41,11 @@ export class EmailService {
     await api.delete(`${BASE}/campaigns/delete`, { id });
   }
 
+  /** Actually queues one email per recipient (see EmailMarketingController::sendCampaign()) — not just a status flip. */
+  static async sendCampaign(id: string): Promise<EmailCampaign> {
+    return api.post<EmailCampaign>(`${BASE}/campaigns/send`, { id });
+  }
+
   // ── Automations ─────────────────────────────────────────────
   static async getAutomations(): Promise<EmailAutomation[]> {
     const data = await api.get<EmailAutomation[]>(`${BASE}/automations/list`);

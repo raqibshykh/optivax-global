@@ -25,7 +25,7 @@ export default function Notifications() {
         const detail = (ev as CustomEvent).detail;
         const msg = detail && detail.payload && detail.payload.message ? detail.payload.message : "New notification";
         showToast(msg, "info", 4000);
-      } catch {}
+      } catch { /* malformed event payload — ignore, next real notification will still show */ }
     };
 
     window.addEventListener("saas:notification", handler as EventListener);
@@ -36,7 +36,7 @@ export default function Notifications() {
       try {
         bc = new BroadcastChannel("saas_notifications");
         bc.onmessage = () => {
-          try { refreshNotifications(); } catch {}
+          try { refreshNotifications(); } catch { /* refresh best-effort */ }
         };
       } catch {
         bc = null;
@@ -49,14 +49,14 @@ export default function Notifications() {
         if (e.key === "__saas_notifications_update") {
           refreshNotifications();
         }
-      } catch {}
+      } catch { /* refresh best-effort */ }
     };
     window.addEventListener("storage", storageHandler);
 
     return () => {
       window.removeEventListener("saas:notification", handler as EventListener);
       window.removeEventListener("storage", storageHandler);
-      try { if (bc) bc.close(); } catch {}
+      try { if (bc) bc.close(); } catch { /* channel already closed */ }
     };
   }, [refreshNotifications, showToast]);
 

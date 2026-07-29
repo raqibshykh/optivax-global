@@ -1,8 +1,12 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
-import { useAuth } from "../../context/AuthContext";
-import { getCampaigns, getTargets, getSalesTasks, SALES_MEMBERS } from "../../mock/salesData";
+import LoadingState from "../../components/common/LoadingState";
+import ErrorState from "../../components/common/ErrorState";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
+import { CampaignService, SalesTargetService, SalesTaskService } from "../../services/salesOpsService";
+import { UserService } from "../../services/userService";
+import { CampaignBudget, SalesTarget, SalesTask } from "../../types";
 
 const pctBarColor = (pct: number) =>
   pct >= 100 ? "bg-green-500" : pct >= 75 ? "bg-brand-500" : pct >= 50 ? "bg-yellow-500" : "bg-red-500";
@@ -14,12 +18,41 @@ const pctTextColor = (pct: number) =>
     : "text-red-600 dark:text-red-400";
 
 export default function TeamPerformance() {
-  const { user, checkPermission } = useAuth();
-  const isAdmin = checkPermission("sales", "APPROVE") || user?.role === "management";
+  const [campaigns, setCampaigns] = useState<CampaignBudget[]>([]);
+  const [targets, setTargets] = useState<SalesTarget[]>([]);
+  const [tasks, setTasks] = useState<SalesTask[]>([]);
+  const [salesMembers, setSalesMembers] = useState<{ id: string; name: string; avatar_url?: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const campaigns = useMemo(() => getCampaigns(), []);
-  const targets   = useMemo(() => getTargets(), []);
-  const tasks     = useMemo(() => getSalesTasks(), []);
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [campaignsData, targetsData, tasksData] = await Promise.all([
+        CampaignService.getAll(),
+        SalesTargetService.getAll(),
+        SalesTaskService.getAll(),
+      ]);
+      setCampaigns(campaignsData);
+      setTargets(targetsData);
+      setTasks(tasksData);
+    } catch (err: unknown) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load team performance data");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Sales team members are real users (role "sales_member"), sourced from
+  // UserService rather than a separate mock member list.
+  useEffect(() => {
+    UserService.listByRole("sales_member")
+      .then(profiles => setSalesMembers(profiles.map(p => ({ id: p.id, name: p.full_name, avatar_url: p.avatar_url }))))
+      .catch(() => {});
+  }, []);
 
   // KPIs
   const teamRevenue   = targets.reduce((s, t) => s + t.achievedAmount, 0);
@@ -34,7 +67,7 @@ export default function TeamPerformance() {
   const blockedTasks  = tasks.filter(t => t.status === "blocked").length;
 
   // Per-member performance
-  const memberStats = SALES_MEMBERS.map(m => {
+  const memberStats = salesMembers.map(m => {
     const target = targets.find(t => t.memberId === m.id);
     const myTasks = tasks.filter(t => t.assignedTo === m.id);
     const done    = myTasks.filter(t => t.status === "done").length;
@@ -64,6 +97,12 @@ export default function TeamPerformance() {
       <PageMeta title="Team Performance | Optivax Sales" description="Sales team performance dashboard" />
       <PageBreadcrumb pageTitle="Team Performance" />
 
+      {isLoading ? (
+        <LoadingState label="Loading team performance..." />
+      ) : loadError ? (
+        <ErrorState message={loadError} onRetry={loadData} />
+      ) : (
+      <>
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
@@ -152,12 +191,7 @@ export default function TeamPerformance() {
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-xs font-bold text-brand-600 dark:text-brand-400">
-                        {m.name.split(" ").map(n => n[0]).join("")}
-                      </div>
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">{m.name}</div>
-                    </div>
+                    <EmployeeIdentity src={m.avatar_url} name={m.name} size="sm" />
                   </td>
                   <td className="px-4 py-4 text-sm font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
                     ${m.achieved.toLocaleString()}
@@ -227,6 +261,8 @@ export default function TeamPerformance() {
           })}
         </div>
       </div>
+      </>
+      )}
     </>
   );
 }

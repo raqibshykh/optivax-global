@@ -2,36 +2,19 @@ import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
 import { useAuth } from "../../context/AuthContext";
-import { safeParse } from "../../lib/storage";
+import { TaskService } from "../../services/taskService";
+import { MarketingCampaignService, type MarketingCampaign } from "../../services/marketingCampaignService";
 import type { MockTask } from "../Common/Tasks";
 import {
-  getContentEntries, todayStr, weekRange, upcomingRange, monthRange,
-  STATUS_DOT, STATUS_BADGE, PLATFORM_ABBR,
+  ContentCalendarService, todayStr, weekRange, upcomingRange, monthRange,
+  STATUS_DOT, PLATFORM_ABBR,
   type ContentEntry,
-} from "../../mock/contentCalendarData";
+} from "../../services/contentCalendarService";
 
 // ── Types ────────────────────────────────────────────────────────────────
-interface MarketingCampaign {
-  id: string;
-  name: string;
-  platform: string;
-  status: "Active" | "Draft" | "Completed";
-  budget: number;
-  spent: number;
-  createdBy?: string;
-  linkedTaskId?: string;
-}
-
 type TaskStatus = "To Do" | "In Progress" | "Done" | "Blocked";
-
-const CAMPAIGNS_KEY = "marketing_campaigns";
-
-const INITIAL_CAMPAIGNS: MarketingCampaign[] = [
-  { id: "cm1", name: "Summer Sale 2026",  platform: "Facebook",   status: "Active",    budget: 5000,  spent: 2340 },
-  { id: "cm2", name: "B2B Lead Gen",      platform: "LinkedIn",   status: "Active",    budget: 10000, spent: 4500 },
-  { id: "cm3", name: "Retargeting Fall",  platform: "Google Ads", status: "Draft",     budget: 2000,  spent: 0   },
-];
 
 const STATUS_TO_TASK: Record<string, TaskStatus> = {
   "todo":        "To Do",
@@ -53,47 +36,26 @@ export default function MarketingPanel() {
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
 
   useEffect(() => {
-    const raw = localStorage.getItem(CAMPAIGNS_KEY);
-    const parsed = safeParse<MarketingCampaign[]>(raw, []);
-    setCampaigns(parsed.length > 0 ? parsed : INITIAL_CAMPAIGNS);
+    MarketingCampaignService.getAll().then(setCampaigns).catch(() => setCampaigns([]));
   }, []);
-
-  useEffect(() => {
-    if (campaigns.length > 0) {
-      localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(campaigns));
-    }
-  }, [campaigns]);
 
   // ── Tasks from common task store ─────────────────────────────────────
   const [allTasks, setAllTasks] = useState<MockTask[]>([]);
 
   const loadTasks = useCallback(() => {
-    const raw = localStorage.getItem("mock_tasks");
-    const parsed = safeParse<MockTask[]>(raw, []);
-    setAllTasks(parsed);
+    TaskService.getAll().then(setAllTasks).catch(() => setAllTasks([]));
   }, []);
 
   useEffect(() => {
     loadTasks();
-    // re-read on storage change (e.g. Tasks page saved)
-    const handler = () => loadTasks();
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
   }, [loadTasks]);
 
   // Tasks visible to this user
   const myTasks: MockTask[] = isMember
     ? allTasks.filter((t) => t.assigneeId === user?.id)
     : isAdmin
-    ? allTasks.filter((t) => {
-        // admin sees tasks assigned to marketing_member or marketing_admin
-        return true; // show all; admin manages them via Tasks page
-      })
+    ? allTasks // show all; admin manages them via Tasks page
     : [];
-
-  const hasCampaignTask = myTasks.some(
-    (t) => t.category === "campaign" || t.title.toLowerCase().includes("campaign")
-  );
 
   // Campaigns visible: admin sees all; member sees only ones they created
   const visibleCampaigns = isAdmin
@@ -113,30 +75,26 @@ export default function MarketingPanel() {
   // ── Handlers ─────────────────────────────────────────────────────────
 
   // Update task status from within the panel
-  const updateTaskStatus = (taskId: string, newStatus: string) => {
-    const stored = localStorage.getItem("mock_tasks");
-    const tasks = safeParse<MockTask[]>(stored, []);
-    const updated = tasks.map((t) =>
-      t.id === taskId ? { ...t, status: newStatus as MockTask["status"] } : t
-    );
-    localStorage.setItem("mock_tasks", JSON.stringify(updated));
-    setAllTasks(updated);
+  const updateTaskStatus = async (taskId: string, newStatus: string) => {
+    await TaskService.update(taskId, { status: newStatus as MockTask["status"] });
+    setAllTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus as MockTask["status"] } : t)));
   };
 
   // Update budget used from within the panel
-  const updateBudgetUsed = (taskId: string, amount: number) => {
-    const stored = localStorage.getItem("mock_tasks");
-    const tasks = safeParse<MockTask[]>(stored, []);
-    const updated = tasks.map((t) =>
-      t.id === taskId ? { ...t, budgetUsed: Math.max(0, Math.min(amount, t.budget ?? amount)) } : t
-    );
-    localStorage.setItem("mock_tasks", JSON.stringify(updated));
-    setAllTasks(updated);
+  const updateBudgetUsed = async (taskId: string, amount: number) => {
+    const t = allTasks.find((x) => x.id === taskId);
+    const budgetUsed = Math.max(0, Math.min(amount, t?.budget ?? amount));
+    await TaskService.update(taskId, { budgetUsed });
+    setAllTasks((prev) => prev.map((x) => (x.id === taskId ? { ...x, budgetUsed } : x)));
   };
 
   // ── Content Calendar widgets ─────────────────────────────────────────
   const [calEntries, setCalEntries] = useState<ContentEntry[]>([]);
-  useEffect(() => { setCalEntries(getContentEntries()); }, []);
+  useEffect(() => {
+    ContentCalendarService.getAll()
+      .then(setCalEntries)
+      .catch(() => setCalEntries([]));
+  }, []);
 
   const today      = todayStr();
   const wk         = weekRange();
@@ -144,9 +102,9 @@ export default function MarketingPanel() {
   const mth        = monthRange();
 
   const todayContent    = calEntries.filter(e => e.scheduledDate === today)
-    .sort((a,b) => a.scheduledTime.localeCompare(b.scheduledTime));
+    .sort((a,b) => (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? ""));
   const weekContent     = calEntries.filter(e => e.scheduledDate >= wk.start && e.scheduledDate <= wk.end)
-    .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime));
+    .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate) || (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? ""));
   const upcomingContent = calEntries.filter(e => e.scheduledDate >= upcoming.start && e.scheduledDate <= upcoming.end)
     .sort((a,b) => a.scheduledDate.localeCompare(b.scheduledDate));
   const monthContent    = calEntries.filter(e => e.scheduledDate >= mth.start && e.scheduledDate <= mth.end);
@@ -158,7 +116,8 @@ export default function MarketingPanel() {
     cancelled: monthContent.filter(e => e.status === "Cancelled").length,
   };
 
-  function fmtTime(t: string): string {
+  function fmtTime(t: string | null | undefined): string {
+    if (!t) return "—";
     const [h, m] = t.split(":").map(Number);
     return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h < 12 ? "AM" : "PM"}`;
   }
@@ -482,7 +441,12 @@ export default function MarketingPanel() {
                       .map((task) => (
                         <tr key={task.id}>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{task.title}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500">{task.assignee}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">
+                            <div className="flex items-center gap-2">
+                              <Avatar name={task.assignee} size="xs" />
+                              {task.assignee}
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-sm text-gray-500">{task.dueDate}</td>
                           <td className="px-4 py-3 text-sm">
                             <span className={`px-2 py-1 text-xs rounded-full ${
@@ -628,12 +592,13 @@ function TaskRow({ task, isMember, isOwnTask, onStatusChange, onBudgetUpdate }: 
           {task.description && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{task.description}</p>
           )}
-          <p className="text-xs text-gray-400">
+          <div className="flex items-center gap-1.5 text-xs text-gray-400">
+            <Avatar name={task.assignee} size="xs" />
             Assigned to: <span className="font-medium text-gray-600 dark:text-gray-300">{task.assignee}</span>
             {task.dueDate && task.dueDate !== "—" && (
               <span className="ml-3">Due: <span className="font-medium text-gray-600 dark:text-gray-300">{task.dueDate}</span></span>
             )}
-          </p>
+          </div>
         </div>
 
         {/* Right: status + update */}

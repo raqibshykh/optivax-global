@@ -1,47 +1,16 @@
 import React, { useState, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { notifyLeaveRequestSubmitted, notifyLeaveDecision } from "../../services/notificationHelpers";
-import { COMPANY_HOLIDAYS_2026, COMPANY_HOLIDAYS_2025 } from "../../mock/attendanceData";
-
-const STORAGE_KEY = "mock_leave_requests";
-
-type LeaveType   = "annual" | "sick" | "casual" | "maternity" | "unpaid";
-type LeaveStatus = "pending" | "approved" | "rejected";
-
-interface LeaveRequest {
-  id: string;
-  userId: string;
-  userName: string;
-  userRole: string;
-  departmentId?: string;
-  type: LeaveType;
-  startDate: string;
-  endDate: string;
-  days: number;
-  reason: string;
-  status: LeaveStatus;
-  reviewedBy?: string;
-  reviewNote?: string;
-  createdAt: string;
-}
-
-const SEED_REQUESTS: LeaveRequest[] = [
-  { id: "lv-seed-1",  userId: "u13", userName: "Liam Park",       userRole: "production_member", departmentId: "dept-production", type: "annual",    startDate: "2026-06-02", endDate: "2026-06-04", days: 3,  reason: "Family vacation",      status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-05-28T09:00:00Z" },
-  { id: "lv-seed-2",  userId: "u24", userName: "Edgar Wright",     userRole: "production_member", departmentId: "dept-production", type: "sick",      startDate: "2026-06-09", endDate: "2026-06-10", days: 2,  reason: "Fever and rest",       status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-06-09T08:00:00Z" },
-  { id: "lv-seed-3",  userId: "u14", userName: "Noah Davis",       userRole: "marketing_member",  departmentId: "dept-marketing",  type: "casual",    startDate: "2026-06-12", endDate: "2026-06-12", days: 1,  reason: "Personal errand",      status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-06-11T10:00:00Z" },
-  { id: "lv-seed-4",  userId: "u20", userName: "Alice Martins",    userRole: "marketing_member",  departmentId: "dept-marketing",  type: "annual",    startDate: "2026-06-19", endDate: "2026-06-21", days: 3,  reason: "Holiday travel",       status: "pending",  createdAt: "2026-06-15T11:00:00Z" },
-  { id: "lv-seed-5",  userId: "u21", userName: "Ben Thompson",     userRole: "marketing_member",  departmentId: "dept-marketing",  type: "sick",      startDate: "2026-06-16", endDate: "2026-06-17", days: 2,  reason: "Doctor visit",         status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-06-16T07:30:00Z" },
-  { id: "lv-seed-6",  userId: "u12", userName: "Emma Wilson",      userRole: "sales_member",      departmentId: "dept-sales",      type: "annual",    startDate: "2026-06-23", endDate: "2026-06-27", days: 5,  reason: "Annual summer leave",  status: "pending",  createdAt: "2026-06-14T09:00:00Z" },
-  { id: "lv-seed-7",  userId: "u22", userName: "Chris Nolan",      userRole: "sales_member",      departmentId: "dept-sales",      type: "casual",    startDate: "2026-06-18", endDate: "2026-06-18", days: 1,  reason: "Personal appointment", status: "rejected", reviewedBy: "Ava Johnson", reviewNote: "Team availability conflict", createdAt: "2026-06-13T14:00:00Z" },
-  { id: "lv-seed-8",  userId: "u23", userName: "Diana Prince",     userRole: "sales_member",      departmentId: "dept-sales",      type: "sick",      startDate: "2026-06-10", endDate: "2026-06-11", days: 2,  reason: "Medical issue",        status: "approved", reviewedBy: "Ava Johnson",  createdAt: "2026-06-10T08:00:00Z" },
-  { id: "lv-seed-9",  userId: "u15", userName: "Ethan Lee",        userRole: "hr_member",         departmentId: "dept-hr",         type: "annual",    startDate: "2026-06-25", endDate: "2026-06-26", days: 2,  reason: "Short vacation",       status: "pending",  createdAt: "2026-06-17T09:00:00Z" },
-  { id: "lv-seed-10", userId: "u25", userName: "Fiona Gallagher",  userRole: "hr_member",         departmentId: "dept-hr",         type: "maternity", startDate: "2026-07-01", endDate: "2026-09-28", days: 90, reason: "Maternity leave",      status: "approved", reviewedBy: "Super Admin",  createdAt: "2026-06-10T10:00:00Z" },
-  { id: "lv-seed-11", userId: "u9",  userName: "David Chen",       userRole: "production_admin",  departmentId: "dept-production", type: "annual",    startDate: "2026-07-07", endDate: "2026-07-09", days: 3,  reason: "Family time",          status: "pending",  createdAt: "2026-06-18T08:00:00Z" },
-  { id: "lv-seed-12", userId: "u10", userName: "Olivia Brown",     userRole: "marketing_admin",   departmentId: "dept-marketing",  type: "casual",    startDate: "2026-06-20", endDate: "2026-06-20", days: 1,  reason: "Medical checkup",      status: "pending",  createdAt: "2026-06-19T07:00:00Z" },
-];
+import { isWorkingDay } from "../../services/attendanceService";
+import {
+  LeaveRequestService,
+  type HRLeaveType as LeaveType,
+  type HRLeaveRequest as LeaveRequest,
+} from "../../services/leaveRequestService";
 
 const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   annual: "Annual", sick: "Sick", casual: "Casual", maternity: "Maternity", unpaid: "Unpaid",
@@ -61,31 +30,6 @@ const TYPE_COLORS: Record<string, string> = {
   unpaid:    "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
 };
 
-function loadLeaves(): LeaveRequest[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_REQUESTS));
-      return SEED_REQUESTS;
-    }
-    const parsed = JSON.parse(raw) as LeaveRequest[];
-    if (parsed.length === 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_REQUESTS));
-      return SEED_REQUESTS;
-    }
-    const ids     = new Set(parsed.map((r) => r.id));
-    const missing = SEED_REQUESTS.filter((r) => !ids.has(r.id));
-    if (missing.length > 0) {
-      const merged = [...parsed, ...missing];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      return merged;
-    }
-    return parsed;
-  } catch { return SEED_REQUESTS; }
-}
-function saveLeaves(data: LeaveRequest[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
 function calcDays(start: string, end: string): number {
   if (!start || !end) return 0;
   const s = new Date(start);
@@ -94,10 +38,8 @@ function calcDays(start: string, end: string): number {
   let count = 0;
   const cur = new Date(s);
   while (cur <= e) {
-    const dow = cur.getDay();
     const iso = cur.toISOString().slice(0, 10);
-    const holidays = cur.getFullYear() === 2025 ? COMPANY_HOLIDAYS_2025 : COMPANY_HOLIDAYS_2026;
-    if (dow !== 0 && dow !== 6 && !holidays.includes(iso)) count++;
+    if (isWorkingDay(iso)) count++;
     cur.setDate(cur.getDate() + 1);
   }
   return Math.max(1, count);
@@ -124,7 +66,11 @@ export default function LeaveRequests() {
   const [reviewModal, setReviewModal]   = useState<{ request: LeaveRequest; action: "approved" | "rejected" } | null>(null);
   const [reviewNote, setReviewNote]     = useState("");
 
-  useEffect(() => { setLeaves(loadLeaves()); }, []);
+  useEffect(() => {
+    LeaveRequestService.getAll()
+      .then(setLeaves)
+      .catch(() => setLeaves([]));
+  }, []);
 
   const myLeaves = canViewAll
     ? leaves
@@ -146,7 +92,7 @@ export default function LeaveRequests() {
   const approvedCount = myLeaves.filter((l) => l.status === "approved").length;
   const totalDays     = myLeaves.filter((l) => l.status === "approved").reduce((s, l) => s + l.days, 0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     if (!form.startDate || !form.endDate) { showToast("Select start and end dates", "error"); return; }
@@ -159,52 +105,62 @@ export default function LeaveRequests() {
     );
     if (overlapping.length > 0) { showToast("You already have a leave request overlapping these dates", "error"); return; }
     const days = calcDays(form.startDate, form.endDate);
-    const req: LeaveRequest = {
-      id: `lv-${Date.now()}`,
-      userId:       user.id,
-      userName:     user.name,
-      userRole:     user.role,
-      departmentId: (user as { departmentId?: string }).departmentId,
-      ...form,
-      days,
-      status:    "pending",
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [req, ...leaves];
-    saveLeaves(updated);
-    setLeaves(updated);
-    setIsModalOpen(false);
-    setForm({ ...EMPTY_FORM });
-    notifyLeaveRequestSubmitted(user.id, user.name, user.role, form.type, req.id);
-    showToast("Leave request submitted — will be deducted from payroll if approved", "success");
+    try {
+      const req = await LeaveRequestService.create({
+        userId:       user.id,
+        userName:     user.name,
+        userRole:     user.role,
+        departmentId: (user as { departmentId?: string }).departmentId,
+        ...form,
+        days,
+        status: "pending",
+      });
+      setLeaves((prev) => [req, ...prev]);
+      setIsModalOpen(false);
+      setForm({ ...EMPTY_FORM });
+      notifyLeaveRequestSubmitted(user.id, user.name, user.role, form.type, req.id);
+      showToast("Leave request submitted — will be deducted from payroll if approved", "success");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to submit leave request", "error");
+    }
   };
 
-  const handleReview = () => {
+  const handleReview = async () => {
     if (!reviewModal || !user) return;
-    const updated = leaves.map((l) =>
-      l.id === reviewModal.request.id
-        ? { ...l, status: reviewModal.action, reviewedBy: user.name, reviewNote }
-        : l
-    );
-    saveLeaves(updated);
-    setLeaves(updated);
-    notifyLeaveDecision(
-      user.id, user.name,
-      reviewModal.request.userId, reviewModal.request.userName,
-      reviewModal.action === "approved",
-      reviewModal.request.type, reviewModal.request.id
-    );
-    showToast(`Request ${reviewModal.action}`, "success");
-    setReviewModal(null);
-    setReviewNote("");
+    try {
+      await LeaveRequestService.review(reviewModal.request.id, {
+        status: reviewModal.action,
+        reviewedBy: user.name,
+        reviewNote,
+      });
+      setLeaves((prev) => prev.map((l) =>
+        l.id === reviewModal.request.id
+          ? { ...l, status: reviewModal.action, reviewedBy: user.name, reviewNote }
+          : l
+      ));
+      notifyLeaveDecision(
+        user.id, user.name,
+        reviewModal.request.userId, reviewModal.request.userName,
+        reviewModal.action === "approved",
+        reviewModal.request.type, reviewModal.request.id
+      );
+      showToast(`Request ${reviewModal.action}`, "success");
+      setReviewModal(null);
+      setReviewNote("");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to update leave request", "error");
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm("Cancel this leave request?")) return;
-    const updated = leaves.filter((l) => l.id !== id);
-    saveLeaves(updated);
-    setLeaves(updated);
-    showToast("Leave request cancelled", "success");
+    try {
+      await LeaveRequestService.cancel(id);
+      setLeaves((prev) => prev.filter((l) => l.id !== id));
+      showToast("Leave request cancelled", "success");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to cancel leave request", "error");
+    }
   };
 
   return (
@@ -286,8 +242,7 @@ export default function LeaveRequests() {
                 <tr key={l.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                   {canViewAll && (
                     <td className="px-4 py-4">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">{l.userName}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">{l.userRole.replace(/_/g, " ")}</div>
+                      <EmployeeIdentity name={l.userName} designation={l.userRole.replace(/_/g, " ")} size="sm" />
                     </td>
                   )}
                   <td className="px-4 py-4">

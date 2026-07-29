@@ -1,21 +1,20 @@
 import { useEffect, useRef } from "react";
 import { useToast } from "../context/ToastContext";
 import { safeParse } from "../lib/storage";
-import { _mockServerReady } from "../lib/client";
+import { getEnvironment } from "../config/environment";
 
+// Single source of truth for the API base URL is getEnvironment()/getApiBaseUrl()
+// (src/config/environment.ts) — this must never read import.meta.env directly,
+// or it silently drifts from what src/lib/client.ts actually calls.
 const buildSseUrl = (): string => {
-  const apiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "");
-  const ssePath = (import.meta.env.VITE_SSE_PATH as string | undefined) ?? "/notifications/stream";
-  if (apiBase) return `${apiBase}${ssePath}`;
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}/api${ssePath}`;
-  }
-  return `/api${ssePath}`;
+  const { apiBaseUrl, ssePath } = getEnvironment();
+  return `${apiBaseUrl}${ssePath}`;
 };
 
 export const useSSE = (enabled: boolean) => {
   const esRef = useRef<EventSource | null>(null);
   const reconnectRef = useRef<number>(0);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -31,7 +30,6 @@ export const useSSE = (enabled: boolean) => {
     let mounted = true;
 
     const connect = async () => {
-      await _mockServerReady;
       if (!mounted) return;
       const url = buildSseUrl();
       try {
@@ -84,14 +82,14 @@ export const useSSE = (enabled: boolean) => {
           const base = Math.min(30000, 1000 * Math.pow(2, attempts));
           const jitter = Math.floor(Math.random() * 1000);
           const timeout = base + jitter;
-          setTimeout(() => connect(), timeout);
+          reconnectTimeoutRef.current = setTimeout(() => connect(), timeout);
         };
       } catch {
 
         const attempts = reconnectRef.current = reconnectRef.current + 1;
         const base = Math.min(30000, 1000 * Math.pow(2, attempts));
         const jitter = Math.floor(Math.random() * 1000);
-        setTimeout(() => connect(), base + jitter);
+        reconnectTimeoutRef.current = setTimeout(() => connect(), base + jitter);
       }
     };
 
@@ -99,6 +97,10 @@ export const useSSE = (enabled: boolean) => {
 
     return () => {
       mounted = false;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       if (esRef.current) {
         try {
           esRef.current.close();

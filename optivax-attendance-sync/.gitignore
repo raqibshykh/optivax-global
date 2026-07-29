@@ -1,0 +1,6 @@
+# config.sample.php is intentionally NOT ignored: it's the checked-in template.
+config.php
+logs/*
+!logs/.gitkeep
+state/*
+!state/.gitkeep

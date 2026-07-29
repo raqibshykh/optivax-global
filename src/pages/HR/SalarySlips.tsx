@@ -1,16 +1,20 @@
 import { useState, useEffect, useMemo } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { useAuth } from "../../context/AuthContext";
 import { UserService, type UserProfile } from "../../services/userService";
 import {
-  getSalarySlips, saveSalarySlips, appendSalarySlip, printSalarySlip,
+  PayrollService, printSalarySlip, countApprovedLeaveDaysInMonth,
   computeNet, computeDeductions, computeStrictDeductions, computeSlipBreakdown,
   type SalarySlip,
-} from "../../mock/payrollData";
-import { getCompanySettings } from "../../services/companySettingsService";
+} from "../../services/payrollService";
+import { getCompanySettings, COMPANY_DEFAULTS, type CompanySettings } from "../../services/companySettingsService";
 import { useToast } from "../../context/ToastContext";
 import { notifySalarySlipDeleted, notifySalarySlipGenerated } from "../../services/notificationHelpers";
+import { EmployeeExtraService } from "../../services/employeeExtraService";
+import { AttendanceService, computeMonthlyReport } from "../../services/attendanceService";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -36,11 +40,15 @@ const DEPT_COLOR: Record<string, string> = {
 
 const inputCls = "w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent";
 
+// Module-scope (not recreated every render) so it can be a stable useEffect dependency below.
+const EMPTY_DEDUCTIONS = { advanceSalaryDeduction: 0, unpaidLeaveDays: 0, unpaidLeaveDeduction: 0, halfDayDeduction: 0, lateCount: 0, lateAttendanceDeduction: 0 };
+
 // ── View modal ────────────────────────────────────────────────────────────────
 
-function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => void }) {
+function SlipViewModal({ slip, onClose, employeeAvatar }: { slip: SalarySlip; onClose: () => void; employeeAvatar?: string | null }) {
   const monthLabel = new Date(slip.salaryMonth + "-01").toLocaleString("default", { month: "long", year: "numeric" });
-  const company    = useMemo(() => getCompanySettings(), []);
+  const [company, setCompany] = useState(COMPANY_DEFAULTS);
+  useEffect(() => { getCompanySettings().then(setCompany).catch(() => {}); }, []);
   const bd         = computeSlipBreakdown(slip.basicSalary);
 
   const Row = ({ label, value, accent }: { label: string; value: string; accent?: string }) => (
@@ -55,7 +63,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
       <div className="relative overflow-hidden w-full max-w-xl rounded-2xl bg-white dark:bg-gray-900 shadow-2xl flex flex-col max-h-[90vh]">
         {/* Background watermark */}
         <img
-          src="/images/logo/logo-icon-dark.png"
+          src={`${import.meta.env.BASE_URL}images/logo/logo-icon-dark.png`}
           alt=""
           aria-hidden="true"
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[35deg] w-[52%] opacity-[0.07] pointer-events-none select-none z-[1]"
@@ -64,7 +72,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
         <div className="relative z-[2] bg-gradient-to-r from-[#1e3a5f] to-[#2563eb] text-white px-6 py-4 rounded-t-2xl flex-shrink-0">
           <div className="flex items-center gap-3 mb-3">
             <img
-              src="/images/logo/logo-icon-dark.png"
+              src={`${import.meta.env.BASE_URL}images/logo/logo-icon-dark.png`}
               alt={company.name}
               className="w-10 h-10 object-contain rounded-lg bg-white p-1 flex-shrink-0"
             />
@@ -75,10 +83,13 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
             <button onClick={onClose} className="text-white opacity-70 hover:opacity-100 text-2xl leading-none ml-2">×</button>
           </div>
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs opacity-65 uppercase tracking-wide mb-0.5">Salary Slip</p>
-              <h3 className="text-lg font-bold">{slip.employeeName}</h3>
-              <p className="text-sm opacity-80">{monthLabel}</p>
+            <div className="flex items-center gap-3">
+              <Avatar src={employeeAvatar} name={slip.employeeName} size="md" />
+              <div>
+                <p className="text-xs opacity-65 uppercase tracking-wide mb-0.5">Salary Slip</p>
+                <h3 className="text-lg font-bold">{slip.employeeName}</h3>
+                <p className="text-sm opacity-80">{monthLabel}</p>
+              </div>
             </div>
             <div className="text-right text-xs opacity-60 mt-1">
               <p>ID: {slip.id.toUpperCase()}</p>
@@ -159,7 +170,7 @@ function SlipViewModal({ slip, onClose }: { slip: SalarySlip; onClose: () => voi
 
         <div className="relative z-[2] px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3 flex-shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors">Close</button>
-          <button onClick={() => printSalarySlip(slip)} className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors">Print / Download PDF</button>
+          <button onClick={() => printSalarySlip(slip, company)} className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors">Print / Download PDF</button>
         </div>
       </div>
     </div>
@@ -185,36 +196,81 @@ function GenerateSlipModal({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (empId) {
-      try {
-        const stored = localStorage.getItem("optivax_employee_extra");
-        if (stored) {
-          const extraData = JSON.parse(stored);
-          const empExtra = extraData[empId];
-          if (empExtra && typeof empExtra.salary === "number") {
-            setBasicSalary(empExtra.salary.toString());
-          } else {
-            setBasicSalary("");
-          }
-        }
-      } catch (err) {
-        console.error("Failed to parse employee extra data", err);
-      }
-    } else {
+    if (!empId) {
       setBasicSalary("");
+      return;
     }
+    let cancelled = false;
+    EmployeeExtraService.getAll()
+      .then((extraData) => {
+        if (cancelled) return;
+        const empExtra = extraData[empId];
+        if (empExtra && typeof empExtra.salary === "number") {
+          setBasicSalary(empExtra.salary.toString());
+        } else {
+          setBasicSalary("");
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load employee extra data", err);
+        if (!cancelled) setBasicSalary("");
+      });
+    return () => { cancelled = true; };
   }, [empId]);
 
   const selectedEmp = employees.find(e => e.id === empId);
   const basic = parseFloat(basicSalary) || 0;
 
-  // Auto-calculated deductions based on strict rules
-  const strictDeductions = useMemo(() => {
+  // Auto-calculated deductions based on strict rules — fetched async since
+  // advances/past slips now come from PayrollService (HTTP) instead of localStorage.
+  const [strictDeductions, setStrictDeductions] = useState(EMPTY_DEDUCTIONS);
+
+  useEffect(() => {
     if (!empId || !month || basic <= 0) {
-      return { advanceSalaryDeduction: 0, unpaidLeaveDays: 0, unpaidLeaveDeduction: 0, halfDayDeduction: 0, lateCount: 0, lateAttendanceDeduction: 0 };
+      setStrictDeductions(EMPTY_DEDUCTIONS);
+      return;
     }
-    return computeStrictDeductions(empId, month, basic);
-  }, [empId, month, basic]);
+    let cancelled = false;
+    (async () => {
+      const [yearStr, monthStr] = month.split("-");
+      const yearNum = parseInt(yearStr, 10);
+      const monthNum = parseInt(monthStr, 10);
+
+      const [advances, slips, yearData] = await Promise.all([
+        PayrollService.getAdvanceRequests(),
+        PayrollService.getSalarySlips(),
+        AttendanceService.getYearData(yearNum),
+      ]);
+      if (cancelled) return;
+      const approvedAdvances = advances.filter(
+        (r) => r.employeeId === empId && (r.status === "approved" || r.status === "paid")
+      );
+      const pastSlips = slips.filter((s) => s.employeeId === empId);
+      const approvedLeaveDaysInMonth = await countApprovedLeaveDaysInMonth(empId, yearNum, monthNum);
+      if (cancelled) return;
+
+      // Real absent/half-day/late-arrival counts from the year-report
+      // attendance data — this used to always be null, meaning the
+      // "unpaid leave" deduction only ever accounted for approved leave
+      // requests, never actual absences/late arrivals recorded via
+      // check-in/out.
+      const monthlyAttendance = computeMonthlyReport(
+        empId,
+        selectedEmp?.full_name ?? "",
+        selectedEmp?.role ?? "",
+        monthNum,
+        yearNum,
+        yearData
+      );
+
+      setStrictDeductions(computeStrictDeductions(basic, approvedAdvances, pastSlips, approvedLeaveDaysInMonth, {
+        absentDays: monthlyAttendance.absentDays,
+        halfDays: monthlyAttendance.halfDays,
+        lateArrivals: monthlyAttendance.lateArrivals,
+      }));
+    })();
+    return () => { cancelled = true; };
+  }, [empId, month, basic, selectedEmp]);
 
   const adv      = strictDeductions.advanceSalaryDeduction;
   const dedCalc  = adv + strictDeductions.unpaidLeaveDeduction + strictDeductions.halfDayDeduction + strictDeductions.lateAttendanceDeduction;
@@ -373,6 +429,7 @@ export default function SalarySlips() {
   const [slips, setSlips] = useState<SalarySlip[]>([]);
   const [employees, setEmployees] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [company, setCompany] = useState<CompanySettings>(COMPANY_DEFAULTS);
 
   // Filters
   const [search, setSearch]         = useState("");
@@ -388,8 +445,8 @@ export default function SalarySlips() {
   const isITUser    = (user?.role ?? "").startsWith("it_");
 
   useEffect(() => {
-    const data = getSalarySlips();
-    setSlips(data);
+    PayrollService.getSalarySlips().then(setSlips).catch(() => setSlips([]));
+    getCompanySettings().then(setCompany).catch(() => {});
     if (isAdminView) {
       UserService.getAll()
         .then(all => setEmployees(all.filter(u => u.role !== "client")))
@@ -415,9 +472,9 @@ export default function SalarySlips() {
     return list.sort((a, b) => b.salaryMonth.localeCompare(a.salaryMonth));
   }, [slips, filterMonth, filterDept, search, isAdminView, user?.id]);
 
-  const handleGenerate = (slip: SalarySlip) => {
-    appendSalarySlip(slip);
-    setSlips(getSalarySlips());
+  const handleGenerate = async (slip: SalarySlip) => {
+    await PayrollService.appendSalarySlip(slip);
+    setSlips(await PayrollService.getSalarySlips());
     setGenerating(false);
     if (user) {
       notifySalarySlipGenerated(user.id, user.name, user.role, slip.employeeId, slip.employeeName, slip.salaryMonth);
@@ -425,11 +482,11 @@ export default function SalarySlips() {
     showToast(`Salary slip generated for ${slip.employeeName}`, "success");
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Delete this salary slip? This cannot be undone.")) return;
     const slipToDelete = slips.find(s => s.id === id);
     const updated = slips.filter(s => s.id !== id);
-    saveSalarySlips(updated);
+    await PayrollService.saveSalarySlips(updated);
     setSlips(updated);
     if (slipToDelete && user) {
       notifySalarySlipDeleted(user.id, user.name, user.role, slipToDelete.employeeId, slipToDelete.employeeName, slipToDelete.salaryMonth);
@@ -526,8 +583,12 @@ export default function SalarySlips() {
                 ) : visibleSlips.map(slip => (
                   <tr key={slip.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{slip.employeeName}</p>
-                      <p className="text-xs text-gray-400">{slip.employeeEmail}</p>
+                      <EmployeeIdentity
+                        src={employees.find(e => e.id === slip.employeeId)?.avatar_url}
+                        name={slip.employeeName}
+                        employeeId={slip.employeeEmail}
+                        size="sm"
+                      />
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DEPT_COLOR[slip.department] ?? "bg-gray-100 text-gray-600"}`}>
@@ -548,7 +609,7 @@ export default function SalarySlips() {
                           className="text-xs px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
                           View
                         </button>
-                        <button onClick={() => printSalarySlip(slip)}
+                        <button onClick={() => printSalarySlip(slip, company)}
                           className="text-xs px-2 py-1 rounded bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
                           Print
                         </button>
@@ -576,7 +637,13 @@ export default function SalarySlips() {
           onGenerate={handleGenerate}
         />
       )}
-      {viewing && <SlipViewModal slip={viewing} onClose={() => setViewing(null)} />}
+      {viewing && (
+        <SlipViewModal
+          slip={viewing}
+          onClose={() => setViewing(null)}
+          employeeAvatar={employees.find(e => e.id === viewing.employeeId)?.avatar_url}
+        />
+      )}
     </>
   );
 }

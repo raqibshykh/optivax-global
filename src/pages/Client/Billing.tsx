@@ -45,9 +45,12 @@ export default function Billing() {
   const [stripePromise, setStripePromise] = useState<ReturnType<typeof loadStripe> | null>(null);
   useEffect(() => {
     api
-      .get<{ publishableKey: string }>("/saas/v1/config/stripe")
+      .get<{ enabled: boolean; publishableKey: string }>("/saas/v1/config/stripe")
       .then((res) => {
-        if (res?.publishableKey) setStripePromise(loadStripe(res.publishableKey));
+        // Stripe.js must never initialize while the admin has payments
+        // disabled — a stale publishableKey can still be saved in the DB
+        // even when `enabled` is off.
+        if (res?.enabled && res?.publishableKey) setStripePromise(loadStripe(res.publishableKey));
       })
       .catch(() => {});
   }, []);
@@ -581,9 +584,8 @@ const StripeCheckoutForm = ({
   onSuccess,
   onCancel,
 }: StripeCheckoutFormProps) => {
-  // useStripe / useElements are available for CardElement rendering
-  useStripe();
-  useElements();
+  const stripe = useStripe();
+  const elements = useElements();
 
   const { showToast } = useToast();
   const [cardName, setCardName] = useState("");
@@ -594,29 +596,53 @@ const StripeCheckoutForm = ({
       showToast("Please enter the cardholder name", "error");
       return;
     }
+    if (!stripe || !elements) {
+      showToast("Payment form is still loading — please try again in a moment", "error");
+      return;
+    }
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) {
+      showToast("Card details are missing", "error");
+      return;
+    }
 
     setIsProcessing(true);
     setProcessingStep("Initializing secure payment...");
 
     try {
-      // Step 1: Create Payment Intent on mock server → get paymentIntentId
+      // Step 1: Create Payment Intent on the server → get a real client secret.
       const intentRes = await api.post<{ clientSecret: string; paymentIntentId: string }>(
         "/saas/v1/create-payment-intent",
         { amount: invoice.amount, invoiceId: invoice.id }
       );
-      if (!intentRes?.paymentIntentId) throw new Error("Failed to initialize payment session");
+      if (!intentRes?.clientSecret) throw new Error("Failed to initialize payment session");
 
       setProcessingStep("Processing card payment...");
 
-      // Step 2: Simulate Stripe network round-trip (mock environment)
-      // Production: stripe.confirmCardPayment(intentRes.clientSecret, { payment_method: { card: cardElement } })
-      await new Promise<void>((resolve) => setTimeout(resolve, 1400));
+      // Step 2: Real Stripe.js confirmation — the card is actually charged
+      // here. Previously this step was faked with a timeout and a made-up
+      // charge id, so the invoice would be marked "paid" in step 3 below
+      // with no money ever having moved.
+      const result = await stripe.confirmCardPayment(intentRes.clientSecret, {
+        payment_method: {
+          card: cardElement,
+          billing_details: { name: cardName.trim() },
+        },
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message || "Card was declined");
+      }
+      if (!result.paymentIntent || result.paymentIntent.status !== "succeeded") {
+        throw new Error("Payment was not completed. Please try again.");
+      }
 
       setProcessingStep("Confirming with payment server...");
 
-      // Step 3: Invoke atomic stripe-confirm (webhook equivalent)
-      const chargeId = `ch_mock_${Date.now()}`;
-      onSuccess(intentRes.paymentIntentId, chargeId);
+      // Step 3: Invoke atomic stripe-confirm (webhook equivalent) with the
+      // real PaymentIntent id — only ever reached once Stripe itself has
+      // confirmed the charge succeeded.
+      onSuccess(result.paymentIntent.id, result.paymentIntent.id);
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Payment failed", "error");
       setIsProcessing(false);

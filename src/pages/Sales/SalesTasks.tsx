@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { getSalesTasks, saveSalesTasks, SALES_MEMBERS, SALES_ADMIN_ID } from "../../mock/salesData";
+import { SalesTaskService } from "../../services/salesOpsService";
+import { UserService } from "../../services/userService";
 import { SalesTask } from "../../types";
 import { NotificationService } from "../../services/notificationService";
+import { AuditLogService } from "../../services/auditLogService";
 
 const PRIORITY_COLORS: Record<string, string> = {
   high:   "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
@@ -24,11 +27,13 @@ const STATUS_LABELS: Record<string, string> = {
   "todo": "To Do", "in-progress": "In Progress", "done": "Done", "blocked": "Blocked",
 };
 
+interface SalesMember { id: string; name: string; avatar_url?: string; }
+
 const EMPTY_FORM = {
   title: "",
   description: "",
-  assignedTo: SALES_MEMBERS[0]?.id || "",
-  assignedName: SALES_MEMBERS[0]?.name || "",
+  assignedTo: "",
+  assignedName: "",
   priority: "medium" as SalesTask["priority"],
   dueDate: "",
   status: "todo" as SalesTask["status"],
@@ -43,6 +48,7 @@ export default function SalesTasks() {
   const isAdmin = checkPermission("sales", "APPROVE") || user?.role === "management";
 
   const [tasks, setTasks] = useState<SalesTask[]>([]);
+  const [salesMembers, setSalesMembers] = useState<SalesMember[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<SalesTask | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -50,20 +56,31 @@ export default function SalesTasks() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [search, setSearch] = useState("");
 
-  const loadData = () => {
-    const all = getSalesTasks();
+  const loadData = useCallback(async () => {
+    const all = await SalesTaskService.getAll();
     if (!isAdmin && user) {
       setTasks(all.filter(t => t.assignedTo === user.id));
     } else {
       setTasks(all);
     }
-  };
+    // Deliberately depends on the primitive `user?.id`, not the `user`
+    // object reference — only the id is read inside.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, user?.id]);
 
-  useEffect(() => { loadData(); }, [isAdmin, user?.id]);
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Sales team members are real users (role "sales_member"), sourced from
+  // UserService rather than a separate mock member list.
+  useEffect(() => {
+    UserService.listByRole("sales_member")
+      .then(profiles => setSalesMembers(profiles.map(p => ({ id: p.id, name: p.full_name, avatar_url: p.avatar_url }))))
+      .catch(() => {});
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ ...EMPTY_FORM });
+    setForm({ ...EMPTY_FORM, assignedTo: salesMembers[0]?.id || "", assignedName: salesMembers[0]?.name || "" });
     setIsModalOpen(true);
   };
 
@@ -84,7 +101,7 @@ export default function SalesTasks() {
   };
 
   const handleAssigneeChange = (id: string) => {
-    const member = SALES_MEMBERS.find(m => m.id === id);
+    const member = salesMembers.find(m => m.id === id);
     setForm(f => ({ ...f, assignedTo: id, assignedName: member?.name || id }));
   };
 
@@ -96,34 +113,27 @@ export default function SalesTasks() {
     }
 
     const sendNotification = (toUserId: string, title: string, message: string) => {
-      NotificationService.create({ userId: toUserId, title, message, type: "info", read: false, createdAt: new Date().toISOString() } as any).catch(() => {});
+      NotificationService.create({ userId: toUserId, title, message, type: "system", read: false, createdAt: new Date().toISOString() }).catch(() => {});
     };
 
     const writeRevision = (taskId: string, taskTitle: string, oldAssigneeName: string, newAssigneeName: string) => {
-      try {
-        const raw = localStorage.getItem("mock_revisions");
-        const existing = raw ? (JSON.parse(raw) as object[]) : [];
-        existing.push({
-          id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          entityType: "sales_task",
-          entityId: taskId,
-          action: "reassigned",
-          field: "assignedTo",
-          oldValue: oldAssigneeName,
-          newValue: newAssigneeName,
-          changedBy: user.id,
-          changedByName: user.name || user.email,
-          note: `Sales task "${taskTitle}" reassigned from ${oldAssigneeName} to ${newAssigneeName}`,
-          createdAt: new Date().toISOString(),
-        });
-        localStorage.setItem("mock_revisions", JSON.stringify(existing));
-      } catch {}
+      AuditLogService.add({
+        entityType: "sales_task",
+        entityId: taskId,
+        entityName: taskTitle,
+        action: "reassigned",
+        performedBy: user.id,
+        performedByName: user.name || user.email,
+        performedByRole: user.role,
+        description: `Sales task "${taskTitle}" reassigned from ${oldAssigneeName} to ${newAssigneeName}`,
+        oldValue: { assignedTo: oldAssigneeName },
+        newValue: { assignedTo: newAssigneeName },
+      }).catch(() => {});
     };
 
-    const all = getSalesTasks();
     if (editing) {
       const isReassignment = editing.assignedTo !== form.assignedTo;
-      saveSalesTasks(all.map(t => t.id === editing.id ? { ...t, ...form } : t));
+      await SalesTaskService.update(editing.id, form);
 
       if (isReassignment) {
         sendNotification(editing.assignedTo, "Task Reassigned", `You have been unassigned from: "${form.title}". It has been reassigned to ${form.assignedName}.`);
@@ -135,6 +145,7 @@ export default function SalesTasks() {
       }
     } else {
       // Duplicate prevention — same title + assignee among non-done tasks
+      const all = await SalesTaskService.getAll();
       const titleLower = form.title.trim().toLowerCase();
       const dup = all.find(t =>
         t.status !== "done" &&
@@ -146,14 +157,11 @@ export default function SalesTasks() {
         return;
       }
 
-      const taskId = `stk${Date.now()}`;
-      const next: SalesTask = {
-        id: taskId,
+      await SalesTaskService.create({
         ...form,
         createdAt: new Date().toISOString(),
         createdBy: user.id,
-      };
-      saveSalesTasks([next, ...all]);
+      });
       sendNotification(form.assignedTo, "New Task Assigned", `You have been assigned to sales task: "${form.title}".`);
       showToast("Task created and assigned", "success");
     }
@@ -161,27 +169,29 @@ export default function SalesTasks() {
     loadData();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm("Delete this task?")) return;
-    saveSalesTasks(getSalesTasks().filter(t => t.id !== id));
+    await SalesTaskService.delete(id);
     showToast("Task deleted", "success");
     loadData();
   };
 
-  const handleStatusUpdate = (id: string, status: SalesTask["status"]) => {
-    const all = getSalesTasks();
-    const task = all.find(t => t.id === id);
-    saveSalesTasks(all.map(t => t.id === id ? { ...t, status } : t));
-    // Notify sales admin when a task is completed
+  const handleStatusUpdate = async (id: string, status: SalesTask["status"]) => {
+    const task = tasks.find(t => t.id === id);
+    await SalesTaskService.update(id, { status });
+    // Notify sales admin(s) when a task is completed
     if (status === "done" && task && user) {
-      NotificationService.create({
-        userId: SALES_ADMIN_ID,
-        type: "system",
-        title: "Sales Task Completed",
-        message: `${user.name || user.email} completed task: "${task.title}"`,
-        read: false,
-        createdAt: new Date().toISOString(),
-      } as any).catch(() => {});
+      const admins = await UserService.listByRole("sales_admin").catch(() => []);
+      for (const admin of admins) {
+        NotificationService.create({
+          userId: admin.id,
+          type: "system",
+          title: "Sales Task Completed",
+          message: `${user.name || user.email} completed task: "${task.title}"`,
+          read: false,
+          createdAt: new Date().toISOString(),
+        }).catch(() => {});
+      }
     }
     showToast(`Task marked as ${STATUS_LABELS[status]}`, "success");
     loadData();
@@ -289,12 +299,11 @@ export default function SalesTasks() {
                   </td>
                   {isAdmin && (
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-xs font-bold text-brand-600 dark:text-brand-400">
-                          {t.assignedName.split(" ").map(n => n[0]).join("")}
-                        </div>
-                        <span className="text-sm text-gray-700 dark:text-gray-300">{t.assignedName}</span>
-                      </div>
+                      <EmployeeIdentity
+                        src={salesMembers.find(m => m.id === t.assignedTo)?.avatar_url}
+                        name={t.assignedName}
+                        size="sm"
+                      />
                     </td>
                   )}
                   <td className="px-4 py-4">
@@ -377,7 +386,7 @@ export default function SalesTasks() {
                 <select required value={form.assignedTo}
                   onChange={e => handleAssigneeChange(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                  {SALES_MEMBERS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {salesMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

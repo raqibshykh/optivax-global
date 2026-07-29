@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/theme.json",
+  "version": 2,
+  "settings": {
+    "appearanceTools": false,
+    "layout": {
+      "contentSize": "1200px",
+      "wideSize": "1400px"
+    },
+    "color": {
+      "custom": false,
+      "customGradient": false,
+      "customDuotone": false,
+      "defaultPalette": false,
+      "palette": [
+        { "slug": "brand", "name": "Brand", "color": "#465fff" },
+        { "slug": "dark", "name": "Dark Background", "color": "#101828" },
+        { "slug": "light", "name": "Light Background", "color": "#ffffff" }
+      ]
+    },
+    "typography": {
+      "customFontSize": false
+    },
+    "spacing": {
+      "units": ["px", "%", "vh", "vw", "rem"]
+    }
+  },
+  "customTemplates": [
+    {
+      "name": "template-app",
+      "title": "React Application",
+      "postTypes": ["page"]
+    }
+  ]
+}

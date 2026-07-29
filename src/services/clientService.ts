@@ -15,6 +15,11 @@ export class ClientService {
     return data?.[0] ?? null;
   }
 
+  static async getByEmail(email: string): Promise<Client | null> {
+    const data = await api.get<Client[]>(`${BASE}/list?email=${encodeURIComponent(email)}`);
+    return data?.[0] ?? null;
+  }
+
   static async create(client: Omit<Client, "id">): Promise<Client> {
     return api.post<Client>(`${BASE}/create`, client);
   }

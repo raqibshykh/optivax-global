@@ -3,6 +3,8 @@
 **Auditor:** Claude Code (automated full-project scan)  
 **Project:** Optivax Global SaaS Admin Dashboard
 
+> **⚠️ Historical snapshot.** This audit predates the 2026-07 Phase 1 migration that removed the in-browser mock backend entirely (see the update note in §1 and the rewritten §3). Sections 1–3 have been updated to reflect the current Service-layer architecture; everything from §4 onward — page inventories, recommendations, scorecards, and every reference to `mock_*` localStorage keys, `src/mock/`, or seeded demo data — describes the **pre-migration** state and is kept for historical reference only. For current architecture, see `README.md`; for the migration record itself, see `PHASE1_IMPLEMENTATION_REPORT.md` at the project root.
+
 ---
 
 ## Table of Contents
@@ -33,22 +35,24 @@
 | **Styling** | Tailwind CSS 4.0.8 (dark mode supported) |
 | **Charts** | ApexCharts 4.1.0 |
 | **State** | React Context API (AuthContext, ToastContext) |
-| **Data Persistence** | localStorage (in-browser mock server) |
+| **Data Persistence** | None on the client — every Service call goes over HTTP via `src/lib/client.ts` to `VITE_API_URL` |
 | **Package Manager** | npm |
+
+> **2026-07 update:** the in-browser mock backend (`src/mock/`, `src/lib/devSeed.ts`) has been fully removed. Every domain now goes through a thin Service class (`src/services/`) calling a real REST API; the backend itself is a Phase 2 deliverable. See `PHASE1_IMPLEMENTATION_REPORT.md` at the project root for the full migration record.
 
 ### Source Structure
 ```
 src/
 ├── pages/          46 .tsx files across 9 role domains
 ├── components/     Dashboard, auth, tables, forms, UI primitives
-├── services/       13 service classes
-├── hooks/          17 custom hooks
+├── services/       30+ service classes — one per domain, thin HTTP wrappers
+├── domain/         Pure business-logic calculations (payroll, budget, attendance, activity)
+├── hooks/          Data hooks
 ├── context/        AuthContext, ToastContext
-├── lib/            client.ts, storage.ts, devSeed.ts
-├── config/         menuConfig.ts  (sidebar links)
+├── lib/            client.ts (api helper), apiError.ts, storage.ts
+├── config/         menuConfig.ts (sidebar links), environment.ts
 ├── types/          index.ts  (40+ interfaces/types)
 ├── utils/          rbac.ts
-├── mock/           users.ts, server.ts, salesData.ts
 └── icons/
 ```
 
@@ -57,11 +61,11 @@ src/
 ## 2. Authentication & RBAC
 
 ### Authentication Flow
-- **Type:** Mock in-browser auth using `localStorage`
-- **Session key:** `mock_session`
-- **Login:** `mockLogin(email, password)` in `src/lib/client.ts` — matches against `mockUsers` or dynamic profiles
-- **Headers:** Every API request injects `X-Mock-UserId` + `X-Mock-UserRole` so the mock server can scope results
-- **Logout:** `clearMockSession()` removes `mock_session`
+- **Type:** Cookie-based session against the real backend, via `AuthService` (`src/services/authService.ts`)
+- **Login:** `AuthService.login(email, password)` — `POST /saas/v1/auth/login`
+- **Session restore:** `AuthService.getSession()` — `GET /saas/v1/auth/session`, called on mount by `AuthContext`; a 401 resolves to `null` (no session) rather than throwing
+- **Logout:** `AuthService.logout()` — `POST /saas/v1/auth/logout`; the server owns clearing the cookie
+- **401 handling:** `src/lib/client.ts` exposes `setUnauthorizedHandler(fn)`, wired from `AuthContext` to clear the in-memory user on any 401 response
 
 ### Roles (11 total)
 | Role | Domain | Notes |
@@ -96,88 +100,41 @@ src/
 
 ---
 
-## 3. Mock Data Layer
+## 3. Service Layer
 
-### Seeding
-- **Entry:** `src/lib/client.ts:8` calls `seedAllMockData()` synchronously on module load (dev only)
-- **Guard:** Each `seedKey()` call checks `if (!localStorage.getItem(key))` — never overwrites user edits
-- **Reset:** SuperAdminPanel "↺ Reload Mock Data" button clears all keys and re-seeds
+There is no mock backend, no seed data, and no hardcoded demo accounts anywhere in the frontend. Every domain has one `src/services/<domain>Service.ts` — a thin static class wrapping `api.get/post/put/patch/delete` (`src/lib/client.ts`), with zero business logic and no client-side persistence. Components call Service methods only; they never call `api.*` directly.
 
-### Seeded localStorage Keys
+Pure calculation logic that has real business rules (payroll math, budget variance, attendance/activity report aggregation) lives in `src/domain/<name>/calculations.ts` — relocated verbatim from where it used to sit alongside demo data, math unchanged. The corresponding Service class calls into these functions and layers HTTP fetching on top.
 
-| Key | Items | Description |
-|-----|-------|-------------|
-| `mock_profiles` | 24 | All user profiles (employees + clients) |
-| `optivax_clients` | 6 | Client company records with contact info |
-| `mock_projects` | 10 | Projects across all 6 clients |
-| `mock_tasks` | 12 | General tasks (shared across panels) |
-| `mock_payments` | 10 | Payment transactions |
-| `mock_invoices` | 13 | Invoices (paid / pending / overdue) |
-| `marketing_campaigns` | 3 | Marketing campaign records |
-| `optivax_deliverables` | 4 | Production deliverables |
-| `optivax_leave_requests` | 4 | HR leave requests |
-| `optivax_employee_extra` | 15 | Salary, work mode, leaves-taken per employee |
-| `email_templates` | 3 | Email template records |
-| `email_campaigns` | 3 | Email campaign records |
-| `email_automations` | 3 | Email automation rules |
-| `mock_organizations` | 6 | Client organizations (for subscriptions) |
-| `mock_subscriptions` | 6 | Subscription plans per organization |
-| `sales_campaigns` | 4 | Sales campaign budgets (`src/mock/salesData.ts`) |
-| `sales_targets` | 3 | Sales targets per member |
-| `sales_tasks` | 8 | Sales tasks with `estimatedValue` |
+There is intentionally no Repository layer underneath the Services: with exactly one data source (the backend REST API), a Repository would just be `XRepository.getAll()` calling `api.get(...)` and `XService.getAll()` calling `XRepository.getAll()`, adding a layer of indirection with no behavior.
 
-**Total: 18 keys, 131+ items**
+### Representative Services
 
-### Mock Users (`src/mock/users.ts`) — 24 total
+| Service | Domain |
+|---|---|
+| `authService.ts` | Login, session, logout, password reset |
+| `userService.ts` | User/profile CRUD |
+| `clientService.ts` | Client records |
+| `projectService.ts` | Projects |
+| `invoiceService.ts` / `paymentService.ts` | Billing |
+| `taskService.ts` | General Kanban tasks |
+| `leaveRequestService.ts` | HR leave requests (two sub-resources — HR full-lifecycle and employee-submitted, documented in-file) |
+| `employeeExtraService.ts` | Per-employee salary overrides |
+| `payrollService.ts` | Salary slips, advance-salary requests, print rendering |
+| `attendanceService.ts` | Yearly attendance reports + self-check-in log |
+| `budgetService.ts` | Company/department/member budget allocations |
+| `revisionService.ts` | Revision/audit trail entries |
+| `deliverableService.ts` | Production deliverables |
+| `marketingCampaignService.ts` / `salesOpsService.ts` | Marketing and sales campaigns/targets/tasks |
+| `itSupportService.ts` | IT tickets, biometric devices, sync logs, attendance exceptions |
+| `organizationService.ts` / `subscriptionService.ts` | SaaS billing/multi-tenancy (super-admin only) |
+| `emailService.ts` | Email templates, campaigns, automations |
+| `notificationService.ts` / `notificationHelpers.ts` | Notification creation + ~60 typed notify-helpers |
+| `auditLogService.ts` / `companySettingsService.ts` | Audit log, company branding settings |
 
-| ID | Name | Role | Company |
-|----|------|------|---------|
-| u1 | Super Admin | super_admin | — |
-| u2 | Sarah Mitchell | management | — |
-| u6 | Alice Johnson | client | Acme Corp |
-| u7 | Bob Williams | client | Globex Corp |
-| u8 | James Carter | sales_admin | — |
-| u9 | David Chen | production_admin | — |
-| u10 | Olivia Brown | marketing_admin | — |
-| u11 | Ava Johnson | hr_admin | — |
-| u12 | Emma Wilson | sales_member | — |
-| u13 | Liam Park | production_member | — |
-| u14 | Noah Davis | marketing_member | — |
-| u15 | Ethan Lee | hr_member | — |
-| u20 | Alice Martins | marketing_member | — |
-| u21 | Ben Thompson | marketing_member | — |
-| u22 | Chris Nolan | sales_member | — |
-| u23 | Diana Prince | sales_member | — |
-| u24 | Edgar Wright | production_member | — |
-| u25 | Fiona Gallagher | hr_member | — |
-| u30 | Carol Stevens | client | TechNova Inc |
-| u31 | Daniel Foster | client | BluePeak Retail |
-| u32 | Elena Vasquez | client | MediCore Solutions |
-| u33 | Frank Huang | client | CapitalEdge Finance |
+### `src/lib/client.ts`
 
-### Mock Server Endpoints (`src/mock/server.ts`)
-All endpoints under `/saas/v1/*` intercepted via `window.fetch` override.
-
-| Endpoint Prefix | Methods | localStorage Key |
-|-----------------|---------|-----------------|
-| `/saas/v1/profiles` | GET list, POST create, PUT update, DELETE | `mock_profiles` |
-| `/saas/v1/clients` | GET list, POST create, PUT update, DELETE | `optivax_clients` |
-| `/saas/v1/projects` | GET list, POST create, PUT update, DELETE | `mock_projects` |
-| `/saas/v1/invoices` | GET list, POST generate, PUT update, POST mark-paid, DELETE | `mock_invoices` |
-| `/saas/v1/payments` | GET list, POST create | `mock_payments` |
-| `/saas/v1/tasks` | GET, POST, PUT, DELETE | `mock_tasks` |
-| `/saas/v1/files` | GET list, POST create, DELETE | `mock_files` |
-| `/saas/v1/revisions` | GET list, POST create, PUT update | `mock_revisions` |
-| `/saas/v1/organizations` | GET list | `mock_organizations` |
-| `/saas/v1/subscriptions` | GET list | `mock_subscriptions` |
-| `/saas/v1/email/templates` | GET, POST, PUT, DELETE | `email_templates` |
-| `/saas/v1/email/campaigns` | GET, POST, PUT, DELETE | `email_campaigns` |
-| `/saas/v1/email/automations` | GET, POST, PUT, DELETE | `email_automations` |
-| `/saas/v1/notifications` | GET, POST, PUT mark-read, DELETE | `mock_notifications` |
-| `/saas/v1/social-links` | GET list, POST create/track, PUT update, DELETE | `social_links` |
-| `/saas/v1/social-analytics` | GET | `social_clicks` |
-| `/saas/v1/config/stripe` | GET | static mock key |
-| `/saas/v1/create-payment-intent` | POST | returns mock `client_secret` |
+The single `api` object used by every Service. AbortController-based 15s timeout; bounded retry (max 2, GET-only, `network`/`timeout`/`server` errors); `ApiError`/`ApiErrorKind` classification (`unauthorized|forbidden|not_found|validation|server|network|timeout|unknown`); `setUnauthorizedHandler(fn)` as the single 401 extension point.
 
 ---
 

@@ -3,7 +3,7 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { api } from "../../lib/client";
+import { LeadService } from "../../services/leadService";
 import type { Lead } from "../../types";
 import { PlusIcon, PencilIcon, TrashBinIcon } from "../../icons";
 import { notifyLeadCreated, notifyLeadUpdated, notifyLeadDeleted, notifyLeadConverted } from "../../services/notificationHelpers";
@@ -81,10 +81,9 @@ export default function Leads() {
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params: Record<string, string> = {};
-      if (!isAdmin && user?.id) params.assignedTo = user.id;
-      const res = await api.get<{ leads: LeadRow[] }>("/saas/v1/leads", { params });
-      setLeads(res.leads ?? []);
+      const filters = !isAdmin && user?.id ? { assignedTo: user.id } : undefined;
+      const res = await LeadService.getAll(filters);
+      setLeads(res as LeadRow[]);
     } catch {
       showToast("Failed to load leads", "error");
     } finally {
@@ -128,13 +127,12 @@ export default function Leads() {
         assignedTo: user?.id,
       };
       if (editId) {
-        await api.put("/saas/v1/leads", { id: editId, ...payload });
+        await LeadService.update(editId, payload);
         if (user) notifyLeadUpdated(user.id, user.name, user.role, form.name, editId);
         showToast("Lead updated", "success");
       } else {
-        const res = await api.post<{ id?: string }>("/saas/v1/leads", payload);
-        const newId = res?.id ?? `lead-${Date.now()}`;
-        if (user) notifyLeadCreated(user.id, user.name, user.role, form.name, newId);
+        const saved = await LeadService.create(payload as Omit<Lead, "id" | "created_at" | "updated_at">);
+        if (user) notifyLeadCreated(user.id, user.name, user.role, form.name, saved.id);
         showToast("Lead created", "success");
       }
       setModalOpen(false);
@@ -150,7 +148,7 @@ export default function Leads() {
     if (!deleteId) return;
     const leadToDelete = leads.find(l => l.id === deleteId);
     try {
-      await api.delete("/saas/v1/leads", { id: deleteId });
+      await LeadService.delete(deleteId);
       if (leadToDelete && user) notifyLeadDeleted(user.id, user.name, user.role, leadToDelete.name, deleteId);
       showToast("Lead deleted", "success");
       setDeleteId(null);
@@ -168,11 +166,7 @@ export default function Leads() {
     if (!window.confirm(`Convert "${lead.name}" (${lead.company ?? lead.email}) to a client? This cannot be undone.`)) return;
     setConvertingId(lead.id);
     try {
-      await api.post("/saas/v1/leads/convert", {
-        leadId: lead.id,
-        convertedBy: user?.id,
-        convertedByName: user?.name,
-      });
+      await LeadService.convert(lead.id, user?.id, user?.name);
       if (user) notifyLeadConverted(user.id, user.name, user.role, lead.name, lead.id);
       showToast(`"${lead.name}" converted to client successfully.`, "success");
       fetchLeads();

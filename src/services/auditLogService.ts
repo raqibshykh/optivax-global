@@ -1,78 +1,49 @@
+import { api } from "../lib/client";
 import { AuditLog } from "../types";
-import { safeParse } from "../lib/storage";
 
-export const AUDIT_LOG_KEY = "optivax_audit_logs";
+const BASE = "/saas/v1/audit-logs";
 
-const readLogs = (): AuditLog[] =>
-  safeParse<AuditLog[]>(localStorage.getItem(AUDIT_LOG_KEY), []);
-
-const writeLogs = (logs: AuditLog[]) => {
-  try {
-    localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(logs));
-  } catch {}
-};
+export interface AuditLogSearchFilters {
+  entityType?: string;
+  action?: string;
+  performedByRole?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
 
 export class AuditLogService {
-  static getAll(): AuditLog[] {
-    return readLogs().sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+  static async getAll(): Promise<AuditLog[]> {
+    const data = await api.get<AuditLog[]>(`${BASE}/list`);
+    return data || [];
   }
 
-  static add(entry: Omit<AuditLog, "id" | "timestamp">): AuditLog {
-    const log: AuditLog = {
-      id: `al-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      timestamp: new Date().toISOString(),
-      ...entry,
-    };
-    const existing = readLogs();
-    // Keep last 2000 entries to avoid unbounded growth
-    const trimmed = [log, ...existing].slice(0, 2000);
-    writeLogs(trimmed);
-    return log;
+  /**
+   * Always a best-effort side-effect write fired alongside an already-
+   * authorized action (see AuditLogController::create()'s doc comment) —
+   * never the primary request a caller is waiting on. Marked `background`
+   * so a stray 401 here can't blow away an otherwise-valid session.
+   */
+  static async add(entry: Omit<AuditLog, "id" | "timestamp">): Promise<AuditLog> {
+    return api.post<AuditLog>(`${BASE}/create`, entry, { background: true });
   }
 
-  static getByEntityType(entityType: string): AuditLog[] {
-    return readLogs()
-      .filter((l) => l.entityType === entityType)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  static async getByEntityType(entityType: string): Promise<AuditLog[]> {
+    const data = await api.get<AuditLog[]>(`${BASE}/list?entityType=${encodeURIComponent(entityType)}`);
+    return data || [];
   }
 
-  static getByUser(userId: string): AuditLog[] {
-    return readLogs()
-      .filter((l) => l.performedBy === userId)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  static async getByUser(userId: string): Promise<AuditLog[]> {
+    const data = await api.get<AuditLog[]>(`${BASE}/list?performedBy=${encodeURIComponent(userId)}`);
+    return data || [];
   }
 
-  static search(query: string, filters?: {
-    entityType?: string;
-    action?: string;
-    performedByRole?: string;
-    dateFrom?: string;
-    dateTo?: string;
-  }): AuditLog[] {
-    const q = query.toLowerCase();
-    return readLogs()
-      .filter((l) => {
-        if (filters?.entityType && l.entityType !== filters.entityType) return false;
-        if (filters?.action && l.action !== filters.action) return false;
-        if (filters?.performedByRole && l.performedByRole !== filters.performedByRole) return false;
-        if (filters?.dateFrom && l.timestamp < filters.dateFrom) return false;
-        if (filters?.dateTo && l.timestamp > filters.dateTo + "T23:59:59") return false;
-        if (!q) return true;
-        return (
-          l.description.toLowerCase().includes(q) ||
-          l.performedByName.toLowerCase().includes(q) ||
-          l.entityName.toLowerCase().includes(q) ||
-          l.action.toLowerCase().includes(q)
-        );
-      })
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  static async search(query: string, filters?: AuditLogSearchFilters): Promise<AuditLog[]> {
+    const data = await api.get<AuditLog[]>(`${BASE}/search`, { params: { q: query, ...filters } });
+    return data || [];
   }
 
-  static getRecent(limit = 20): AuditLog[] {
-    return readLogs()
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, limit);
+  static async getRecent(limit = 20): Promise<AuditLog[]> {
+    const data = await api.get<AuditLog[]>(`${BASE}/list`, { params: { limit } });
+    return data || [];
   }
 }

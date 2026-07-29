@@ -3,19 +3,19 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import {
-  loadYearData,
+  AttendanceService,
   computeMonthlyReport,
-  exportCSV,
-  exportPrintHTML,
-  STAFF_USERS,
   MONTHS,
   monthLabel,
   getAccessibleDepts,
   ROLE_TO_DEPT,
   DEPT_IDS,
   DEPT_LABELS,
+  type AttendanceRecord,
   type MonthlyReport,
-} from "../../mock/attendanceData";
+  type StaffUser,
+} from "../../services/attendanceService";
+import { exportCSV, exportPrintHTML } from "../../lib/csvExport";
 
 type SortKey = keyof MonthlyReport;
 type SortDir = "asc" | "desc";
@@ -60,28 +60,33 @@ export default function AttendanceMonthly() {
   const [deptFilter,    setDeptFilter]    = useState("all");
   const [sortKey,       setSortKey]       = useState<SortKey>("userName");
   const [sortDir,       setSortDir]       = useState<SortDir>("asc");
-  const [records,       setRecords]       = useState<ReturnType<typeof loadYearData>>([]);
+  const [records,       setRecords]       = useState<AttendanceRecord[]>([]);
   const [loading,       setLoading]       = useState(true);
+  const [staffUsers,    setStaffUsers]    = useState<StaffUser[]>([]);
 
   useEffect(() => {
     setLoading(true);
-    setTimeout(() => {
-      setRecords(loadYearData(selectedYear));
+    AttendanceService.getYearData(selectedYear).then((data) => {
+      setRecords(data);
       setLoading(false);
-    }, 0);
+    });
   }, [selectedYear]);
+
+  useEffect(() => {
+    AttendanceService.getStaffUsers().then(setStaffUsers);
+  }, []);
 
   const visibleUsers = useMemo(() => {
     if (accessibleDepts !== "all") {
       const allowed = accessibleDepts as string[];
-      return STAFF_USERS.filter((u) => {
-        const d = (u as { departmentId?: string }).departmentId || ROLE_TO_DEPT[u.role] || "";
+      return staffUsers.filter((u) => {
+        const d = u.departmentId || ROLE_TO_DEPT[u.role] || "";
         return allowed.includes(d);
       });
     }
-    if (!isAdmin && role === "hr_member") return STAFF_USERS.filter((u) => u.id === user?.id);
-    return STAFF_USERS;
-  }, [accessibleDepts, isAdmin, role, user]);
+    if (!isAdmin && role === "hr_member") return staffUsers.filter((u) => u.id === user?.id);
+    return staffUsers;
+  }, [accessibleDepts, isAdmin, role, user, staffUsers]);
 
   const reports: MonthlyReport[] = useMemo(() => {
     return visibleUsers.map((u) =>
@@ -94,8 +99,8 @@ export default function AttendanceMonthly() {
     if (empFilter !== "all") list = list.filter((r) => r.userId === empFilter);
     if (deptFilter !== "all") {
       const deptUsers = new Set(
-        STAFF_USERS.filter((u) => {
-          const d = (u as { departmentId?: string }).departmentId || ROLE_TO_DEPT[u.role] || "";
+        staffUsers.filter((u) => {
+          const d = u.departmentId || ROLE_TO_DEPT[u.role] || "";
           return d === deptFilter;
         }).map((u) => u.id)
       );
@@ -111,7 +116,7 @@ export default function AttendanceMonthly() {
       const cmp = typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number);
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [reports, empFilter, deptFilter, searchQuery, sortKey, sortDir]);
+  }, [reports, empFilter, deptFilter, searchQuery, sortKey, sortDir, staffUsers]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));

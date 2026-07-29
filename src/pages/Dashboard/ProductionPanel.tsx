@@ -3,21 +3,17 @@ import { useNavigate, Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { RequirePermission } from "../../components/auth/RequirePermission";
+import Avatar from "../../components/common/Avatar";
 import { useAuth } from "../../context/AuthContext";
 import { UserService } from "../../services/userService";
 import { ClientService } from "../../services/clientService";
-import { safeParse } from "../../lib/storage";
-import { StoredClient } from "../../types";
+import { ProjectService } from "../../services/projectService";
+import { TaskService } from "../../services/taskService";
+import { ProductionAssignmentService } from "../../services/productionAssignmentService";
+import { Client } from "../../types";
 import type { MockTask } from "../Common/Tasks";
-import { getConversations, getVisibleConversations, getConvStats } from "../../mock/conversationsData";
-import { getContentEntries, PROD_STATUS_DOT, PROD_STATUS_BADGE, type ContentEntry } from "../../mock/contentCalendarData";
-
-const PROJECTS_KEY = "mock_projects";
-
-// ── Storage keys ─────────────────────────────────────────────────────────────
-const PROD_ASSIGNMENTS_KEY = "production_client_assignments";
-const CLIENTS_KEY          = "optivax_clients";
-const TASKS_KEY            = "mock_tasks";
+import { ConversationService, getVisibleConversations, getConvStats } from "../../services/conversationService";
+import { ContentCalendarService, PROD_STATUS_DOT, PROD_STATUS_BADGE, type ContentEntry } from "../../services/contentCalendarService";
 
 // Status mapping: MockTask → display
 const TASK_STATUS_LABEL: Record<MockTask["status"], string> = {
@@ -41,7 +37,7 @@ interface Project {
 }
 
 interface Member {
-  id: string; full_name: string; email: string; role: string;
+  id: string; full_name: string; email: string; role: string; avatar_url?: string;
 }
 
 export default function ProductionPanel() {
@@ -51,51 +47,35 @@ export default function ProductionPanel() {
 
   const [activeTab, setActiveTab] = useState("tasks");
 
-  const [tasks, setTasks] = useState<MockTask[]>(() =>
-    safeParse<MockTask[]>(localStorage.getItem(TASKS_KEY), [])
-  );
+  const [tasks, setTasks] = useState<MockTask[]>([]);
 
   const loadTasks = useCallback(() => {
-    setTasks(safeParse<MockTask[]>(localStorage.getItem(TASKS_KEY), []));
+    TaskService.getAll().then(setTasks).catch(() => setTasks([]));
   }, []);
 
   useEffect(() => {
-    const handler = () => loadTasks();
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
+    loadTasks();
   }, [loadTasks]);
 
-  const [projects, setProjects] = useState<Project[]>(() =>
-    safeParse<Project[]>(localStorage.getItem(PROJECTS_KEY), [])
-  );
+  const [projects, setProjects] = useState<Project[]>([]);
 
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === PROJECTS_KEY)
-        setProjects(safeParse<Project[]>(e.newValue, []));
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    ProjectService.getAll().then(setProjects).catch(() => setProjects([]));
   }, []);
 
   // ── Real clients from optivax_clients ────────────────────────────────────
-  const [storedClients, setStoredClients] = useState<StoredClient[]>(() =>
-    safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), [])
-  );
+  const [storedClients, setStoredClients] = useState<Client[]>([]);
 
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === CLIENTS_KEY)
-        setStoredClients(safeParse<StoredClient[]>(e.newValue, []));
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    ClientService.getAll().then(setStoredClients).catch(() => setStoredClients([]));
   }, []);
 
   // ── Client assignment state ──────────────────────────────────────────────
-  const [assignments, setAssignments] = useState<Record<string, string[]>>(() =>
-    safeParse<Record<string, string[]>>(localStorage.getItem(PROD_ASSIGNMENTS_KEY), {})
-  );
+  const [assignments, setAssignments] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    ProductionAssignmentService.getAll().then(setAssignments).catch(() => setAssignments({}));
+  }, []);
 
   const [members, setMembers] = useState<Member[]>([]);
 
@@ -105,29 +85,39 @@ export default function ProductionPanel() {
         setMembers(
           all
             .filter((u) => u.role === "production_member")
-            .map((u) => ({ id: u.id, full_name: u.full_name ?? u.email, email: u.email, role: u.role }))
+            .map((u) => ({ id: u.id, full_name: u.full_name ?? u.email, email: u.email, role: u.role, avatar_url: u.avatar_url }))
         )
       )
       .catch(() => setMembers([]));
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(PROD_ASSIGNMENTS_KEY, JSON.stringify(assignments));
-  }, [assignments]);
-
   // ── Conversation stats (for widget) ──────────────────────────────────────
-  const convStats = (() => {
-    if (!user) return { open: 0, awaitingTeam: 0, unreadByTeam: 0 };
-    const all = getConversations();
-    const visible = getVisibleConversations(all, user.role, user.id);
-    const s = getConvStats(visible);
-    return { open: s.open, awaitingTeam: s.awaitingTeam, unreadByTeam: s.unreadByTeam };
-  })();
+  const [convStats, setConvStats] = useState({ open: 0, awaitingTeam: 0, unreadByTeam: 0 });
+  useEffect(() => {
+    if (!user) {
+      setConvStats({ open: 0, awaitingTeam: 0, unreadByTeam: 0 });
+      return;
+    }
+    let cancelled = false;
+    ConversationService.getAll()
+      .then((all) => {
+        if (cancelled) return;
+        const visible = getVisibleConversations(all, user.role, user.id);
+        const s = getConvStats(visible);
+        setConvStats({ open: s.open, awaitingTeam: s.awaitingTeam, unreadByTeam: s.unreadByTeam });
+      })
+      .catch(() => {
+        if (!cancelled) setConvStats({ open: 0, awaitingTeam: 0, unreadByTeam: 0 });
+      });
+    return () => { cancelled = true; };
+  }, [user]);
 
   // ── Marketing production requests ─────────────────────────────────────────
   const [prodRequests, setProdRequests] = useState<ContentEntry[]>([]);
   useEffect(() => {
-    setProdRequests(getContentEntries().filter(e => e.productionSupportRequired));
+    ContentCalendarService.getAll()
+      .then((all) => setProdRequests(all.filter(e => e.productionSupportRequired)))
+      .catch(() => setProdRequests([]));
   }, []);
 
   const prodStats = useMemo(() => {
@@ -155,6 +145,7 @@ export default function ProductionPanel() {
 
     const newAssignments = { ...assignments, [memberId]: newMemberList };
     setAssignments(newAssignments);
+    ProductionAssignmentService.save(newAssignments).catch(() => {});
 
     // Compute all members now assigned to this client and sync to client record
     const allAssignedToClient = Object.entries(newAssignments)
@@ -167,21 +158,10 @@ export default function ProductionPanel() {
     }
   };
 
-  const getAssignedMemberNames = (clientId: string): string => {
-    const assignedIds = Object.entries(assignments)
-      .filter(([, clientIds]) => clientIds.includes(clientId))
-      .map(([memberId]) => memberId);
-    if (assignedIds.length === 0) return "None";
-    const names = assignedIds
-      .map((id) => members.find((m) => m.id === id)?.full_name ?? id)
-      .join(", ");
-    return names;
-  };
-
   // ── Visible clients for current user ─────────────────────────────────────
   // Members can see: (a) clients manually assigned by admin, OR (b) clients
   // whose projects have this member in assignedTo[]
-  const myClients: StoredClient[] = isAdmin
+  const myClients: Client[] = isAdmin
     ? storedClients
     : storedClients.filter((c) => {
         const uid = user?.id ?? "";
@@ -205,16 +185,14 @@ export default function ProductionPanel() {
   // Derived
   const pendingTasks = visibleTasks.filter((t) => t.status !== "done");
 
-  const handleTaskStatusChange = (id: string, newStatus: MockTask["status"]) => {
-    const updated = tasks.map((t) => (t.id === id ? { ...t, status: newStatus } : t));
-    localStorage.setItem(TASKS_KEY, JSON.stringify(updated));
-    setTasks(updated);
+  const handleTaskStatusChange = async (id: string, newStatus: MockTask["status"]) => {
+    await TaskService.update(id, { status: newStatus });
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)));
   };
 
-  const handleProjectStatusChange = (id: string, newStatus: string) => {
-    const updated = projects.map((p) => (p.id === id ? { ...p, status: newStatus } : p));
-    setProjects(updated);
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(updated));
+  const handleProjectStatusChange = async (id: string, newStatus: string) => {
+    await ProjectService.update(id, { status: newStatus as "not-started" | "in-progress" | "completed" | "on-hold" });
+    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, status: newStatus } : p)));
   };
 
   return (
@@ -373,7 +351,12 @@ export default function ProductionPanel() {
                   {visibleTasks.map((task) => (
                     <tr key={task.id}>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{task.title}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{task.assignee}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        <div className="flex items-center gap-2">
+                          <Avatar src={members.find(m => m.id === task.assigneeId)?.avatar_url} name={task.assignee} size="xs" />
+                          {task.assignee}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-500">{task.dueDate}</td>
                       <td className="px-4 py-3 text-sm">
                         <span className={`px-2 py-1 text-xs rounded-full ${
@@ -526,13 +509,18 @@ export default function ProductionPanel() {
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                         {storedClients.map((client) => (
                           <tr key={client.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{client.contactName}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                              <div className="flex items-center gap-2">
+                                <Avatar src={client.avatar} name={client.contactName} size="xs" />
+                                {client.contactName}
+                              </div>
+                            </td>
                             <td className="px-4 py-3 text-sm text-gray-500">{client.companyName}</td>
                             <td className="px-4 py-3 text-sm text-gray-500">{client.phone}</td>
                             <td className="px-4 py-3 text-sm text-brand-500">{client.email}</td>
                             <td className="px-4 py-3 text-sm text-gray-500">{client.createdByName}</td>
                             <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                              {new Date(client.createdAt).toLocaleDateString()}
+                              {client.createdAt ? new Date(client.createdAt).toLocaleDateString() : "—"}
                             </td>
                             <td className="px-4 py-3 text-sm">
                               <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
@@ -556,6 +544,7 @@ export default function ProductionPanel() {
                                           onChange={() => toggleAssignment(client.id, m.id)}
                                           className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
                                         />
+                                        <Avatar src={m.avatar_url} name={m.full_name} size="xs" />
                                         <span className={assigned ? "text-brand-600 dark:text-brand-400 font-medium" : "text-gray-600 dark:text-gray-400"}>
                                           {m.full_name}
                                         </span>
@@ -639,9 +628,12 @@ export default function ProductionPanel() {
                         return (
                         <div key={client.id} className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/50">
                           <div className="flex items-start justify-between gap-3 mb-3">
-                            <div>
-                              <h4 className="font-semibold text-gray-900 dark:text-white">{client.contactName}</h4>
-                              <p className="text-xs text-gray-500 mt-0.5">{client.companyName}</p>
+                            <div className="flex items-center gap-3">
+                              <Avatar src={client.avatar} name={client.contactName} size="md" />
+                              <div>
+                                <h4 className="font-semibold text-gray-900 dark:text-white">{client.contactName}</h4>
+                                <p className="text-xs text-gray-500 mt-0.5">{client.companyName}</p>
+                              </div>
                             </div>
                             <span className={`px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${viaProject ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
                               {viaProject ? "Via project" : "Assigned to you"}

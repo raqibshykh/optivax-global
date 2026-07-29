@@ -1,0 +1,82 @@
+/*
+Theme Name: OptiVax React Theme
+Theme URI: https://optivaxglobal.com
+Author: OptiVax Global
+Author URI: https://optivaxglobal.com
+Description: Production WordPress theme shell that loads and mounts the OptiVax Global React ERP application (built with Vite). This theme carries no business logic, REST APIs, or database queries of its own — all ERP functionality is provided by the companion "OptiVax ERP Backend" plugin. The theme's only job is to serve the React build's compiled JS/CSS, pass runtime configuration to it via wp_localize_script(), and get out of the way.
+Version: 1.0.0
+Requires at least: 6.4
+Tested up to: 6.7
+Requires PHP: 8.1
+License: GNU General Public License v2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: optivax-react-theme
+Tags: full-site-editing-not-used, custom-menu, custom-logo, featured-images, translation-ready
+
+This theme deliberately contains no design system of its own — nearly all
+visual styling comes from the React app's own compiled Tailwind CSS bundle
+(enqueued from build/assets/*.css). The rules below only cover the brief
+pre-hydration window before React mounts, so there is no flash of
+completely unstyled content on a slow connection.
+*/
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background-color: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  html,
+  body {
+    background-color: #101828;
+  }
+}
+
+/* Shown only until React's own root render replaces it (see footer.php). */
+#optivax-root-loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #667085;
+  font-size: 14px;
+}
+
+/* Screen-reader-only skip link, per WordPress accessibility guidelines — the
+   React app manages its own in-app focus/nav; this only covers the moment
+   before it has mounted. */
+.skip-link.screen-reader-text {
+  border: 0;
+  clip: rect(1px, 1px, 1px, 1px);
+  clip-path: inset(50%);
+  height: 1px;
+  width: 1px;
+  overflow: hidden;
+  position: absolute !important;
+  word-wrap: normal !important;
+}
+
+.skip-link.screen-reader-text:focus {
+  background-color: #f1f1f1;
+  border-radius: 3px;
+  box-shadow: 0 0 2px 2px rgba(0, 0, 0, 0.6);
+  clip: auto !important;
+  clip-path: none;
+  color: #21759b;
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  height: auto;
+  left: 5px;
+  line-height: normal;
+  padding: 15px 23px 14px;
+  text-decoration: none;
+  top: 5px;
+  width: auto;
+  z-index: 100000;
+}

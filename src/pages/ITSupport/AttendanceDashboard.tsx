@@ -1,15 +1,47 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
-import { getDevices, getAttendanceExceptions, getDeviceSyncLogs } from "../../mock/itSupportData";
-import { mockUsers } from "../../mock/users";
-
-const STAFF = mockUsers.filter(u => u.role !== "client");
+import LoadingState from "../../components/common/LoadingState";
+import ErrorState from "../../components/common/ErrorState";
+import Avatar from "../../components/common/Avatar";
+import {
+  DeviceService, AttendanceExceptionService, DeviceSyncLogService,
+  type BiometricDevice, type AttendanceException, type DeviceSyncLog,
+} from "../../services/itSupportService";
+import { UserService, type UserProfile } from "../../services/userService";
+import { useDepartments } from "../../context/DepartmentContext";
 
 export default function AttendanceDashboard() {
-  const devices    = useMemo(() => getDevices(), []);
-  const exceptions = useMemo(() => getAttendanceExceptions(), []);
-  const syncLogs   = useMemo(() => getDeviceSyncLogs(), []);
+  const { getDepartmentName } = useDepartments();
+  const [devices, setDevices]       = useState<BiometricDevice[]>([]);
+  const [exceptions, setExceptions] = useState<AttendanceException[]>([]);
+  const [syncLogs, setSyncLogs]     = useState<DeviceSyncLog[]>([]);
+  const [staff, setStaff]           = useState<UserProfile[]>([]);
+  const [isLoading, setIsLoading]   = useState(true);
+  const [loadError, setLoadError]   = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [devicesData, exceptionsData, syncLogsData, users] = await Promise.all([
+        DeviceService.getAll(),
+        AttendanceExceptionService.getAll(),
+        DeviceSyncLogService.getAll(),
+        UserService.getAll(),
+      ]);
+      setDevices(devicesData);
+      setExceptions(exceptionsData);
+      setSyncLogs(syncLogsData);
+      setStaff(users.filter(u => u.role !== "client"));
+    } catch (err: unknown) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load the attendance dashboard");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const [activeTab, setActiveTab] = useState<"summary" | "devices" | "exceptions" | "logs">("summary");
 
@@ -27,6 +59,12 @@ export default function AttendanceDashboard() {
       <PageMeta title="Attendance Dashboard | Optivax CRM" description="Biometric attendance overview" />
       <PageBreadcrumb pageTitle="Attendance Dashboard" />
 
+      {isLoading ? (
+        <LoadingState label="Loading attendance dashboard..." />
+      ) : loadError ? (
+        <ErrorState message={loadError} onRetry={loadData} />
+      ) : (
+      <>
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
@@ -66,7 +104,7 @@ export default function AttendanceDashboard() {
       {/* Department attendance summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {["Sales", "Production", "Marketing", "HR", "IT Support"].map(dept => {
-          const count = STAFF.filter(u =>
+          const count = staff.filter(u =>
             u.departmentId === `dept-${dept.toLowerCase().replace(/\s+/g, "-")}`
           ).length;
           return (
@@ -111,13 +149,18 @@ export default function AttendanceDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                {STAFF.map((u, i) => {
+                {staff.map((u, i) => {
                   const statuses = ["Present", "Present", "Present", "Late", "Present", "Absent", "Present", "Remote"];
                   const s = statuses[i % statuses.length];
                   return (
                     <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{u.name}</td>
-                      <td className="px-4 py-3 text-gray-500 capitalize">{u.departmentId?.replace("dept-", "").replace("-", " ") ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Avatar src={u.avatar_url} name={u.full_name} size="xs" />
+                          <span className="font-medium text-gray-900 dark:text-white">{u.full_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">{getDepartmentName(u.departmentId)}</td>
                       <td className="px-4 py-3 text-gray-500 capitalize">{u.role.replace(/_/g, " ")}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
@@ -181,7 +224,12 @@ export default function AttendanceDashboard() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {exceptions.map(ex => (
                   <tr key={ex.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{ex.employeeName}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <Avatar src={staff.find(u => u.id === ex.employeeId)?.avatar_url} name={ex.employeeName} size="xs" />
+                        <span className="font-medium text-gray-900 dark:text-white">{ex.employeeName}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{ex.department}</td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{ex.date}</td>
                     <td className="px-4 py-3 text-gray-500 capitalize">{ex.exceptionType.replace(/-/g, " ")}</td>
@@ -241,6 +289,8 @@ export default function AttendanceDashboard() {
             </table>
           </div>
         </div>
+      )}
+      </>
       )}
     </>
   );

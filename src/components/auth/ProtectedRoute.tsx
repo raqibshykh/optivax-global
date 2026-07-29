@@ -31,7 +31,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // super_admin bypasses all checks
+  // Blocks every route except /change-password itself while the backend's
+  // must_change_password flag is set — applies to every role, including
+  // super_admin, and is re-evaluated on every route match so it can't be
+  // defeated by editing the URL hash directly. The real, non-bypassable
+  // enforcement is the backend's PasswordGateMiddleware; this is UX so the
+  // user sees a redirect instead of a bare 403 from every API call.
+  if (user.mustChangePassword && location.pathname !== "/change-password") {
+    return <Navigate to="/change-password" replace />;
+  }
+
+  // super_admin bypasses all remaining checks
   if (user.role === "super_admin") {
     return <Outlet />;
   }

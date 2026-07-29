@@ -35,6 +35,13 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     files: ["VIEW", "CREATE", "EDIT", "DELETE", "EXPORT"],
     notifications: ["VIEW", "EXPORT"],
     revisions: ["VIEW", "EDIT"],
+    // VIEW+CREATE only — every internal role can submit/view IT tickets
+    // (Tickets.tsx's own design: "any internal non-client employee can
+    // create tickets"), but only it_admin/it_member/super_admin can
+    // assign/resolve/escalate/close (that's a separate EDIT grant those
+    // roles alone carry). Fixes a 2026-07-17 bug where this domain had no
+    // grant at all for non-IT roles, so /it/tickets 403'd for everyone else.
+    it_support: ["VIEW", "CREATE"],
     conversations: ALL_ACTIONS,
     budget: ALL_ACTIONS,
     payroll: ALL_ACTIONS,
@@ -48,7 +55,9 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     reports: ["VIEW", "EXPORT"],
     files: ["VIEW", "CREATE", "EDIT", "DELETE"],
     notifications: ["VIEW", "CREATE"],
-    conversations: ["VIEW", "CREATE", "EDIT"],
+    // No "conversations" grant — Sales Admin is explicitly denied access to
+    // client messages/message history (see conversationsData.ts, App.tsx).
+    it_support: ["VIEW", "CREATE"],
     budget: ["VIEW", "CREATE", "EDIT", "APPROVE", "ASSIGN"],
     salary_slips: ["VIEW"],
     advance_salary: ["VIEW", "CREATE"],
@@ -58,18 +67,33 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     clients: ["VIEW", "EDIT"],
     files: ["VIEW", "CREATE"],
     notifications: ["VIEW"],
-    conversations: ["VIEW", "CREATE"],
+    // No "conversations" grant — Sales Member is explicitly denied access to
+    // client messages/message history (see conversationsData.ts, App.tsx).
+    it_support: ["VIEW", "CREATE"],
     salary_slips: ["VIEW"],
     advance_salary: ["VIEW", "CREATE"],
   },
   production_admin: {
     production: ALL_ACTIONS,
     clients: ["VIEW", "ASSIGN"],
+    // Production Requests are content_calendar entries with
+    // productionSupportRequired=true, served under the 'marketing' RBAC
+    // domain (ContentCalendarRoutes.php) — VIEW to see them, EDIT to update
+    // their production status (ContentCalendar.tsx's canUpdateProdStatus).
+    // Not ALL_ACTIONS: creating/deleting calendar entries stays marketing-only.
+    marketing: ["VIEW", "EDIT"],
+    // Department dropdowns/filters are app-wide (DepartmentContext fetches
+    // GET /departments/list for every authenticated user), which is gated on
+    // the 'system' domain (DepartmentRoutes.php) — VIEW only, so
+    // production_admin can read the list but still can't create/edit/delete
+    // departments (that stays super_admin/it_admin only).
+    system: ["VIEW"],
     files: ALL_ACTIONS,
     reports: ["VIEW", "EXPORT"],
     notifications: ["VIEW", "CREATE"],
     revisions: ["VIEW", "CREATE", "EDIT", "DELETE"],
     conversations: ["VIEW", "CREATE", "EDIT"],
+    it_support: ["VIEW", "CREATE"],
     budget: ["VIEW", "EXPORT"],
     salary_slips: ["VIEW"],
     advance_salary: ["VIEW", "CREATE"],
@@ -80,6 +104,7 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     notifications: ["VIEW"],
     revisions: ["VIEW"],
     conversations: ["VIEW", "CREATE"],
+    it_support: ["VIEW", "CREATE"],
     salary_slips: ["VIEW"],
     advance_salary: ["VIEW", "CREATE"],
   },
@@ -90,6 +115,7 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     reports: ["VIEW", "EXPORT"],
     notifications: ["VIEW", "CREATE"],
     conversations: ["VIEW", "CREATE", "EDIT"],
+    it_support: ["VIEW", "CREATE"],
     budget: ["VIEW", "EXPORT"],
     salary_slips: ["VIEW"],
     advance_salary: ["VIEW", "CREATE"],
@@ -100,6 +126,7 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     files: ["VIEW", "CREATE"],
     notifications: ["VIEW"],
     conversations: ["VIEW", "CREATE"],
+    it_support: ["VIEW", "CREATE"],
     salary_slips: ["VIEW"],
     advance_salary: ["VIEW", "CREATE"],
   },
@@ -108,6 +135,7 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     files: ALL_ACTIONS,
     reports: ["VIEW", "EXPORT"],
     notifications: ["VIEW", "CREATE"],
+    it_support: ["VIEW", "CREATE"],
     budget: ["VIEW", "EXPORT"],
     payroll: ALL_ACTIONS,
     salary_slips: ALL_ACTIONS,
@@ -117,6 +145,7 @@ export const RBAC_MATRIX: Record<UserRole, RolePermissions> = {
     hr: ["VIEW"],
     files: ["VIEW", "CREATE"],
     notifications: ["VIEW"],
+    it_support: ["VIEW", "CREATE"],
     salary_slips: ["VIEW"],
     advance_salary: ["VIEW", "CREATE"],
   },

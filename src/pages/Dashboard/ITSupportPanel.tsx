@@ -1,9 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { useAuth } from "../../context/AuthContext";
-import { getITTickets, getDevices, getAttendanceExceptions } from "../../mock/itSupportData";
-import type { TicketStatus, TicketPriority, DeviceStatus } from "../../mock/itSupportData";
+import {
+  ITTicketService, DeviceService, AttendanceExceptionService,
+  type ITTicket, type BiometricDevice, type AttendanceException,
+  type TicketStatus, type TicketPriority, type DeviceStatus,
+} from "../../services/itSupportService";
 
 const PRIORITY_COLORS: Record<TicketPriority, string> = {
   critical: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
@@ -31,9 +36,15 @@ export default function ITSupportPanel() {
   const { user } = useAuth();
   const isAdmin = user?.role === "it_admin" || user?.role === "super_admin" || user?.role === "management";
 
-  const tickets    = useMemo(() => getITTickets(), []);
-  const devices    = useMemo(() => getDevices(), []);
-  const exceptions = useMemo(() => getAttendanceExceptions(), []);
+  const [tickets, setTickets]       = useState<ITTicket[]>([]);
+  const [devices, setDevices]       = useState<BiometricDevice[]>([]);
+  const [exceptions, setExceptions] = useState<AttendanceException[]>([]);
+
+  useEffect(() => {
+    ITTicketService.getAll().then(setTickets).catch(() => {});
+    DeviceService.getAll().then(setDevices).catch(() => {});
+    AttendanceExceptionService.getAll().then(setExceptions).catch(() => {});
+  }, []);
 
   const [activeTab, setActiveTab] = useState<"overview" | "tickets" | "devices" | "exceptions">("overview");
 
@@ -133,9 +144,12 @@ export default function ITSupportPanel() {
             <div className="space-y-3">
               {myTickets.slice(0, 5).map(t => (
                 <div key={t.id} className="flex items-start justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{t.title}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.requestedByName} · {t.requestedByDept}</p>
+                  <div className="min-w-0 flex items-start gap-2">
+                    <Avatar name={t.requestedByName} size="xs" className="mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{t.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.requestedByName} · {t.requestedByDept}</p>
+                    </div>
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${PRIORITY_COLORS[t.priority]}`}>{t.priority}</span>
@@ -192,10 +206,8 @@ export default function ITSupportPanel() {
                     <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
                       <td className="px-4 py-3 font-medium text-gray-900 dark:text-white max-w-xs truncate">{t.title}</td>
                       <td className="px-4 py-3 text-gray-500 capitalize">{t.category}</td>
-                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                        <span>{t.requestedByName}</span>
-                        <br />
-                        <span className="text-xs text-gray-400">{t.requestedByDept}</span>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <EmployeeIdentity name={t.requestedByName} department={t.requestedByDept} size="xs" />
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${PRIORITY_COLORS[t.priority]}`}>{t.priority}</span>
@@ -269,7 +281,12 @@ export default function ITSupportPanel() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {exceptions.map(ex => (
                   <tr key={ex.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{ex.employeeName}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <Avatar name={ex.employeeName} size="xs" />
+                        <span className="font-medium text-gray-900 dark:text-white">{ex.employeeName}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{ex.department}</td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{ex.date}</td>
                     <td className="px-4 py-3 text-gray-500 capitalize">{ex.exceptionType.replace("-", " ")}</td>

@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
 import { useAuth } from "../../context/AuthContext";
-import { safeParse } from "../../lib/storage";
-import type { StoredClient, UserRole } from "../../types";
+import { ClientService } from "../../services/clientService";
+import type { Client, UserRole } from "../../types";
 import {
-  getConversations, saveConversations, getVisibleConversations,
+  ConversationService, getVisibleConversations,
   getConvStats, CAN_INITIATE_ROLES, DEPT_FOR_ROLE,
   type Conversation, type ConvMessage, type ConvStatus, type ConvDept,
-} from "../../mock/conversationsData";
-
-const CLIENTS_KEY = "optivax_clients";
+} from "../../services/conversationService";
 
 const STATUS_LABEL: Record<ConvStatus, string> = {
   open: "Open",
@@ -55,7 +54,7 @@ export default function ClientConversations() {
   const [statusFilter, setStatusFilter] = useState<ConvStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [showNewModal, setShowNewModal] = useState(false);
-  const [clients, setClients] = useState<StoredClient[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
 
   // New conversation form
   const [newSubject, setNewSubject] = useState("");
@@ -65,10 +64,14 @@ export default function ClientConversations() {
 
   useEffect(() => {
     if (!user) return;
-    const all = getConversations();
-    const visible = getVisibleConversations(all, user.role, user.id);
-    setAllConvs(visible);
-    setClients(safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []));
+    let cancelled = false;
+    ConversationService.getAll().then((all) => {
+      if (cancelled) return;
+      const visible = getVisibleConversations(all, user.role, user.id);
+      setAllConvs(visible);
+    }).catch(() => { if (!cancelled) setAllConvs([]); });
+    ClientService.getAll().then(setClients).catch(() => setClients([]));
+    return () => { cancelled = true; };
   }, [user]);
 
   useEffect(() => {
@@ -92,21 +95,21 @@ export default function ClientConversations() {
     );
   }, [allConvs, statusFilter, search]);
 
-  const refreshState = (updated: Conversation[]) => {
-    const raw = getConversations();
+  const refreshState = async (updated: Conversation[]) => {
+    const raw = await ConversationService.getAll();
     // Replace the visible ones in the full list
     const visibleIds = new Set(updated.map(c => c.id));
     const merged = raw.map(c => (visibleIds.has(c.id) ? updated.find(u => u.id === c.id)! : c));
     // Add any new ones (id not in raw)
     const rawIds = new Set(raw.map(c => c.id));
     updated.forEach(c => { if (!rawIds.has(c.id)) merged.push(c); });
-    saveConversations(merged);
+    await ConversationService.save(merged);
     if (!user) return;
     const visible = getVisibleConversations(merged, user.role, user.id);
     setAllConvs(visible);
   };
 
-  const openConversation = (conv: Conversation) => {
+  const openConversation = async (conv: Conversation) => {
     if (!user) return;
     const isClient = user.role === "client";
     const updated = allConvs.map(c => {
@@ -121,12 +124,12 @@ export default function ClientConversations() {
         })),
       };
     });
-    refreshState(updated);
+    await refreshState(updated);
     setSelected(updated.find(c => c.id === conv.id) ?? null);
     setReplyText("");
   };
 
-  const sendReply = () => {
+  const sendReply = async () => {
     if (!user || !selected || !replyText.trim()) return;
     const isClient = user.role === "client";
     const msg: ConvMessage = {
@@ -150,21 +153,21 @@ export default function ClientConversations() {
         unreadByClient: isClient ? c.unreadByClient : c.unreadByClient + 1,
       };
     });
-    refreshState(updated);
+    await refreshState(updated);
     setSelected(updated.find(c => c.id === selected.id) ?? null);
     setReplyText("");
   };
 
-  const changeStatus = (status: ConvStatus) => {
+  const changeStatus = async (status: ConvStatus) => {
     if (!selected || !user) return;
     const updated = allConvs.map(c =>
       c.id === selected.id ? { ...c, status } : c
     );
-    refreshState(updated);
+    await refreshState(updated);
     setSelected(updated.find(c => c.id === selected.id) ?? null);
   };
 
-  const createConversation = () => {
+  const createConversation = async () => {
     if (!user || !newSubject.trim() || !newClientId || !newBody.trim()) return;
     const client = clients.find(c => c.id === newClientId);
     if (!client) return;
@@ -177,7 +180,7 @@ export default function ClientConversations() {
       id: convId,
       subject: newSubject.trim(),
       clientId: newClientId,
-      clientName: client.contactName,
+      clientName: client.contactName ?? client.name,
       clientEmail: client.email,
       assignedDept: dept,
       assignedUserId: user.id,
@@ -200,9 +203,9 @@ export default function ClientConversations() {
         },
       ],
     };
-    const all = getConversations();
+    const all = await ConversationService.getAll();
     const merged = [...all, conv];
-    saveConversations(merged);
+    await ConversationService.save(merged);
     const visible = getVisibleConversations(merged, user.role, user.id);
     setAllConvs(visible);
     setSelected(conv);
@@ -310,9 +313,12 @@ export default function ClientConversations() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mb-1">
-                      {conv.clientName}
-                    </p>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Avatar src={clients.find(c => c.id === conv.clientId)?.avatar} name={conv.clientName} size="xs" />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {conv.clientName}
+                      </p>
+                    </div>
                     <div className="flex items-center justify-between gap-1">
                       <span className={`inline-block text-xs px-1.5 py-0.5 rounded-full ${STATUS_COLOR[conv.status]}`}>
                         {STATUS_LABEL[conv.status]}
@@ -358,9 +364,10 @@ export default function ClientConversations() {
                       {selected.subject}
                     </h3>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs text-gray-500">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                        <Avatar src={clients.find(c => c.id === selected.clientId)?.avatar} name={selected.clientName} size="xs" />
                         {selected.clientName} · {selected.clientEmail}
-                      </span>
+                      </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${DEPT_COLOR[selected.assignedDept]}`}>
                         {selected.assignedDept}
                       </span>
@@ -409,15 +416,12 @@ export default function ClientConversations() {
                   const isClientMsg = msg.senderRole === "client";
                   return (
                     <div key={msg.id} className={`flex gap-3 ${isMine ? "flex-row-reverse" : ""}`}>
-                      <div
-                        className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${
-                          isClientMsg
-                            ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
-                            : "bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
-                        }`}
-                      >
-                        {msg.senderName.charAt(0)}
-                      </div>
+                      <Avatar
+                        src={isClientMsg ? clients.find(c => c.id === selected.clientId)?.avatar : undefined}
+                        name={msg.senderName}
+                        size="sm"
+                        className="flex-shrink-0"
+                      />
                       <div className={`flex-1 max-w-[75%] ${isMine ? "items-end" : "items-start"} flex flex-col`}>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -520,7 +524,7 @@ export default function ClientConversations() {
                     <option value="">— Select client —</option>
                     {clients.map(c => (
                       <option key={c.id} value={c.id}>
-                        {c.contactName} ({c.companyName})
+                        {c.contactName ?? c.name} ({c.companyName ?? c.company})
                       </option>
                     ))}
                   </select>

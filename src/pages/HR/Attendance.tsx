@@ -1,65 +1,30 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { mockUsers } from "../../mock/users";
 import {
-  appendAuditEntry,
+  AttendanceService,
   STATUS_COLORS,
   type AttendanceStatus,
-} from "../../mock/attendanceData";
+  type AttendanceRecord,
+  type StaffUser,
+} from "../../services/attendanceService";
 import { notifyAttendanceEdited, logAttendanceModified } from "../../services/notificationHelpers";
-
-const STORAGE_KEY = "mock_attendance";
-
-interface AttendanceRecord {
-  id: string;
-  userId: string;
-  userName: string;
-  userRole: string;
-  date: string;
-  checkIn?: string;
-  checkOut?: string;
-  status: AttendanceStatus;
-  notes?: string;
-}
-
-const STAFF_USERS = mockUsers.filter((u) => u.role !== "client" && u.role !== "super_admin");
-
-function loadRecords(): AttendanceRecord[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      const today = new Date().toISOString().split("T")[0];
-      const seed: AttendanceRecord[] = STAFF_USERS.map((u, i) => ({
-        id: `att-seed-${u.id}`,
-        userId: u.id, userName: u.name, userRole: u.role,
-        date: today,
-        checkIn: `0${8 + (i % 3)}:${i % 2 === 0 ? "00" : "30"}`,
-        checkOut: i % 5 === 0 ? undefined : "17:00",
-        status: (["present", "present", "late", "present", "leave", "half-day"] as AttendanceStatus[])[i % 6],
-        notes: "",
-      }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
-      return seed;
-    }
-    return JSON.parse(raw);
-  } catch { return []; }
-}
-function saveRecords(data: AttendanceRecord[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
+import { DepartmentService, type Department } from "../../services/departmentService";
+import { ShiftService, type DepartmentShift } from "../../services/shiftService";
+import { resolveShiftConfig, resolveShiftDate, isLate as isLateForShift } from "../../domain/attendance/shift";
 
 function nowTime(): string {
   const n = new Date();
   return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`;
 }
 
-function autoStatus(checkIn: string): AttendanceStatus {
-  const [h, m] = checkIn.split(":").map(Number);
-  return h > 9 || (h === 9 && m > 30) ? "late" : "present";
+function yesterdayOf(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split("T")[0];
 }
 
 const today = new Date().toISOString().split("T")[0];
@@ -73,6 +38,7 @@ export default function Attendance() {
   const canViewAll = canView("hr");
 
   const [records, setRecords]             = useState<AttendanceRecord[]>([]);
+  const [staffUsers, setStaffUsers]       = useState<StaffUser[]>([]);
   const [filterDate, setFilterDate]       = useState(today);
   const [filterStatus, setFilterStatus]   = useState("all");
   const [isModalOpen, setIsModalOpen]     = useState(false);
@@ -82,40 +48,78 @@ export default function Attendance() {
     date: string; checkIn: string; checkOut: string;
     status: AttendanceStatus; notes: string; reason: string;
   }>({
-    userId: STAFF_USERS[0]?.id ?? "", userName: STAFF_USERS[0]?.name ?? "",
-    userRole: STAFF_USERS[0]?.role ?? "", date: today,
+    userId: "", userName: "",
+    userRole: "", date: today,
     checkIn: "09:00", checkOut: "17:00", status: "present", notes: "", reason: "",
   });
 
-  useEffect(() => { setRecords(loadRecords()); }, []);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [shifts, setShifts]           = useState<DepartmentShift[]>([]);
+
+  useEffect(() => {
+    AttendanceService.getSelfRecords()
+      .then(setRecords)
+      .catch(() => setRecords([]));
+    AttendanceService.getStaffUsers()
+      .then((staff) => {
+        setStaffUsers(staff);
+        if (staff[0]) {
+          setForm((f) => ({ ...f, userId: staff[0].id, userName: staff[0].name, userRole: staff[0].role }));
+        }
+      })
+      .catch(() => setStaffUsers([]));
+    DepartmentService.getAll().then(setDepartments).catch(() => setDepartments([]));
+    ShiftService.getAll().then(setShifts).catch(() => setShifts([]));
+  }, []);
 
   // ── Self attendance ────────────────────────────────────────────────────────
-  const myToday        = records.find((r) => r.userId === user?.id && r.date === today);
+  // Shift-date aware: an overnight shift's check-in is stamped with a shift date that can
+  // still be "yesterday" once past midnight, so the open-shift lookup below can't require
+  // date === today the way it used to (see the night-shift attendance fix) — instead it finds
+  // the most recent still-open (no checkOut) record from today or yesterday, whichever it is.
+  const myShiftConfig = useMemo(
+    () => resolveShiftConfig(user?.departmentId, departments, shifts),
+    [user?.departmentId, departments, shifts],
+  );
+  const myCurrentShiftDate = useMemo(() => resolveShiftDate(new Date(), myShiftConfig), [myShiftConfig]);
+  const myOpenShift = records.find(
+    (r) => r.userId === user?.id && !r.checkOut && (r.date === today || r.date === yesterdayOf(today)),
+  );
+  const myCompletedForCurrentShift = !myOpenShift
+    ? records.find((r) => r.userId === user?.id && r.date === myCurrentShiftDate && r.checkOut)
+    : undefined;
+  const myToday        = myOpenShift ?? myCompletedForCurrentShift;
   const isSelfUser     = user?.role !== "client" && !canViewAll;
   const canSelfCheckin = !canManage && user?.role !== "client";
 
-  const handleSelfCheckIn = () => {
+  const handleSelfCheckIn = async () => {
     if (!user) return;
-    if (myToday) { showToast("Already checked in for today", "error"); return; }
+    if (myOpenShift) { showToast("You already have an open shift — check out first", "error"); return; }
     const t = nowTime();
-    const rec: AttendanceRecord = {
-      id: `att-${Date.now()}`,
-      userId: user.id, userName: user.name, userRole: user.role,
-      date: today, checkIn: t, status: autoStatus(t), notes: "",
-    };
-    const updated = [rec, ...records];
-    saveRecords(updated);
-    setRecords(updated);
-    showToast(`Checked in at ${t}${rec.status === "late" ? " — marked Late" : ""}`, "success");
+    const shiftDate = resolveShiftDate(new Date(), myShiftConfig);
+    const status = isLateForShift(t, myShiftConfig) ? "late" : "present";
+    try {
+      const rec = await AttendanceService.createSelfRecord({
+        userId: user.id, userName: user.name, userRole: user.role,
+        date: shiftDate, checkIn: t, status, notes: "",
+      });
+      setRecords((prev) => [rec, ...prev]);
+      showToast(`Checked in at ${t}${status === "late" ? " — marked Late" : ""}`, "success");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to check in", "error");
+    }
   };
 
-  const handleSelfCheckOut = () => {
-    if (!user || !myToday) return;
+  const handleSelfCheckOut = async () => {
+    if (!user || !myOpenShift) return;
     const t = nowTime();
-    const updated = records.map((r) => r.id === myToday.id ? { ...r, checkOut: t } : r);
-    saveRecords(updated);
-    setRecords(updated);
-    showToast(`Checked out at ${t}`, "success");
+    try {
+      await AttendanceService.updateSelfRecord(myOpenShift.id, { checkOut: t });
+      setRecords((prev) => prev.map((r) => r.id === myOpenShift.id ? { ...r, checkOut: t } : r));
+      showToast(`Checked out at ${t}`, "success");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to check out", "error");
+    }
   };
 
   // ── Super Admin attendance management ──────────────────────────────────────
@@ -130,75 +134,76 @@ export default function Attendance() {
   const attendancePct = dateRecords.length > 0 ? Math.round((presentCount / dateRecords.length) * 100) : 0;
 
   const handleUserChange = (id: string) => {
-    const u = STAFF_USERS.find((x) => x.id === id);
+    const u = staffUsers.find((x) => x.id === id);
     setForm((f) => ({ ...f, userId: id, userName: u?.name ?? id, userRole: u?.role ?? "" }));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (canManage && !form.reason.trim()) {
       showToast("Reason is required for attendance edits", "error");
       return;
     }
-    if (editingRecord) {
-      const updated = records.map((r) => r.id === editingRecord.id ? { ...r, ...form } : r);
-      saveRecords(updated);
-      setRecords(updated);
-      // Log every super_admin edit in the audit trail
-      if (canManage && user) {
-        appendAuditEntry({
-          editedAt:        new Date().toISOString(),
-          editedBy:        user.name,
-          editedByRole:    user.role,
-          employeeId:      editingRecord.userId,
-          employeeName:    editingRecord.userName,
-          attendanceDate:  editingRecord.date,
-          previousStatus:  editingRecord.status as AttendanceStatus,
-          newStatus:       form.status,
-          previousCheckIn:  editingRecord.checkIn,
-          previousCheckOut: editingRecord.checkOut,
-          newCheckIn:       form.checkIn || undefined,
-          newCheckOut:      form.checkOut || undefined,
-          reason:          form.reason,
-        });
-        notifyAttendanceEdited(
-          user.id, user.name,
-          editingRecord.userId, editingRecord.userName,
-          editingRecord.date,
-          editingRecord.status, form.status,
-          form.reason
-        );
+    try {
+      if (editingRecord) {
+        await AttendanceService.updateSelfRecord(editingRecord.id, form);
+        setRecords((prev) => prev.map((r) => r.id === editingRecord.id ? { ...r, ...form } : r));
+        // Log every super_admin edit in the audit trail
+        if (canManage && user) {
+          await AttendanceService.appendAuditEntry({
+            editedAt:        new Date().toISOString(),
+            editedBy:        user.name,
+            editedByRole:    user.role,
+            employeeId:      editingRecord.userId,
+            employeeName:    editingRecord.userName,
+            attendanceDate:  editingRecord.date,
+            previousStatus:  editingRecord.status as AttendanceStatus,
+            newStatus:       form.status,
+            previousCheckIn:  editingRecord.checkIn,
+            previousCheckOut: editingRecord.checkOut,
+            newCheckIn:       form.checkIn || undefined,
+            newCheckOut:      form.checkOut || undefined,
+            reason:          form.reason,
+          });
+          notifyAttendanceEdited(
+            user.id, user.name,
+            editingRecord.userId, editingRecord.userName,
+            editingRecord.date,
+            editingRecord.status, form.status,
+            form.reason
+          );
+        }
+        showToast("Attendance updated", "success");
+      } else {
+        if (records.find((r) => r.userId === form.userId && r.date === form.date)) {
+          showToast("Record for this employee on this date already exists", "error");
+          return;
+        }
+        const rec = await AttendanceService.createSelfRecord(form);
+        setRecords((prev) => [rec, ...prev]);
+        if (canManage && user) {
+          await AttendanceService.appendAuditEntry({
+            editedAt:       new Date().toISOString(),
+            editedBy:       user.name,
+            editedByRole:   user.role,
+            employeeId:     form.userId,
+            employeeName:   form.userName,
+            attendanceDate: form.date,
+            previousStatus: "absent",
+            newStatus:      form.status,
+            newCheckIn:     form.checkIn || undefined,
+            newCheckOut:    form.checkOut || undefined,
+            reason:         form.reason,
+          });
+          logAttendanceModified(user.id, user.name, form.userName, form.userId, form.date, form.status);
+        }
+        showToast("Attendance recorded", "success");
       }
-      showToast("Attendance updated", "success");
-    } else {
-      if (records.find((r) => r.userId === form.userId && r.date === form.date)) {
-        showToast("Record for this employee on this date already exists", "error");
-        return;
-      }
-      const rec: AttendanceRecord = { id: `att-${Date.now()}`, ...form };
-      const updated = [rec, ...records];
-      saveRecords(updated);
-      setRecords(updated);
-      if (canManage && user) {
-        appendAuditEntry({
-          editedAt:       new Date().toISOString(),
-          editedBy:       user.name,
-          editedByRole:   user.role,
-          employeeId:     form.userId,
-          employeeName:   form.userName,
-          attendanceDate: form.date,
-          previousStatus: "absent",
-          newStatus:      form.status,
-          newCheckIn:     form.checkIn || undefined,
-          newCheckOut:    form.checkOut || undefined,
-          reason:         form.reason,
-        });
-        logAttendanceModified(user.id, user.name, form.userName, form.userId, form.date, form.status);
-      }
-      showToast("Attendance recorded", "success");
+      setIsModalOpen(false);
+      setEditingRecord(null);
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to save attendance record", "error");
     }
-    setIsModalOpen(false);
-    setEditingRecord(null);
   };
 
   const openEdit = (r: AttendanceRecord) => {
@@ -214,19 +219,22 @@ export default function Attendance() {
   const openCreate = () => {
     setEditingRecord(null);
     setForm({
-      userId: STAFF_USERS[0]?.id ?? "", userName: STAFF_USERS[0]?.name ?? "",
-      userRole: STAFF_USERS[0]?.role ?? "", date: filterDate,
+      userId: staffUsers[0]?.id ?? "", userName: staffUsers[0]?.name ?? "",
+      userRole: staffUsers[0]?.role ?? "", date: filterDate,
       checkIn: "09:00", checkOut: "17:00", status: "present", notes: "", reason: "",
     });
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm("Delete this attendance record?")) return;
-    const updated = records.filter((r) => r.id !== id);
-    saveRecords(updated);
-    setRecords(updated);
-    showToast("Record deleted", "success");
+    try {
+      await AttendanceService.deleteSelfRecord(id);
+      setRecords((prev) => prev.filter((r) => r.id !== id));
+      showToast("Record deleted", "success");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to delete record", "error");
+    }
   };
 
   return (
@@ -440,7 +448,7 @@ export default function Attendance() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Employee *</label>
                 <select value={form.userId} onChange={(e) => handleUserChange(e.target.value)} required disabled={!!editingRecord}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:opacity-60">
-                  {STAFF_USERS.map((u) => (
+                  {staffUsers.map((u) => (
                     <option key={u.id} value={u.id}>{u.name} ({u.role.replace(/_/g, " ")})</option>
                   ))}
                 </select>

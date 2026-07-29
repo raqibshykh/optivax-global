@@ -39,16 +39,53 @@ interface ActivityFeedProps {
 export default function ActivityFeed({ limit = 20, compact = false }: ActivityFeedProps) {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [, setTick] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    setLogs(AuditLogService.getRecent(limit));
+    let cancelled = false;
+    const load = (isFirstLoad: boolean) => {
+      if (isFirstLoad) setIsLoading(true);
+      AuditLogService.getRecent(limit).then((data) => {
+        if (cancelled) return;
+        setLogs(data);
+        setHasError(false);
+      }).catch(() => {
+        if (cancelled) return;
+        // Only surface the error state on the initial load — a transient
+        // failure on a background 30s refresh shouldn't blank out a feed
+        // that's already showing real data.
+        if (isFirstLoad) setHasError(true);
+      }).finally(() => {
+        if (!cancelled && isFirstLoad) setIsLoading(false);
+      });
+    };
+    load(true);
     // Refresh every 30s so new events appear without page reload
     const id = setInterval(() => {
-      setLogs(AuditLogService.getRecent(limit));
+      load(false);
       setTick((t) => t + 1);
     }, 30000);
-    return () => clearInterval(id);
+    return () => { cancelled = true; clearInterval(id); };
   }, [limit]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <p className="text-sm text-gray-400 dark:text-gray-500">Loading activity...</p>
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <p className="text-sm text-red-500 dark:text-red-400">
+          Couldn't load recent activity. It'll retry automatically.
+        </p>
+      </div>
+    );
+  }
 
   if (logs.length === 0) {
     return (

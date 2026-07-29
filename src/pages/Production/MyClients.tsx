@@ -1,11 +1,13 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import LoadingState from "../../components/common/LoadingState";
+import ErrorState from "../../components/common/ErrorState";
 import { useAuth } from "../../context/AuthContext";
 import { ClientService } from "../../services/clientService";
 import { ProjectService } from "../../services/projectService";
-import { getOwnershipsByMember, getOwnershipHistory, type ClientOwnership } from "../../mock/clientOwnershipData";
-import type { Client, Project } from "../../types";
+import { ClientOwnershipService } from "../../services/clientOwnershipService";
+import type { Client, Project, ClientOwnership, ClientOwnershipHistoryEntry } from "../../types";
 import { useNavigate } from "react-router-dom";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -181,30 +183,48 @@ export default function MyClients() {
   const [clients,    setClients]    = useState<Client[]>([]);
   const [projects,   setProjects]   = useState<Project[]>([]);
   const [loading,    setLoading]    = useState(true);
+  const [loadError,  setLoadError]  = useState<string | null>(null);
 
   const [viewProjectsClient, setViewProjectsClient] = useState<Client | null>(null);
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    if (!user) return;
+  const loadMyClients = useCallback(async (userId: string) => {
     setLoading(true);
-    const myOwnerships = getOwnershipsByMember(user.id);
-    setOwnerships(myOwnerships);
+    setLoadError(null);
+    try {
+      const myOwnerships = await ClientOwnershipService.getByMemberId(userId);
+      setOwnerships(myOwnerships);
 
-    if (myOwnerships.length === 0) {
-      setLoading(false);
-      return;
-    }
+      if (myOwnerships.length === 0) {
+        return;
+      }
 
-    Promise.all([
-      ClientService.getAll(),
-      ProjectService.getAll(),
-    ]).then(([cls, prjs]) => {
+      const [cls, prjs] = await Promise.all([
+        ClientService.getAll(),
+        ProjectService.getAll(),
+      ]);
       const myClientIds = new Set(myOwnerships.map(o => o.clientId));
       setClients(cls.filter(c => myClientIds.has(c.id)));
       setProjects(prjs);
-    }).finally(() => setLoading(false));
-  }, [user?.id]);
+    } catch (err: unknown) {
+      // Previously: no .catch on this chain at all, so a rejection here
+      // left `loading` stuck true forever (setLoading(false) only ran
+      // inside a nested .finally that a failure in the outer promise
+      // never reached) — an infinite spinner with no way to recover
+      // short of a hard refresh.
+      setLoadError(err instanceof Error ? err.message : "Failed to load your clients");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    loadMyClients(user.id);
+    // Deliberately depends on the primitive `user?.id`, not the `user`
+    // object reference — only the id is read here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, loadMyClients]);
 
   const filtered = useMemo(() => {
     if (!search) return clients;
@@ -215,20 +235,32 @@ export default function MyClients() {
     );
   }, [clients, search]);
 
-  const getProjectCount = (clientId: string) =>
-    projects.filter(p => p.clientId === clientId).length;
+  const getProjectCount = useCallback(
+    (clientId: string) => projects.filter(p => p.clientId === clientId).length,
+    [projects]
+  );
 
-  const getClientProjects = (clientId: string) =>
-    projects.filter(p => p.clientId === clientId);
+  const getClientProjects = useCallback(
+    (clientId: string) => projects.filter(p => p.clientId === clientId),
+    [projects]
+  );
 
   const totalProjects = useMemo(
     () => clients.reduce((sum, c) => sum + getProjectCount(c.id), 0),
-    [clients, projects]
+    [clients, getProjectCount]
   );
 
-  const recentHistory = useMemo(() => {
-    if (!user) return [];
-    return getOwnershipHistory().filter(h => h.newOwnerId === user.id).slice(0, 5);
+  const [recentHistory, setRecentHistory] = useState<ClientOwnershipHistoryEntry[]>([]);
+
+  useEffect(() => {
+    if (!user) { setRecentHistory([]); return; }
+    let cancelled = false;
+    ClientOwnershipService.getHistory().then(all => {
+      if (cancelled) return;
+      setRecentHistory(all.filter(h => h.newOwnerId === user.id).slice(0, 5));
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   return (
@@ -265,7 +297,9 @@ export default function MyClients() {
 
       {/* Client Cards */}
       {loading ? (
-        <div className="py-20 text-center text-sm text-gray-400">Loading your clients…</div>
+        <LoadingState label="Loading your clients..." />
+      ) : loadError ? (
+        <ErrorState message={loadError} onRetry={() => user && loadMyClients(user.id)} />
       ) : clients.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
           <div className="text-5xl mb-3">👤</div>

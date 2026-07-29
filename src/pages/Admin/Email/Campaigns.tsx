@@ -7,7 +7,7 @@ import { useToast } from "../../../context/ToastContext";
 import Badge from "../../../components/ui/badge/Badge";
 
 export default function Campaigns() {
-  const { campaigns, isLoading, addCampaign, updateCampaign, deleteCampaign } = useCampaigns();
+  const { campaigns, isLoading, addCampaign, deleteCampaign, sendCampaign } = useCampaigns();
   const { templates } = useTemplates();
   const { showToast } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -39,14 +39,10 @@ export default function Campaigns() {
     if (!confirm(`Send campaign "${camp.name}" to all recipients now?`)) return;
     setSending(camp.id);
     try {
-      await updateCampaign(camp.id, {
-        status: "sent",
-        sentDate: new Date().toISOString(),
-        stats: { sent: 100, opened: 0, clicked: 0 },
-      });
-      showToast(`Campaign "${camp.name}" sent successfully!`, "success");
-    } catch {
-      showToast("Failed to send campaign.", "error");
+      const sent = await sendCampaign(camp.id);
+      showToast(`Campaign "${camp.name}" queued for ${sent.stats.sent} recipient${sent.stats.sent === 1 ? "" : "s"}.`, "success");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to send campaign.", "error");
     } finally {
       setSending(null);
     }

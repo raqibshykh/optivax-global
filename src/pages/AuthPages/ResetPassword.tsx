@@ -3,8 +3,7 @@ import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import AuthLayout from "./AuthPageLayout";
 import { ChevronLeftIcon } from "../../icons";
-import { mockUsers } from "../../mock/users";
-import { notifySecurityEvent } from "../../services/notificationHelpers";
+import { AuthService } from "../../services/authService";
 
 type Step = "request" | "reset" | "done";
 
@@ -17,28 +16,21 @@ export default function ResetPassword() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleRequestReset = (e: React.FormEvent) => {
+  const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
-
-    setTimeout(() => {
-      const user = mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
-      if (!user) {
-        setError("No account found with that email address.");
-        setIsLoading(false);
-        return;
-      }
-      // Store mock reset token in localStorage
-      const mockToken = `RESET-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-      localStorage.setItem("mock_reset_token", JSON.stringify({ token: mockToken, email, expires: Date.now() + 15 * 60 * 1000 }));
-      setToken(mockToken);
+    try {
+      await AuthService.requestPasswordReset(email);
       setStep("reset");
+    } catch {
+      setError("Failed to send reset link. Please try again.");
+    } finally {
       setIsLoading(false);
-    }, 800);
+    }
   };
 
-  const handleResetPassword = (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -51,36 +43,15 @@ export default function ResetPassword() {
       return;
     }
 
-    const stored = localStorage.getItem("mock_reset_token");
-    if (!stored) {
-      setError("Reset token expired. Please request a new one.");
-      return;
-    }
-
-    const parsed = JSON.parse(stored);
-    if (parsed.token !== token || parsed.email !== email || Date.now() > parsed.expires) {
+    setIsLoading(true);
+    try {
+      await AuthService.confirmPasswordReset(token, newPassword);
+      setStep("done");
+    } catch {
       setError("Invalid or expired reset token.");
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    // In mock mode, just update the password in localStorage profiles
-    const profiles = JSON.parse(localStorage.getItem("mock_profiles") || "[]");
-    const updated = profiles.map((p: { email: string }) =>
-      p.email === email ? { ...p, password: newPassword } : p
-    );
-    localStorage.setItem("mock_profiles", JSON.stringify(updated));
-    localStorage.removeItem("mock_reset_token");
-
-    const resetUser = mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    notifySecurityEvent(
-      "Password Reset",
-      `Password was reset for account: ${email}.`,
-      resetUser?.id ?? email,
-      resetUser?.name ?? email,
-      "system"
-    );
-
-    setStep("done");
   };
 
   return (
@@ -146,12 +117,8 @@ export default function ResetPassword() {
                     Set New Password
                   </h1>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Enter your reset token and choose a new password.
+                    Enter the reset token from your email and choose a new password.
                   </p>
-                  <div className="mt-3 p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg">
-                    <p className="text-xs text-brand-700 dark:text-brand-300 font-medium">Mock Reset Token:</p>
-                    <p className="text-xs font-mono text-brand-600 dark:text-brand-400 mt-0.5 break-all">{token}</p>
-                  </div>
                 </div>
                 <form onSubmit={handleResetPassword} className="space-y-5">
                   {error && (
@@ -168,6 +135,7 @@ export default function ResetPassword() {
                       required
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
+                      placeholder="Paste the token from your email"
                       className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-mono text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                     />
                   </div>
@@ -200,9 +168,10 @@ export default function ResetPassword() {
                   </div>
                   <button
                     type="submit"
-                    className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600"
+                    disabled={isLoading}
+                    className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600 disabled:opacity-50"
                   >
-                    Reset Password
+                    {isLoading ? "Resetting..." : "Reset Password"}
                   </button>
                 </form>
               </div>

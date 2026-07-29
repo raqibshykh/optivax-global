@@ -1,10 +1,14 @@
-# OptiVax Global — SaaS CRM Platform
+# OptiVax Global — SaaS ERP Platform
 ## Complete System Architecture & Documentation
 
-**Version:** 1.0  
-**Date:** 2026-06-20  
-**Classification:** Internal Technical Reference  
-**Author:** Solution Architecture Team  
+**Version:** 2.1
+**Date:** 2026-07-17
+**Classification:** Internal Technical Reference
+**Status:** Real WordPress REST backend + React SPA. Post-Phase-8 production audit (Final Score 61/100 as of 2026-07-11 — see Section 13) plus a subsequent Bridge-Ready biometric-device architecture refactor and a device API-key management feature (both 2026-07-17, not yet covered by a numbered phase report — documented directly in this revision, see Sections 6.4, 12.8, 15.1).
+
+> **This is a full rewrite, not an edit of the 2026-06-20 v1.0 document.** That version described an in-browser mock backend (`src/mock/`, `localStorage`-keyed storage) that has been **completely removed**. Every page, hook, and service now calls a real WordPress REST API (`wordpress-backend/optivax-erp-backend/`) backed by MySQL. Nothing in this document describes mock/simulated behavior — where a feature is real vs. still incomplete, it's called out explicitly (see Section 13, "Known Gaps").
+>
+> This document is the 9th artifact in a documented audit series, refreshed here for the first time since Phase 8 against the live codebase (all counts/claims in this revision were re-verified directly against source on 2026-07-17, not carried forward from the phase reports unchanged). For full findings/fix detail on any topic, the authoritative source is the phase report named in that section, all at the project root: `PHASE1_SECURITY_RBAC_REPORT.md`, `PHASE2_API_AUDIT_REPORT.md`, `PHASE3_DATABASE_AUDIT_REPORT.md`, `PHASE4_FRONTEND_AUDIT_REPORT.md`, `PHASE5_BUSINESS_LOGIC_AUDIT_REPORT.md`, `PHASE6_PERFORMANCE_REPORT.md`, `PHASE7_SECURITY_REPORT.md`, `PHASE8_FINAL_PRODUCTION_AUDIT_REPORT.md`. No phase report exists yet for the Bridge-Ready/device-key work — it is documented only in this file.
 
 ---
 
@@ -15,19 +19,17 @@
 3. [RBAC Permission Matrix](#section-3)
 4. [Route Map](#section-4)
 5. [Page Inventory](#section-5)
-6. [Data Architecture](#section-6)
-7. [Workflow Documentation](#section-7)
-8. [Service Layer](#section-8)
-9. [Database Model (ERD)](#section-9)
-10. [State Management](#section-10)
+6. [Backend Architecture (WordPress Plugin)](#section-6)
+7. [Database Schema](#section-7)
+8. [REST API Reference](#section-8)
+9. [State Management (Frontend)](#section-9)
+10. [Workflow Documentation](#section-10)
 11. [File Management System](#section-11)
-12. [Project Management System](#section-12)
-13. [Billing System](#section-13)
-14. [Reporting System](#section-14)
-15. [Security Model](#section-15)
-16. [Current Limitations](#section-16)
-17. [Production Readiness](#section-17)
-18. [Final Summary](#section-18)
+12. [Security Model](#section-12)
+13. [Known Gaps & Production Readiness](#section-13)
+14. [Build, Performance & Deployment](#section-14)
+15. [Audit History](#section-15)
+16. [Final Summary](#section-16)
 
 ---
 
@@ -36,505 +38,161 @@
 
 ### 1.1 Platform Identity
 
-**OptiVax Global** is a multi-tenant, role-based SaaS CRM platform built to manage the complete commercial lifecycle of a digital services agency — from lead acquisition through client delivery, billing, and employee operations. The platform unifies four internal departments (Sales, Production, Marketing, HR) and a client-facing portal under a single authenticated surface.
+**OptiVax Global** is a multi-role SaaS ERP platform managing the full commercial lifecycle of a digital services agency — lead acquisition through client delivery, billing, payroll, and HR/attendance operations. Five internal departments (Sales, Production, Marketing, HR, IT Support) plus Management/Super Admin and a client-facing portal share one authenticated application.
 
-### 1.2 Main Purpose
-
-The platform serves three categories of user:
-
-| Category | Description |
-|---|---|
-| **Internal Staff** | Employees across Sales, Production, Marketing, and HR departments operating within role-specific workspaces |
-| **Management / Admin** | Senior leadership with cross-department visibility, audit access, and approval authority |
-| **Clients** | External clients accessing a read-only portal for projects, invoices, files, and revision requests |
-
-### 1.3 Departments Supported
+### 1.2 Departments Supported
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    OptiVax Global Platform                  │
-├─────────────┬──────────────┬──────────────┬────────────────┤
-│    SALES    │  PRODUCTION  │  MARKETING   │      HR        │
-│             │              │              │                │
-│ Lead mgmt   │ Deliverables │ Campaigns    │ Employees      │
-│ Clients     │ Projects     │ Email Mktg   │ Payroll        │
-│ Targets     │ Revisions    │ Social Track │ Leave          │
-│ Commissions │ Files        │ Lead Attrib  │ Attendance     │
-│ Pipeline    │ Tasks        │ Automation   │ Tasks          │
-└─────────────┴──────────────┴──────────────┴────────────────┘
-                         │
-              ┌──────────┴──────────┐
-              │   CROSS-CUTTING     │
-              │ Super Admin Panel   │
-              │ Management Panel    │
-              │ Billing & Invoices  │
-              │ Files & Documents   │
-              │ Notifications       │
-              │ Audit Logs          │
-              │ Reports             │
-              │ Client Portal       │
-              └─────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         OptiVax Global Platform                          │
+├───────────┬────────────┬────────────┬────────────┬───────────────────────┤
+│  SALES    │ PRODUCTION │ MARKETING  │     HR      │      IT SUPPORT       │
+│           │            │            │             │                       │
+│ Leads     │ Deliverabl.│ Campaigns  │ Employees   │ Tickets                │
+│ Clients   │ Projects   │ Email Mktg │ Payroll     │ Devices / device logs  │
+│ Targets   │ Client     │ Social     │ Leave       │ Attendance dashboard/  │
+│ Commiss.  │  ownership │  tracking  │ Attendance  │  exceptions/reports    │
+│ Camp. bud │ Tasks      │ Content    │ Advance     │                       │
+│           │ Files      │  calendar  │  salary     │                       │
+└───────────┴────────────┴────────────┴─────────────┴───────────────────────┘
+                              │
+                    ┌─────────┴─────────┐
+                    │   CROSS-CUTTING   │
+                    │ Super Admin Panel │
+                    │ Management Panel  │
+                    │ Budget Management │
+                    │ Billing/Invoices  │
+                    │ Files/Documents   │
+                    │ Notifications     │
+                    │ Audit Logs (2)    │
+                    │ Client Conversat. │
+                    │ Reports (mock)    │
+                    │ Client Portal     │
+                    └───────────────────┘
 ```
 
-### 1.4 Business Workflows Supported
-
-| Workflow | Description |
-|---|---|
-| **Lead → Client Pipeline** | Sales captures leads, converts to clients with duplicate prevention |
-| **Project Lifecycle** | Clients linked to projects, assigned to production teams, tracked through completion |
-| **Deliverable Tracking** | Production creates and advances deliverables through a 5-stage approval flow |
-| **Invoice & Payment** | Billing generates invoices against projects, marks payment, notifies clients |
-| **File Management** | Role-scoped file upload with 5 visibility levels and audit trail |
-| **Revision Requests** | Clients submit revision requests; production team manages status transitions |
-| **HR Operations** | Leave requests, attendance logging, payroll calculation, employee management |
-| **Email Marketing** | Template authoring, campaign management, audience segmentation, automation |
-| **Social Tracking** | Platform link tracking with click analytics |
-| **Reporting** | Cross-department KPI dashboards and exportable data |
-
-### 1.5 SaaS Architecture Summary
+### 1.3 SaaS Architecture Summary
 
 ```
 Browser
   │
-  ├── React 19 (Vite 6 build, TypeScript 5.7)
-  │     ├── React Router 7 (HashRouter, protected routes)
-  │     ├── Tailwind CSS 4 (utility-first styling)
-  │     └── Context API (auth, toast, no external state lib)
+  ├── React 19 SPA (Vite 6, TypeScript 5.7 strict)
+  │     ├── React Router 7 (HashRouter, ProtectedRoute/PublicRoute guards)
+  │     ├── Tailwind CSS 4
+  │     ├── Context API (Auth, Activity, Toast, Theme, Sidebar — no Redux/Zustand)
+  │     └── Route-level code-splitting (React.lazy + Suspense, all ~92 pages)
   │
-  ├── In-Browser Mock API Server
-  │     ├── Intercepts window.fetch for /saas/v1/* routes
-  │     ├── All data persisted in localStorage (14 keys)
-  │     ├── Simulates REST semantics (GET/POST/PUT/DELETE)
-  │     ├── Role-scoped filtering at the handler level
-  │     └── SSE simulation for real-time notifications
+  ├── HTTPS (fetch, credentials:"include", double-submit CSRF header)
   │
-  └── External Dependencies
-        ├── Stripe (payment intent creation — mock key in dev)
-        └── No backend, no database, no network calls in dev
+  └── WordPress REST API — wordpress-backend/optivax-erp-backend/
+        ├── Custom REST namespace saas/v1 (38 route files, ~25 controllers)
+        ├── JWT access token in an HttpOnly cookie (not Authorization header)
+        ├── Random refresh token (hashed, DB-stored, rotated on use)
+        ├── MySQL via $wpdb — 67 tables across 15 migration files
+        ├── CSRF middleware, rate limiter, upload MIME/size validation (Phase 7)
+        └── External: Stripe API (real PaymentIntent flow), SMTP via wp_mail (queued + immediate paths)
 ```
 
 **Stack:**
 
 | Layer | Technology |
 |---|---|
-| Framework | React 19 |
-| Language | TypeScript 5.7 (strict mode) |
-| Build Tool | Vite 6 |
-| Routing | React Router 7 (Hash-based) |
+| Frontend framework | React 19 |
+| Language | TypeScript 5.7 (strict) |
+| Build tool | Vite 6 |
+| Routing | React Router 7 (HashRouter) |
 | Styling | Tailwind CSS 4 |
-| State | Context API + localStorage |
-| API Layer | In-browser mock server (fetch interception) |
-| Persistence | localStorage (14 namespaced keys) |
-| Auth | Mock session with role-based token |
-| Payments | Stripe (mock publishable key) |
-| Real-time | Server-Sent Events (SSE) simulation |
+| Frontend state | Context API only |
+| Backend | WordPress plugin (`optivax-erp-backend`, custom REST controllers — not WP core CRUD) |
+| Backend language | PHP 8+ |
+| Database | MySQL via `$wpdb` (WordPress's DB abstraction) |
+| Auth | JWT (HS256) in an HttpOnly, Secure, SameSite=None cookie; separate hashed refresh token |
+| CSRF | Double-submit cookie (`optivax_csrf` cookie + `X-CSRF-Token` header) |
+| Payments | Stripe — real PaymentIntent creation/confirmation, server-verified |
+| Email | `wp_mail` via SMTP — synchronous (`MailService::sendNow`, auth-critical mail) or queued (`MailService::queue` + `EmailQueueWorker` cron, retry/backoff) |
+| Real-time | Server-Sent Events (`/saas/v1/notifications/stream`) |
+| Deployment | Vite build → either a standalone Vercel SPA (`vercel.json`), or synced into a WP theme (`npm run build:wp`) |
 
 ---
 
 <a name="section-2"></a>
 ## SECTION 2 — ROLE ARCHITECTURE
 
-The platform defines **11 distinct roles** organized into three tiers: Global Administrators, Departmental Users, and External Clients.
+**13 roles**, defined in `src/types/index.ts`'s `UserRole` union — one more tier than the original design (IT Support was added later):
 
 ```
 TIER 1 — GLOBAL
-├── super_admin     (unrestricted, all domains)
-└── management      (cross-department read + billing approval)
+├── super_admin     (unrestricted, all 17 permission domains)
+└── management      (cross-department VIEW/EXPORT + full billing/budget/payroll/salary_slips/advance_salary)
 
-TIER 2 — DEPARTMENTAL
-├── SALES
-│   ├── sales_admin
-│   └── sales_member
-├── PRODUCTION
-│   ├── production_admin
-│   └── production_member
-├── MARKETING
-│   ├── marketing_admin
-│   └── marketing_member
-└── HR
-    ├── hr_admin
-    └── hr_member
+TIER 2 — DEPARTMENTAL (admin + member per department)
+├── SALES:       sales_admin, sales_member
+├── PRODUCTION:  production_admin, production_member
+├── MARKETING:   marketing_admin, marketing_member
+├── HR:          hr_admin, hr_member
+└── IT SUPPORT:  it_admin, it_member
 
 TIER 3 — EXTERNAL
 └── client
 ```
 
----
+Each departmental role's **home dashboard** is `/{domain}/dashboard` (e.g. `/sales/dashboard`, `/it/dashboard`). Sidebar menus are role-specific, defined per-role in `src/config/menuConfig.ts` (not derived from the RBAC matrix — a menu item and a permission grant are two independent things; a route can exist and be permission-guarded without being linked from every eligible role's menu — see Section 13 for one confirmed instance of this gap).
 
-### 2.1 Super Admin
-
-**Purpose:** Platform owner. Unrestricted access to all data, all departments, all operations.
-
-**Accessible Pages:**
-- `/super-admin/dashboard` — SuperAdminPanel (platform-wide metrics)
-- `/admin/dashboard` — AdminPanel
-- `/admin/clients` — All clients, full CRUD
-- `/admin/projects` — All projects, full CRUD
-- `/admin/billing` — All invoices and payments
-- `/admin/files` — All files, all visibility levels
-- `/admin/revisions` — All revision requests
-- `/admin/notifications` — All notifications
-- `/admin/reports` — All reports
-- `/admin/audit-logs` — Full audit history
-- `/admin/leave` — All leave requests
-- `/admin/attendance` — All attendance records
-- `/admin/commissions` — All commission records
-- `/admin/email/*` — Full email marketing suite
-- `/admin/users` — All employees
-- `/super-admin/departments` — Department management
-
-**Permissions:** ALL actions on ALL domains (VIEW, CREATE, EDIT, DELETE, EXPORT, APPROVE, ASSIGN).
-
-**Restrictions:** None. Can self-assign any role via signup (server enforces that public signups cannot select privileged roles, but super_admin is pre-seeded).
-
-**Data Visibility:** Sees all records across all clients, departments, and users. File visibility enforcement is bypassed. Revision list is unfiltered.
-
----
-
-### 2.2 Management
-
-**Purpose:** Senior leadership with cross-department read access and billing authority.
-
-**Accessible Pages:**
-- `/management/dashboard` — ManagementPanel (cross-dept KPIs, HR summary, rejected leaves)
-- `/management/projects` — All projects (view)
-- `/management/clients` — All clients (view)
-- `/management/billing` — Full billing operations (create, edit, approve)
-- `/management/reports` — All reports
-- `/management/tasks` — All tasks (view)
-- `/management/audit-logs` — Full audit history
-- `/management/deliverables` — All deliverables (view)
-- `/management/revisions` — All revisions (view + update status)
-- `/management/files` — All files (upload, edit, delete)
-- `/management/notifications` — Own notifications
-- `/management/profile` — Profile
-
-**Permissions:**
-- `billing`: VIEW, CREATE, EDIT, EXPORT, APPROVE, ASSIGN
-- `files`: VIEW, CREATE, EDIT, DELETE, EXPORT
-- `revisions`: VIEW, EDIT
-- All other domains: VIEW, EXPORT only
-
-**Restrictions:** Cannot create/edit HR records, sales records, or production records. Cannot assign projects or tasks (that authority sits with dept admins).
-
-**Data Visibility:** Sees all data across departments. File visibility enforcement is bypassed (same as super_admin).
-
----
-
-### 2.3 Sales Admin
-
-**Purpose:** Department head for sales. Manages leads, clients, billing pipeline, team performance.
-
-**Accessible Pages:**
-- `/sales/dashboard` — SalesPanel
-- `/sales/leads` — All leads, full CRUD
-- `/sales/clients` — All clients, full CRUD
-- `/sales/campaigns` — Campaign budgets, full CRUD
-- `/sales/targets` — Sales targets, full CRUD
-- `/sales/commissions` — Commission management
-- `/sales/tasks` — Sales tasks (SalesTasks), full CRUD
-- `/sales/team-performance` — Team performance view
-- `/sales/billing` — Invoices (create, edit, approve)
-- `/sales/files` — Files (upload, edit, delete)
-- `/sales/users` — Employee list (read-only)
-- `/sales/reports` — Reports
-- `/sales/notifications` — Notifications
-- `/sales/settings` — Settings
-- `/sales/profile` — Profile
-
-**Permissions:**
-- `sales`: ALL actions
-- `clients`: ALL actions
-- `billing`: VIEW, CREATE, EDIT, APPROVE, ASSIGN
-- `files`: VIEW, CREATE, EDIT, DELETE
-- `reports`: VIEW, EXPORT
-- `notifications`: VIEW, CREATE
-
-**Restrictions:** Cannot access HR, Production, or Marketing domains. Cannot approve their own invoices without management countersignature (by convention — not enforced in UI).
-
-**Data Visibility:** Sees all clients and leads. Sees billing for all clients. Files visible to all non-clients.
-
----
-
-### 2.4 Sales Member
-
-**Purpose:** Individual sales contributor. Manages own leads and tasks, views clients and targets.
-
-**Accessible Pages:**
-- `/sales/dashboard` — SalesPanel
-- `/sales/leads` — Leads (filtered to own assigned leads)
-- `/sales/clients` — Clients (view + edit)
-- `/sales/tasks` — Sales tasks (own tasks)
-- `/sales/targets` — Own sales targets
-- `/sales/commissions` — Own commission records
-- `/sales/files` — Files (upload + view)
-- `/sales/notifications` — Own notifications
-- `/sales/profile` — Profile
-
-**Permissions:**
-- `sales`: VIEW, EDIT
-- `clients`: VIEW, EDIT
-- `files`: VIEW, CREATE
-- `notifications`: VIEW
-
-**Restrictions:** Cannot delete clients, delete leads, or access billing. Cannot see other members' commission data unless sales_admin exposes it. Cannot create campaigns or targets.
-
-**Data Visibility:** Leads filtered to `assignedTo: user.id`. Sees all clients. Files scoped by visibility rules.
-
----
-
-### 2.5 Production Admin
-
-**Purpose:** Production department head. Manages deliverables, projects, revisions, team files.
-
-**Accessible Pages:**
-- `/production/dashboard` — ProductionPanel
-- `/production/deliverables` — Deliverables, full CRUD + approval
-- `/production/projects` — Projects (view, assign team members)
-- `/production/tasks` — Tasks (create, assign within dept)
-- `/production/files` — Files, full CRUD
-- `/production/revisions` — Revisions (view all, create, edit, delete)
-- `/production/users` — Employee list (read-only)
-- `/production/reports` — Reports
-- `/production/notifications` — Notifications
-- `/production/settings` — Settings
-- `/production/profile` — Profile
-
-**Permissions:**
-- `production`: ALL actions
-- `clients`: VIEW
-- `files`: ALL actions
-- `reports`: VIEW, EXPORT
-- `notifications`: VIEW, CREATE
-- `revisions`: VIEW, CREATE, EDIT, DELETE
-
-**Restrictions:** Cannot access Sales, Marketing, or HR domains. Cannot create/approve invoices.
-
-**Data Visibility:** Revisions are unfiltered within department. Files visible to all non-clients per visibility rules.
-
----
-
-### 2.6 Production Member
-
-**Purpose:** Individual production contributor. Works on assigned projects and tasks.
-
-**Accessible Pages:**
-- `/production/dashboard` — ProductionPanel
-- `/production/deliverables` — Own deliverables (advance status Pending → In Progress → Review)
-- `/production/tasks` — Own assigned tasks
-- `/production/files` — Files (upload + view own/dept/project-team files)
-- `/production/revisions` — Revisions for own assigned projects only
-- `/production/notifications` — Own notifications
-- `/production/profile` — Profile
-
-**Permissions:**
-- `production`: VIEW, EDIT
-- `files`: VIEW, CREATE
-- `notifications`: VIEW
-- `revisions`: VIEW
-
-**Restrictions:** Cannot delete deliverables. Cannot approve revisions. Can only advance deliverables they personally uploaded (and only up to "Review" status). Revisions filtered to projects they are assigned to.
-
-**Data Visibility:** Deliverables scoped to `uploadedBy === user.id`. Revisions scoped to `project.assignedTo includes user.id`. Files scoped by visibility.
-
----
-
-### 2.7 Marketing Admin
-
-**Purpose:** Marketing department head. Manages email campaigns, social tracking, lead attribution.
-
-**Accessible Pages:**
-- `/marketing/dashboard` — MarketingPanel
-- `/marketing/leads` — Lead attribution (view)
-- `/marketing/email/campaigns` — Campaigns, full CRUD
-- `/marketing/email/templates` — Templates, full CRUD
-- `/marketing/email/audience` — Audience management
-- `/marketing/email/analytics` — Campaign analytics
-- `/marketing/email/automation` — Automation rules
-- `/marketing/social` — Social tracking, full CRUD
-- `/marketing/tasks` — Tasks (create, assign within dept)
-- `/marketing/files` — Files, full CRUD
-- `/marketing/users` — Employee list (read-only)
-- `/marketing/reports` — Reports
-- `/marketing/notifications` — Notifications
-- `/marketing/settings` — Settings
-- `/marketing/profile` — Profile
-
-**Permissions:**
-- `marketing`: ALL actions
-- `sales`: VIEW (lead source data for attribution)
-- `files`: ALL actions
-- `reports`: VIEW, EXPORT
-- `notifications`: VIEW, CREATE
-
-**Restrictions:** Cannot create or convert leads. Cannot access billing, HR, or production domains directly.
-
-**Data Visibility:** Lead data is read-only for attribution purposes. Sees all marketing campaigns and social links.
-
----
-
-### 2.8 Marketing Member
-
-**Purpose:** Individual marketing contributor. Executes campaigns, manages social content.
-
-**Accessible Pages:**
-- `/marketing/dashboard` — MarketingPanel
-- `/marketing/tasks` — Own tasks
-- `/marketing/social` — Social tracking (view + edit)
-- `/marketing/email/campaigns` — Campaigns (view + edit)
-- `/marketing/email/templates` — Templates (view + edit)
-- `/marketing/email/audience` — Audience (view)
-- `/marketing/files` — Files (upload + view)
-- `/marketing/notifications` — Own notifications
-- `/marketing/profile` — Profile
-
-**Permissions:**
-- `marketing`: VIEW, EDIT
-- `sales`: VIEW
-- `files`: VIEW, CREATE
-- `notifications`: VIEW
-
-**Restrictions:** Cannot delete campaigns or templates. Cannot create automations. Cannot access HR, production, billing.
-
-**Data Visibility:** Sees own tasks. Sees all marketing campaigns, templates, and social links.
-
----
-
-### 2.9 HR Admin
-
-**Purpose:** HR department head. Manages all employee records, payroll, leave, attendance.
-
-**Accessible Pages:**
-- `/hr/dashboard` — HRPanel
-- `/hr/users` — All employees, full CRUD
-- `/hr/payroll` — Payroll records
-- `/hr/leave` — All leave requests (approve/reject)
-- `/hr/attendance` — All attendance records
-- `/hr/tasks` — HR tasks
-- `/hr/files` — Files, full CRUD
-- `/hr/reports` — Reports
-- `/hr/notifications` — Notifications
-- `/hr/settings` — Settings
-- `/hr/profile` — Profile
-
-**Permissions:**
-- `hr`: ALL actions
-- `files`: ALL actions
-- `reports`: VIEW, EXPORT
-- `notifications`: VIEW, CREATE
-
-**Restrictions:** Cannot access Sales, Production, Marketing, or Billing domains directly.
-
-**Data Visibility:** Sees all employee records, all leave requests, all attendance entries, all payroll data.
-
----
-
-### 2.10 HR Member
-
-**Purpose:** Individual HR contributor. Manages own leave and attendance, views HR data.
-
-**Accessible Pages:**
-- `/hr/dashboard` — HRPanel
-- `/hr/leave` — Own leave requests (submit new)
-- `/hr/attendance` — Own attendance records
-- `/hr/tasks` — Own tasks
-- `/hr/files` — Files (upload + view)
-- `/hr/notifications` — Own notifications
-- `/hr/profile` — Profile
-
-**Permissions:**
-- `hr`: VIEW, EDIT
-- `files`: VIEW, CREATE
-- `notifications`: VIEW
-
-**Restrictions:** Cannot approve leave requests. Cannot create payroll records. Cannot view other employees' payroll.
-
-**Data Visibility:** Leave requests filtered to own records. Attendance filtered to own records.
-
----
-
-### 2.11 Client
-
-**Purpose:** External customer accessing a read-only project and billing portal.
-
-**Accessible Pages:**
-- `/client/dashboard` — ClientPanel (own project summary, billing summary)
-- `/client/projects` — Own projects (view only)
-- `/client/billing` — Own invoices (view only)
-- `/client/files` — Own files (view only, scoped to `visibility === "client" && clientId === user.id`)
-- `/client/revisions` — Own revision requests (submit + view)
-- `/client/notifications` — Own notifications
-- `/client/profile` — Own profile (edit name, company, avatar)
-
-**Permissions:**
-- `production`: VIEW
-- `clients`: VIEW, EDIT (own record)
-- `billing`: VIEW
-- `files`: VIEW
-- `notifications`: VIEW
-
-**Restrictions:** Cannot upload files. Cannot create invoices. Cannot view other clients' data. Cannot access any internal department page.
-
-**Data Visibility:** All data is hard-scoped to `clientId === user.id`. Projects filtered by clientId. Invoices filtered by clientId. Files filtered to `visibility === "client"` entries matching their user ID.
+**IT Support scope (added after the original 11-role design):** ticket management, device inventory/logs, and a dedicated attendance sub-suite (dashboard, exceptions, reports) — explicitly walled off from HR/payroll/billing/client-financial data (`it_admin`'s RBAC comment in `rbac.ts` states this directly).
 
 ---
 
 <a name="section-3"></a>
 ## SECTION 3 — RBAC PERMISSION MATRIX
 
-### 3.1 Domain Definitions
+### 3.1 Domain Definitions (17 domains — up from the original 11)
 
-| Domain | Description |
-|---|---|
-| `sales` | Leads, targets, commissions, sales tasks, campaign budgets |
-| `production` | Deliverables, project tasks, production workflows |
-| `marketing` | Email marketing, social tracking, lead attribution |
-| `hr` | Employees, payroll, leave, attendance |
-| `clients` | Client records, client portal access |
-| `system` | Departments, platform configuration, audit logs |
-| `billing` | Invoices, payments, payment approval |
-| `reports` | Dashboard reports, data exports |
-| `files` | File upload, visibility, sharing |
-| `notifications` | Notification creation and management |
-| `revisions` | Client revision requests, status management |
+`sales`, `production`, `marketing`, `hr`, `it_support`, `clients`, `system`, `billing`, `reports`, `files`, `notifications`, `revisions`, `conversations`, `budget`, `payroll`, `salary_slips`, `advance_salary`.
 
-### 3.2 Full Permission Matrix
+### 3.2 Full Permission Matrix (verbatim from `src/utils/rbac.ts`)
 
-Legend: `V`=VIEW `C`=CREATE `E`=EDIT `D`=DELETE `X`=EXPORT `A`=APPROVE `S`=ASSIGN `—`=No access `ALL`=All 7 actions
+Legend: `ALL`=all 7 actions (VIEW/CREATE/EDIT/DELETE/EXPORT/APPROVE/ASSIGN), `V`=VIEW, `C`=CREATE, `E`=EDIT, `D`=DELETE, `X`=EXPORT, `A`=APPROVE, `S`=ASSIGN, `—`=no access.
 
-| Domain | super_admin | management | sales_admin | sales_member | production_admin | production_member | marketing_admin | marketing_member | hr_admin | hr_member | client |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| **sales** | ALL | V,X | ALL | V,E | — | — | V | V | — | — | — |
-| **production** | ALL | V,X | — | — | ALL | V,E | — | — | — | — | V |
-| **marketing** | ALL | V,X | — | — | — | — | ALL | V,E | — | — | — |
-| **hr** | ALL | V,X | — | — | — | — | — | — | ALL | V,E | — |
-| **clients** | ALL | V,X | ALL | V,E | V | — | — | — | — | — | V,E |
-| **system** | ALL | — | — | — | — | — | — | — | — | — | — |
-| **billing** | ALL | V,C,E,X,A,S | V,C,E,A,S | — | — | — | — | — | — | — | V |
-| **reports** | ALL | V,X | V,X | — | V,X | — | V,X | — | V,X | — | — |
-| **files** | ALL | V,C,E,D,X | V,C,E,D | V,C | ALL | V,C | ALL | V,C | ALL | V,C | V |
-| **notifications** | ALL | V,X | V,C | V | V,C | V | V,C | V | V,C | V | V |
-| **revisions** | ALL | V,E | — | — | V,C,E,D | V | — | — | — | — | — |
+| Domain | super_admin | management | sales_admin | sales_member | production_admin | production_member | marketing_admin | marketing_member | hr_admin | hr_member | it_admin | it_member | client |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sales | ALL | V,X | ALL | V,E | — | — | V | V | — | — | — | — | — |
+| production | ALL | V,X | — | — | ALL | V,E | — | — | — | — | — | — | V |
+| marketing | ALL | V,X | — | — | — | — | ALL | V,E | — | — | — | — | — |
+| hr | ALL | V,X | — | — | — | — | — | — | ALL | V | — | — | — |
+| it_support | ALL | — | — | — | — | — | — | — | — | — | ALL | V,E | — |
+| clients | ALL | V,X | ALL | V,E | V,S | — | — | — | — | — | — | — | V,E |
+| system | ALL | — | — | — | — | — | — | — | — | — | V,E | — | — |
+| billing | ALL | V,C,E,X,A,S | V,C,E,A,S | — | — | — | — | — | — | — | — | — | V |
+| reports | ALL | V,X | V,X | — | V,X | — | V,X | — | V,X | — | V,X | — | — |
+| files | ALL | V,C,E,D,X | V,C,E,D | V,C | ALL | V,C | ALL | V,C | ALL | V,C | — | — | V |
+| notifications | ALL | V,X | V,C | V | V,C | V | V,C | V | V,C | V | V,C | V | V |
+| revisions | ALL | V,E | — | — | V,C,E,D | V | — | — | — | — | — | — | — |
+| conversations | ALL | ALL | — | — | V,C,E | V,C | V,C,E | V,C | — | — | — | — | — |
+| budget | ALL | ALL | V,C,E,A,S | — | V,X | — | V,X | — | V,X | — | — | — | — |
+| payroll | ALL | ALL | — | — | — | — | — | — | ALL | — | — | — | — |
+| salary_slips | ALL | ALL | V | V | V | V | V | V | ALL | V | — | — | — |
+| advance_salary | ALL | ALL | V,C | V,C | V,C | V,C | V,C | V,C | V,A,E | V,C | — | — | — |
 
-### 3.3 Scope Enforcement Rules
+### 3.3 Scope Enforcement — two independent layers, and where they diverge
 
-The platform applies two layers of permission checking:
-
-**Layer 1 — `hasPermission`:** Direct RBAC matrix lookup. Returns true if the role has the action in the domain.
-
-**Layer 2 — `hasPermissionScoped`:** Adds domain scope restriction for departmental roles:
-- Department roles (`sales_*`, `production_*`, `marketing_*`, `hr_*`) cannot perform non-VIEW actions outside their primary domain...
-- **Exception:** Cross-cutting infrastructure domains (`files`, `notifications`, `reports`, `revisions`) are exempt from scope restriction — all roles access these via explicit matrix grants.
-
+**Frontend (`hasPermissionScoped` in `rbac.ts`):**
 ```
-hasPermissionScoped logic:
-  super_admin         → always true
-  management          → hasPermission (no scope restriction)
-  dept_role           → if domain ∈ CROSS_CUTTING_DOMAINS: hasPermission
-                        if action == VIEW: hasPermission  
-                        if domain != primary: false
-                        else: hasPermission
+super_admin              → always true
+management                → hasPermission (no scope restriction)
+dept role, cross-cutting  → hasPermission (files/notifications/reports/revisions/
+  domain (files, etc.)      conversations/budget/salary_slips/advance_salary are
+                             exempt from scope restriction — every role has an
+                             explicit matrix grant for them)
+dept role, primary domain → hasPermission
+dept role, other domain,  → hasPermission (VIEW is always allowed cross-domain)
+  action === VIEW
+dept role, other domain,  → false (blocked client-side)
+  action !== VIEW
 ```
+
+**Backend — this is where it diverges, and it's the report's C3 finding (Section 13).** `middleware/RbacMiddleware.php` defines an equivalent `authorizeScoped()`, but **re-confirmed 2026-07-17: it has zero call sites anywhere in the codebase** (`grep -rn "authorizeScoped"` across every `.php` file returns only the method's own definition and one doc-comment reference — no controller invokes it, `BudgetController.php` included). Every controller uses the unscoped `authorize()` (permission-only, no ownership/department check) as its RBAC gate.
+
+Two controllers compensate with their own hand-rolled ownership check on top of that unscoped gate: `BudgetController.php` (`ownDepartmentOrNull()`) and, **as of this re-verification, also `CommissionController.php`** (`ensureSameDepartment()`, `controllers/CommissionController.php:151-167`) — its own doc comment (`:140-149`) explains the deliberate choice not to use `authorizeScoped()`: that method would block any non-VIEW action outside a role's *primary* domain entirely, which would stop `sales_admin` from managing their own team's commissions (`billing` is a granted-but-non-primary domain for that role). This narrows the original finding: **the specific "Commission editing" cross-department exposure the Phase 1/8 reports cited is not reproducible as described** — a same-department check is now in place there. The broader architectural gap stands unchanged, though: `authorizeScoped()` itself is dead code, and department/ownership scoping exists only where a specific controller author added it by hand — not systematically. Controllers beyond Budget and Commission were not re-audited in this pass, so an equivalent gap elsewhere cannot be ruled out.
 
 ---
 
@@ -543,2076 +201,501 @@ hasPermissionScoped logic:
 
 ### 4.1 Route Architecture
 
-All routes are wrapped by:
-1. **`<PublicRoute>`** — Redirects authenticated users away from auth pages
-2. **`<AppLayout>`** — Applies sidebar, header, scroll restoration
-3. **`<ProtectedRoute allowedDomain="X" allowedRoles={[...]}/>`** — Enforces role membership before rendering children
+Defined in `src/App.tsx`. Structure:
+1. `<ErrorBoundary>` — top-level crash isolation, plus a second, narrower one around `<Outlet/>` inside `<AppLayout>` so one page crashing doesn't take down the sidebar/header.
+2. `<Suspense fallback={<RouteFallback/>}>` wraps the whole `<Routes>` tree — every page is `React.lazy()`-imported (Phase 4/6).
+3. `<PublicRoute>` — wraps `/login`, `/reset-password`; redirects an already-authenticated user away.
+4. `<ProtectedRoute allowedDomain="X" allowedRoles={[...]}/>` — wraps every other route; unauthenticated → redirect to login, wrong role → redirect to the user's own home.
 
-### 4.2 Complete Route Inventory
+### 4.2 Route Inventory by Section
 
-#### Authentication (Public)
-
-| Path | Component | Auth Required | Purpose |
+| Section | Path prefix | Roles | Notable pages |
 |---|---|---|---|
-| `/` | — | No | Redirects to `/login` |
-| `/login` | `SignIn` | No | Email/password authentication |
-| `/signup` | `SignUp` | No | New account registration (client role only via public flow) |
-| `/reset-password` | `ResetPassword` | No | Password reset flow |
+| Auth (public) | `/login`, `/reset-password`, `/change-password` | anyone / anyone authenticated | `change-password` reachable even while `must_change_password` is blocking every other route |
+| Super Admin | `/super-admin/*` | super_admin | dashboard, `/super-admin/departments` |
+| Admin (shared with Super Admin) | `/admin/*` | super_admin | dashboard, clients, projects, billing, files, notifications, revisions, settings, reports, audit-logs, security-audit-logs, commissions, `email/{campaigns,templates,audience,analytics,automation}`, users |
+| Sales | `/sales/*` | sales_admin, sales_member | dashboard, leads, clients, tasks, targets, `campaigns`/`team-performance` (sales_admin only, nested guard), commissions, reports, files, billing (sales_admin only), notifications, settings, profile, users (shared w/ hr_admin/management) |
+| Production | `/production/*` | production_admin, production_member | dashboard, content-requests, projects, tasks, deliverables, files, reports, revisions, notifications, settings, profile, my-clients, users |
+| Client Ownership | `/production/client-ownership` | super_admin, management, production_admin | separate guard block from the rest of `/production/*` |
+| Marketing | `/marketing/*` | marketing_admin, marketing_member | dashboard, leads, content-calendar, tasks, social, reports, files, notifications, `email/{campaigns,templates,audience}`, `email/{analytics,automation}` (marketing_admin only), settings, profile, users |
+| HR | `/hr/*` | hr_admin, hr_member | dashboard, users (hr_admin+management), payroll (hr_admin+super_admin), leave, `attendance` + 6 sub-pages (monthly/yearly/analytics/calendar/payroll/corrections — several role-narrowed further), tasks, files, settings+reports (hr_admin+super_admin), notifications, profile |
+| Management | `/management/*` | management | dashboard, projects, clients, billing, reports, tasks, notifications, audit-logs, deliverables, revisions, files, profile, users |
+| Client Conversations | `/conversations` | super_admin, management, marketing_admin, marketing_member, production_admin, production_member | **sales roles explicitly excluded** — documented in-line in `App.tsx` as intentional |
+| Budget Management | `/budget` | super_admin, management, sales_admin, production_admin, marketing_admin, hr_admin, it_admin | shared cross-department page |
+| My Budget | `/my-budget` | every `*_member` role | member-level personal view |
+| Payroll/Salary (admin) | `/hr/salary-slips`, `/hr/advance-salary` | super_admin, management, hr_admin | |
+| Advance Salary Audit | `/hr/advance-salary/audit` | super_admin, hr_admin | |
+| Bulk Salary Slips | `/hr/bulk-salary-slips` | super_admin, hr_admin | |
+| Salary Slips + Advance (self) | `/salary-slips`, `/advance-salary` | every internal role incl. IT | |
+| IT Tickets | `/it/tickets` | every internal (non-client) role | anyone can submit |
+| Activity Reports | `/activity/reports` | super_admin, management, hr_admin, and all `*_admin` roles | server-scoped to own dept for dept admins |
+| Live Activity Dashboard | `/activity/live` | every internal role | members see only themselves, server-scoped |
+| IT Support | `/it/*` | it_admin, it_member | dashboard, attendance, devices, device-logs, exceptions, reports, notifications, profile — **no billing/payroll/salary routes exposed here**, by design |
+| Client Portal | `/client/*` | client | dashboard, projects, billing, files, notifications, messages, revisions, profile |
+| Fallback | `*` | anyone | `NotFound` (404) |
 
-#### Super Admin
-
-| Path | Component | Required Role | Purpose |
-|---|---|---|---|
-| `/super-admin/dashboard` | `SuperAdminPanel` | super_admin | Platform-wide metrics dashboard |
-| `/super-admin/departments` | `Departments` | super_admin | Department create/edit/manage |
-| `/admin/dashboard` | `AdminPanel` | super_admin | Admin operations dashboard |
-| `/admin/clients` | `Clients` | super_admin | Client management (full CRUD) |
-| `/admin/projects` | `Projects` | super_admin | Project management (full CRUD) |
-| `/admin/billing` | `AdminBilling` | super_admin | Invoice and payment management |
-| `/admin/files` | `AdminFiles` | super_admin | File management (all files visible) |
-| `/admin/revisions` | `AdminRevisions` | super_admin | All revision requests |
-| `/admin/notifications` | `AdminNotifications` | super_admin | Notification management |
-| `/admin/reports` | `Reports` | super_admin | All department reports |
-| `/admin/audit-logs` | `AuditLogs` | super_admin | Full audit trail |
-| `/admin/leave` | `LeaveRequests` | super_admin | All leave requests |
-| `/admin/attendance` | `Attendance` | super_admin | All attendance records |
-| `/admin/commissions` | `Commissions` | super_admin | Commission management |
-| `/admin/email/campaigns` | `Campaigns` | super_admin | Email campaign management |
-| `/admin/email/templates` | `Templates` | super_admin | Email template management |
-| `/admin/email/audience` | `Audience` | super_admin | Audience segment management |
-| `/admin/email/analytics` | `Analytics` | super_admin | Campaign analytics |
-| `/admin/email/automation` | `Automation` | super_admin | Email automation rules |
-| `/admin/users` | `Employees` | super_admin | All employee records |
-| `/admin/settings` | `Settings` | super_admin | Platform settings |
-
-#### Sales Department
-
-| Path | Component | Required Role | Purpose |
-|---|---|---|---|
-| `/sales/dashboard` | `SalesPanel` | sales_admin, sales_member | Sales KPIs, pipeline summary |
-| `/sales/leads` | `SalesLeads` | sales_admin, sales_member | Lead list, create, convert to client |
-| `/sales/clients` | `Clients` | sales_admin, sales_member | Client management |
-| `/sales/tasks` | `SalesTasks` | sales_admin, sales_member | Sales-specific tasks |
-| `/sales/targets` | `SalesTargets` | sales_admin, sales_member | Target setting and tracking |
-| `/sales/campaigns` | `CampaignBudgets` | sales_admin, sales_member | Campaign budget management |
-| `/sales/team-performance` | `TeamPerformance` | sales_admin, sales_member | Team performance dashboard |
-| `/sales/commissions` | `Commissions` | sales_admin, sales_member | Commission records |
-| `/sales/billing` | `AdminBilling` | sales_admin, sales_member | Invoice management |
-| `/sales/files` | `AdminFiles` | sales_admin, sales_member | File management |
-| `/sales/reports` | `Reports` | sales_admin, sales_member | Sales reports |
-| `/sales/notifications` | `AdminNotifications` | sales_admin, sales_member | Notifications |
-| `/sales/users` | `Employees` | sales_admin, hr_admin, management | Team employee list |
-| `/sales/settings` | `Settings` | sales_admin | Department settings |
-| `/sales/profile` | `Profile` | sales_admin, sales_member | Own profile |
-
-#### Production Department
-
-| Path | Component | Required Role | Purpose |
-|---|---|---|---|
-| `/production/dashboard` | `ProductionPanel` | production_admin, production_member | Production metrics dashboard |
-| `/production/deliverables` | `Deliverables` | production_admin, production_member | Deliverable lifecycle management |
-| `/production/projects` | `Projects` | production_admin, production_member | Project view and assignment |
-| `/production/tasks` | `Tasks` | production_admin, production_member | Task management |
-| `/production/files` | `AdminFiles` | production_admin, production_member | File management |
-| `/production/revisions` | `AdminRevisions` | production_admin, production_member | Client revision requests |
-| `/production/reports` | `Reports` | production_admin, production_member | Production reports |
-| `/production/notifications` | `AdminNotifications` | production_admin, production_member | Notifications |
-| `/production/users` | `Employees` | production_admin, hr_admin, management | Team employee list |
-| `/production/settings` | `Settings` | production_admin | Department settings |
-| `/production/profile` | `Profile` | production_admin, production_member | Own profile |
-
-#### Marketing Department
-
-| Path | Component | Required Role | Purpose |
-|---|---|---|---|
-| `/marketing/dashboard` | `MarketingPanel` | marketing_admin, marketing_member | Marketing metrics dashboard |
-| `/marketing/leads` | `MarketingLeads` | marketing_admin, marketing_member | Lead attribution view |
-| `/marketing/tasks` | `Tasks` | marketing_admin, marketing_member | Task management |
-| `/marketing/social` | `SocialTracking` | marketing_admin, marketing_member | Social link tracking |
-| `/marketing/files` | `AdminFiles` | marketing_admin, marketing_member | File management |
-| `/marketing/reports` | `Reports` | marketing_admin, marketing_member | Marketing reports |
-| `/marketing/notifications` | `AdminNotifications` | marketing_admin, marketing_member | Notifications |
-| `/marketing/email/campaigns` | `Campaigns` | marketing_admin, marketing_member | Email campaigns |
-| `/marketing/email/templates` | `Templates` | marketing_admin, marketing_member | Email templates |
-| `/marketing/email/audience` | `Audience` | marketing_admin, marketing_member | Audience management |
-| `/marketing/email/analytics` | `Analytics` | marketing_admin | Campaign analytics |
-| `/marketing/email/automation` | `Automation` | marketing_admin | Automation rules |
-| `/marketing/users` | `Employees` | marketing_admin, hr_admin, management | Team employee list |
-| `/marketing/settings` | `Settings` | marketing_admin | Department settings |
-| `/marketing/profile` | `Profile` | marketing_admin, marketing_member | Own profile |
-
-#### HR Department
-
-| Path | Component | Required Role | Purpose |
-|---|---|---|---|
-| `/hr/dashboard` | `HRPanel` | hr_admin, hr_member | HR metrics dashboard |
-| `/hr/users` | `Employees` | hr_admin, management | Employee management |
-| `/hr/payroll` | `Payroll` | hr_admin, hr_member | Payroll management |
-| `/hr/leave` | `LeaveRequests` | hr_admin, hr_member | Leave request management |
-| `/hr/attendance` | `Attendance` | hr_admin, hr_member | Attendance tracking |
-| `/hr/tasks` | `Tasks` | hr_admin, hr_member | HR tasks |
-| `/hr/files` | `AdminFiles` | hr_admin, hr_member | File management |
-| `/hr/reports` | `Reports` | hr_admin | HR reports |
-| `/hr/notifications` | `AdminNotifications` | hr_admin, hr_member | Notifications |
-| `/hr/settings` | `Settings` | hr_admin | Department settings |
-| `/hr/profile` | `Profile` | hr_admin, hr_member | Own profile |
-
-#### Management
-
-| Path | Component | Required Role | Purpose |
-|---|---|---|---|
-| `/management/dashboard` | `ManagementPanel` | management | Executive dashboard |
-| `/management/projects` | `Projects` | management | Cross-department project view |
-| `/management/clients` | `Clients` | management | Client overview |
-| `/management/billing` | `AdminBilling` | management | Invoice approval and management |
-| `/management/reports` | `Reports` | management | Cross-department reports |
-| `/management/tasks` | `Tasks` | management | Task overview |
-| `/management/deliverables` | `Deliverables` | management | Deliverable status view |
-| `/management/revisions` | `AdminRevisions` | management | Revision request management |
-| `/management/files` | `AdminFiles` | management | File management |
-| `/management/audit-logs` | `AuditLogs` | management | Audit log access |
-| `/management/notifications` | `AdminNotifications` | management | Notifications |
-| `/management/users` | `Employees` | management, hr_admin | Employee management |
-| `/management/profile` | `Profile` | management | Own profile |
-
-#### Client Portal
-
-| Path | Component | Required Role | Purpose |
-|---|---|---|---|
-| `/client/dashboard` | `ClientPanel` | client | Own project/billing summary |
-| `/client/projects` | `MyProjects` | client | Own projects (read-only) |
-| `/client/billing` | `ClientBilling` | client | Own invoices (read-only) |
-| `/client/files` | `ClientFiles` | client | Files shared with client |
-| `/client/revisions` | `MyRevisions` | client | Submit and track revision requests |
-| `/client/notifications` | `ClientNotifications` | client | Own notifications |
-| `/client/profile` | `Profile` | client | Edit own profile |
-
-#### System
-
-| Path | Component | Purpose |
-|---|---|---|
-| `*` | `NotFound` | 404 fallback for all unmatched paths |
+**Route/menu consistency (verified Phase 8):** every route resolves to a real lazy-imported file; zero duplicate path registrations; every menu link resolves to a real route. One confirmed gap: `it_member`'s sidebar has no link to `/it/reports` even though the route exists and is correctly guarded for that role (only `it_admin`'s menu links it) — reachable only by typing the URL.
 
 ---
 
 <a name="section-5"></a>
 ## SECTION 5 — PAGE INVENTORY
 
-### 5.1 Dashboard Pages
+**83** `.tsx` files under `src/pages/` (re-counted 2026-07-17; the prior "~92" figure was stale) — **79** are actual routable pages; the other 4 (`Admin/ClientModal.tsx`, `Admin/InvoiceModal.tsx`, `Admin/NotificationModal.tsx`, `Admin/ProjectModal.tsx`) are modal sub-components colocated in `Admin/` and never imported by `src/App.tsx` directly. `src/App.tsx` itself lazy-imports 74 distinct page components (fewer than 79, since several — e.g. `Admin/Clients.tsx`, `Common/Tasks.tsx`, `HR/Employees.tsx` — are reused across multiple role-specific routes). Rather than one entry per page (see `PHASE4_FRONTEND_AUDIT_REPORT.md` and `PHASE8_FINAL_PRODUCTION_AUDIT_REPORT.md` for exhaustive per-page findings), this section maps each functional area to its backing controller and current status:
 
-#### SuperAdminPanel (`/super-admin/dashboard`)
-- **Purpose:** Platform-level operational overview — all departments, all clients, system health
-- **Data Source:** Aggregated from `mock_profiles`, `optivax_clients`, `mock_projects`, `mock_invoices`
-- **CRUD:** Read-only display
-- **Dependencies:** All service layers
-
-#### AdminPanel (`/admin/dashboard`)
-- **Purpose:** Admin operations hub for super_admin role — recent activity, quick links
-- **Data Source:** Same as SuperAdminPanel
-- **CRUD:** Read-only
-- **Dependencies:** Cross-service aggregation
-
-#### SalesPanel (`/sales/dashboard`)
-- **Purpose:** Sales KPIs — total leads, conversion rate, revenue pipeline, top performers
-- **Data Source:** `mock_leads`, `optivax_clients`, `mock_invoices`
-- **CRUD:** Read-only
-- **Dependencies:** SalesLeads, Clients, Billing
-
-#### ProductionPanel (`/production/dashboard`)
-- **Purpose:** Production health — deliverable status counts, project progress, team workload
-- **Data Source:** `optivax_deliverables`, `mock_projects`, `mock_tasks`
-- **CRUD:** Read-only
-- **Dependencies:** Deliverables, Projects, Tasks
-
-#### MarketingPanel (`/marketing/dashboard`)
-- **Purpose:** Marketing KPIs — campaign performance, email open rates, social clicks, lead attribution
-- **Data Source:** `email_campaigns`, `social_links`, `social_clicks`, `mock_leads`
-- **CRUD:** Read-only
-- **Dependencies:** Email marketing, Social tracking, Leads
-
-#### HRPanel (`/hr/dashboard`)
-- **Purpose:** HR overview — headcount, leave summary, attendance rate, payroll status
-- **Data Source:** `mock_profiles`, `optivax_leave_requests`, `mock_attendance`, `optivax_employee_extra`
-- **CRUD:** Read-only
-- **Dependencies:** Employees, Leave, Attendance, Payroll
-
-#### ManagementPanel (`/management/dashboard`)
-- **Purpose:** Executive cross-department view — financial summary, HR analytics (including rejected leave count), project pipeline, department performance tiles
-- **Data Source:** All stores aggregated
-- **CRUD:** Read-only
-- **Dependencies:** All services
-
-#### ClientPanel (`/client/dashboard`)
-- **Purpose:** Client-facing summary — active projects, pending invoices, recent files, unread notifications
-- **Data Source:** `mock_projects`, `mock_invoices`, `mock_files`, `mock_notifications` filtered by clientId
-- **CRUD:** Read-only
-- **Dependencies:** Projects, Billing, Files, Notifications
-
-### 5.2 Client Management Pages
-
-#### Clients (`/admin/clients`, `/sales/clients`, etc.)
-- **Purpose:** Full client directory with search, filtering, status management
-- **Data Source:** `optivax_clients` via `ClientService`
-- **CRUD:** Full (super_admin, sales_admin) | VIEW+EDIT (sales_member, management) | VIEW (production_admin)
-- **Dependencies:** `useClients`, `ClientModal`, `ProjectService` (for project count display)
-- **Special:** Lead-to-client conversion preserves email as unique key; duplicate email prevented at server level
-
-#### ClientModal
-- **Purpose:** Create/edit client form within a modal dialog
-- **Data Source:** Inline form state → `ClientService.create/update`
-- **CRUD:** Create and Edit
-- **Dependencies:** `useClients`, `useAuth`
-
-### 5.3 Project Management Pages
-
-#### Projects (`/admin/projects`, `/production/projects`, etc.)
-- **Purpose:** Project list with status/priority/progress display and assignment management
-- **Data Source:** `mock_projects` via `ProjectService`
-- **CRUD:** Full (super_admin, management, sales_admin) | VIEW+Assignment (production_admin) | VIEW (members)
-- **Dependencies:** `useProjects`, `ProjectModal`, `useAuth`
-
-#### ProjectModal
-- **Purpose:** Create/edit project with 4-panel form: basic info, status/dates, budget, team assignment
-- **Data Source:** `mock_projects`, `mock_profiles`, `optivax_clients`
-- **CRUD:** Create + Edit
-- **Special:** Assignment panel visible to super_admin, management, production_admin, sales_admin. On assignment change: writes revision entry to `mock_revisions` + sends notification to newly added users.
-- **Dependencies:** `useClients`, `useAuth`, `safeParse`, `NotificationService`
-
-### 5.4 Task Pages
-
-#### Tasks (`/production/tasks`, `/hr/tasks`, `/marketing/tasks`, `/management/tasks`)
-- **Purpose:** Task management with status tracking, priority, assignment, project linking
-- **Data Source:** `mock_tasks` via TaskService
-- **CRUD:** Full (dept_admin) | Own tasks only (dept_member)
-- **Special:** Task assignee picker for dept_admin uses explicit allowlist `[dept_admin, dept_member]` — prevents cross-department assignment. Tasks must link to a projectId.
-- **Dependencies:** `useAuth`, `useTasks`, `useProjects`
-
-#### SalesTasks (`/sales/tasks`)
-- **Purpose:** Sales-specific task management with estimated deal value, notes, and lead linkage
-- **Data Source:** `mock_tasks` (sales-scoped)
-- **CRUD:** Full (sales_admin) | Own tasks (sales_member)
-- **Dependencies:** `useAuth`
-
-### 5.5 HR Pages
-
-#### Employees (`/hr/users`, `/admin/users`, `/management/users`, etc.)
-- **Purpose:** Employee directory with department filter, role display, designation, work mode, status
-- **Data Source:** `mock_profiles`, `optivax_employee_extra`
-- **CRUD:** Full (hr_admin, super_admin) | VIEW (management, dept_admin)
-- **Dependencies:** `useAuth`, UserService, `optivax_employee_extra` for salary/work mode data
-
-#### Payroll (`/hr/payroll`)
-- **Purpose:** Monthly payroll calculation display per employee including salary, leaves taken, net pay
-- **Data Source:** `mock_profiles`, `optivax_employee_extra`, `optivax_leave_requests`
-- **CRUD:** Read-only display
-- **Dependencies:** HR service, employee extras
-
-#### LeaveRequests (`/hr/leave`, `/admin/leave`)
-- **Purpose:** Leave request submission, approval (hr_admin), rejection, and calendar display
-- **Data Source:** `optivax_leave_requests`
-- **CRUD:** Full (hr_admin) | Submit own (hr_member)
-- **Dependencies:** `useAuth`
-
-#### Attendance (`/hr/attendance`, `/admin/attendance`)
-- **Purpose:** Daily attendance logging, status tracking (present/absent/late/on-leave)
-- **Data Source:** `mock_attendance`
-- **CRUD:** Full (hr_admin) | Own records (hr_member)
-- **Dependencies:** `useAuth`
-
-### 5.6 Sales Pages
-
-#### SalesLeads (`/sales/leads`)
-- **Purpose:** Lead pipeline management — source tracking, status progression, estimated value, lead-to-client conversion
-- **Data Source:** `mock_leads`
-- **CRUD:** Full (sales_admin) | Own leads (sales_member)
-- **Special:** Convert button checks for duplicate email before creating client record. On conversion: creates client, sends notification, removes converted lead.
-- **Dependencies:** `useLeads`, `useClients`, `NotificationService`
-
-#### SalesTargets (`/sales/targets`)
-- **Purpose:** Monthly/quarterly/annual target setting and achievement tracking
-- **Data Source:** In-component localStorage
-- **CRUD:** Full (sales_admin) | VIEW own (sales_member)
-- **Dependencies:** `useAuth`
-
-#### CampaignBudgets (`/sales/campaigns`)
-- **Purpose:** Marketing campaign budget allocation and spend tracking
-- **Data Source:** In-component localStorage
-- **CRUD:** Full (sales_admin) | VIEW (sales_member)
-- **Dependencies:** `useAuth`
-
-#### TeamPerformance (`/sales/team-performance`)
-- **Purpose:** Sales team performance metrics — targets vs achieved, conversion rate per member
-- **Data Source:** SalesTargets + mock_leads aggregation
-- **CRUD:** Read-only
-- **Dependencies:** `useAuth`
-
-#### Commissions (`/sales/commissions`, `/admin/commissions`)
-- **Purpose:** Commission calculation and record management
-- **Data Source:** In-component localStorage
-- **CRUD:** Full (sales_admin, super_admin) | VIEW own (sales_member)
-- **Dependencies:** `useAuth`
-
-### 5.7 Production Pages
-
-#### Deliverables (`/production/deliverables`, `/management/deliverables`)
-- **Purpose:** Client deliverable tracking through 5 stages: Pending → In Progress → Review → Approved → Delivered
-- **Data Source:** `optivax_deliverables`
-- **CRUD:** Full lifecycle (production_admin) | Advance own (production_member, up to Review) | VIEW (management, client)
-- **Special:** Members can only advance deliverables they personally uploaded. Admin can approve (→ Approved) and mark delivered.
-- **Dependencies:** `useAuth`, `useClients`, `useProjects`
-
-### 5.8 Marketing Pages
-
-#### MarketingLeads (`/marketing/leads`)
-- **Purpose:** Lead attribution — which leads came from which marketing channel
-- **Data Source:** `mock_leads` (read-only view)
-- **CRUD:** VIEW only
-- **Dependencies:** `useLeads`
-
-#### SocialTracking (`/marketing/social`)
-- **Purpose:** Social media link management with click tracking, per-platform analytics, persistent metrics
-- **Data Source:** `social_links`, `social_clicks`, `social_account_metrics`
-- **CRUD:** Full (marketing_admin) | VIEW+EDIT (marketing_member)
-- **Dependencies:** `useSocialTracking`
-
-### 5.9 File Management Pages
-
-#### AdminFiles (`/*/files`)
-- **Purpose:** 4-step file upload modal (Client → Project → Visibility → File), file grid display with visibility badges
-- **Data Source:** `mock_files` via `FileService`
-- **CRUD:** Full (super_admin, management, production_admin, hr_admin, marketing_admin, sales_admin) | Upload+VIEW (all members)
-- **Special:** Visibility filter applied server-side per requesting role. After upload: revision entry created + notifications sent for specific/client/project-team visibility.
-- **Dependencies:** `useFiles`, `useAuth`, `safeParse` (for client/project/user data)
-
-#### ClientFiles (`/client/files`)
-- **Purpose:** Client-facing file view — only files with `visibility === "client"` and matching clientId
-- **Data Source:** `mock_files` filtered by server
-- **CRUD:** VIEW only
-- **Dependencies:** `useFiles`
-
-### 5.10 Billing Pages
-
-#### AdminBilling (`/admin/billing`, `/management/billing`, `/sales/billing`)
-- **Purpose:** Invoice list, create/edit invoice, payment marking, overdue detection
-- **Data Source:** `mock_invoices`, `mock_payments`
-- **CRUD:** Full (super_admin, management, sales_admin) | VIEW (sales_member)
-- **Special:** Edit button gated by `canEdit("billing")`. Pay button gated by `canApprove("billing")`. Pending invoices past dueDate auto-flagged "overdue" by server.
-- **Dependencies:** `useInvoices`, `useAuth`, `InvoiceModal`
-
-#### ClientBilling (`/client/billing`)
-- **Purpose:** Client-facing invoice list — own invoices only, with payment status display
-- **Data Source:** `mock_invoices` filtered by clientId
-- **CRUD:** VIEW only
-- **Dependencies:** `useInvoices`
-
-### 5.11 Other Pages
-
-#### AdminRevisions (`/admin/revisions`, `/production/revisions`, `/management/revisions`)
-- **Purpose:** Revision request management — status updates, project/client linkage display
-- **Data Source:** `mock_revisions`
-- **CRUD:** Full (super_admin, production_admin) | Edit status (management) | VIEW (production_member — own projects only)
-- **Special:** Access denied component shown if `!canView("revisions")`. Update Status column only rendered when `canEdit("revisions")`.
-- **Dependencies:** `useAuth`, `useClients`, `api`
-
-#### MyRevisions (`/client/revisions`)
-- **Purpose:** Client-facing revision request submission and status tracking
-- **Data Source:** `mock_revisions` filtered by clientId === user.id
-- **CRUD:** Create + VIEW own
-- **Dependencies:** `useAuth`, `useProjects`
-
-#### AuditLogs (`/admin/audit-logs`, `/management/audit-logs`)
-- **Purpose:** Complete platform action history with search, date filter, entity type filter
-- **Data Source:** `optivax_audit_logs` via `AuditLogService`
-- **CRUD:** VIEW only
-- **Dependencies:** `AuditLogService`
-
-#### Reports (`/*/reports`)
-- **Purpose:** Role-filtered report dashboard — KPIs relevant to the requesting department
-- **Data Source:** Aggregated across all relevant stores
-- **CRUD:** VIEW + EXPORT
-- **Dependencies:** All domain services (filtered by role)
-
-#### Settings (`/*/settings`)
-- **Purpose:** Department-level settings (notifications, display preferences)
-- **Data Source:** User preferences localStorage
-- **CRUD:** Edit own preferences
-- **Dependencies:** `useAuth`
-
-#### Profile (`/*/profile`)
-- **Purpose:** Edit own profile — name, company, avatar, bio, contact info
-- **Data Source:** `mock_profiles` via `ProfileService`
-- **CRUD:** Edit own record
-- **Dependencies:** `useAuth`, `updateProfile`
-
-#### Departments (`/super-admin/departments`)
-- **Purpose:** Department create/edit/delete with head assignment
-- **Data Source:** In-component localStorage
-- **CRUD:** Full (super_admin only)
-- **Dependencies:** `useAuth`
-
-#### Email Marketing Suite
-- **Campaigns** — Create/send/schedule email campaigns with audience tags and template selection
-- **Templates** — Rich-text email template authoring (welcome, newsletter, reminder, custom)
-- **Audience** — Contact audience management with tag-based segmentation
-- **Analytics** — Campaign open rate, click rate, send volume charts
-- **Automation** — Trigger-based automation rules (new_client, invoice_overdue, project_complete)
+| Area | Frontend pages | Backend controller(s) | Status |
+|---|---|---|---|
+| Dashboards | `Dashboard/{SuperAdminPanel,AdminPanel,SalesPanel,ProductionPanel,MarketingPanel,HRPanel,ManagementPanel,ITSupportPanel,ClientPanel}.tsx` | aggregated reads across multiple repos | Real, read-only aggregation |
+| Clients | `Admin/Clients.tsx` + `ClientModal.tsx` | `ClientRoutes.php` → `ClientRepository` | Real CRUD, client-scoped for `client` role |
+| Projects | `Admin/Projects.tsx` + `ProjectModal.tsx` | `ProjectRoutes.php` → `ProjectRepository` | Real CRUD |
+| Tasks | `Common/Tasks.tsx`, `Sales/SalesTasks.tsx` | `TaskRoutes.php` → `TaskRepository` | Real CRUD, Kanban board memoized (Phase 4) |
+| Deliverables | `Production/Deliverables.tsx` | `DeliverableRoutes.php` | Real CRUD, but **no loading/error state — Phase 8 Critical C4** |
+| Client Ownership | `Production/ClientOwnership.tsx`, `MyClients.tsx` | `ClientOwnershipRoutes.php` | Real, RBAC + audit-logged (2026-07-02 module) |
+| Files | `Admin/Files.tsx`, `Client/Files.tsx` | `FileRoutes.php` → `UploadService`/`FileRepository` | Real upload (MIME allow-list + size cap + magic-byte check, Phase 7), but **visibility rules stored, never enforced on read — Phase 8 High H5** |
+| Billing/Invoices | `Admin/Billing.tsx`, `Client/Billing.tsx`, `InvoiceModal.tsx` | `InvoiceRoutes.php`, `PaymentRoutes.php`, `StripeRoutes.php` | Real, including a genuine Stripe PaymentIntent flow (server-verified) |
+| Revisions | `Admin/Revisions.tsx`, `Client/MyRevisions.tsx` | `RevisionRoutes.php` | Real CRUD |
+| Notifications | `Admin/Notifications.tsx`, `Client/Notifications.tsx` | `NotificationRoutes.php`, `NotificationStreamController.php` (SSE) | Real delivery (SSE + cross-tab sync), but **creation is client-triggered only — no server-side business-event triggers exist yet** |
+| Audit Logs | `Admin/AuditLogs.tsx`, `Admin/SecurityAuditLogs.tsx` | `AuditLogRoutes.php`, `SecurityAuditLogRoutes.php` | Two separate logs: `SecurityAuditLog` (auth events, thoroughly server-triggered) vs. general `AuditLog` (**client-triggered only** — a real integrity gap, Phase 7/8) |
+| Employees / HR | `HR/Employees.tsx`, `Payroll.tsx`, `SalarySlips.tsx`, `BulkSalarySlips.tsx`, `LeaveRequests.tsx`, `Attendance*.tsx` (7 sub-pages), `AdvanceSalary*.tsx` | `ProfileRoutes.php`, `PayrollRoutes.php`, `LeaveRequestRoutes.php`, `AttendanceRoutes.php`, `EmployeeExtraRoutes.php` | Payroll calculation is real and consistent (single source of truth, server invariant enforced); **employee↔department assignment is broken — Phase 8 Critical C2** |
+| IT Support | `ITSupport/{Tickets,Devices,DeviceLogs,AttendanceDashboard,AttendanceExceptions,AttendanceReports}.tsx` | `ItSupportRoutes.php`, `BiometricAttendanceRoutes.php`, `ActivityRoutes.php` | Real CRUD. `Devices.tsx` (2026-07-17) also drives a full device API-key lifecycle — masked `••••••••1234` display, confirm-then-generate/rotate flow, one-time plaintext reveal with copy — restricted server-side to `super_admin`/`it_admin` (see Section 12.8). Punch ingestion is now Bridge-push-only by default; the legacy direct-TCP "Test Connection"/"Sync Now" buttons still exist but are disabled server-side unless an operator opts into legacy LAN sync (Section 6.4). |
+| Marketing | `Marketing/{ContentCalendar,Leads,SocialTracking}.tsx`, `Admin/Email/*.tsx` | `MarketingCampaignRoutes.php`, `ContentCalendarRoutes.php`, `SocialTrackingRoutes.php`, `EmailMarketingRoutes.php` | Content calendar/social tracking real; **email campaigns cannot actually send — Phase 8 High H3** (compose/template UI works, "Send Now" only flips a status field); **automation is a UI-only toggle, zero enforcement — Phase 8 Medium M2** |
+| Sales | `Sales/{Leads,SalesTargets,CampaignBudgets,TeamPerformance,Commissions}.tsx` | `LeadRoutes.php`, `SalesOpsRoutes.php`, `SalesWidgetRoutes.php`, `CommissionRoutes.php` | Leads/targets/campaigns real; **commission amounts are 100% manually entered, no auto-calc from closed deals — Phase 8 Medium M1** |
+| Budget | `Budget/BudgetManagement.tsx`, `Employee/MyBudget.tsx` | `BudgetRoutes.php` → `BudgetController` (hand-rolled department scoping) | Allocation/request/approval workflow real; **`usedAmount` is permanently frozen — never derived from real spend — Phase 8 High H4** |
+| Reports | `Common/Reports.tsx` | **none** | **100% hardcoded mock data, zero backend — Phase 8 Critical C5** (newly discovered, not in any prior phase) |
+| Conversations | `Conversations/ClientConversations.tsx`, `Client/Messages.tsx` | `ConversationRoutes.php` | Real, sales roles explicitly excluded by design |
+| Company Settings | `Admin/Settings.tsx` | `CompanySettingsRoutes.php` | Real, singleton row, object-cached (Phase 6) |
+| Departments | `Admin/Departments.tsx` | `DepartmentRoutes.php` → `DepartmentRepository` | Real CRUD, **but disconnected from the employee-department field — see C2** |
 
 ---
 
 <a name="section-6"></a>
-## SECTION 6 — DATA ARCHITECTURE
+## SECTION 6 — BACKEND ARCHITECTURE (WordPress Plugin)
 
-### 6.1 Storage Architecture
+**Location:** `wordpress-backend/optivax-erp-backend/`. A custom WordPress plugin — not WP core post types/CRUD, its own REST namespace (`saas/v1`) and its own MySQL tables (prefixed, not `wp_posts`).
 
-All data is persisted in `localStorage` under 14 namespaced keys:
+### 6.1 Directory Structure
+
+Counts re-verified 2026-07-17 directly against source (superseding the original Phase 2A-era figures below, which had drifted):
 
 ```
-localStorage
-├── mock_profiles          (users / employees)
-├── mock_tasks             (cross-dept tasks)
-├── mock_notifications     (all role notifications)
-├── optivax_clients        (client records)
-├── mock_projects          (project records)
-├── mock_invoices          (invoice records)
-├── mock_files             (file metadata)
-├── mock_revisions         (revision requests)
-├── mock_payments          (payment records)
-├── optivax_leave_requests (HR leave data)
-├── mock_attendance        (HR attendance)
-├── optivax_deliverables   (production deliverables)
-├── optivax_audit_logs     (system audit trail)
-├── optivax_employee_extra (salary/workmode extras)
-├── mock_leads             (sales leads)
-├── mock_passwords         (hashed credentials)
-├── mock_session           (active session token)
-├── social_links           (social platform links)
-├── social_clicks          (click event tracking)
-├── social_account_metrics (per-account analytics)
-├── email_templates        (email template content)
-├── email_campaigns        (campaign records)
-├── email_automations      (automation rules)
-├── mock_organizations     (organization records)
-└── mock_subscriptions     (subscription records)
+optivax-erp-backend/
+├── optivax-erp-backend.php   Plugin bootstrap — defines OPTIVAX_ERP_DB_VERSION (1.7.0),
+│                              autoloader, registers all hooks/middleware/routes/cron.
+│                              NOTE: the file's own docblock header still reads
+│                              "Version: 2.0.0-phase2a" — not bumped alongside
+│                              OPTIVAX_ERP_VERSION ("2.6.0-bridge-ready"); cosmetic drift,
+│                              see Section 13 Minor.
+├── controllers/               26 files — one per resource, or BaseCrudController for generic CRUD
+├── routes/                    39 files — register_rest_route() calls, one per resource,
+│                              all explicitly listed (not globbed) in routeFiles()
+├── repositories/               55 files — DB access layer, most extend AbstractRepository
+│                              (shared list/find/create/update/delete + pagination/search/safety-limit)
+├── middleware/                 8 files: AuthMiddleware, CsrfMiddleware, RbacMiddleware,
+│                              ClientScopeMiddleware, DepartmentScopeMiddleware,
+│                              ErrorBoundaryMiddleware, PasswordGateMiddleware, and
+│                              DeviceApiKeyMiddleware (2026-07-17 — see Section 6.4/12.8)
+├── helpers/                    17 files: Jwt, RateLimiter, PasswordPolicy, Sanitize, Validator,
+│                              ApiResponse, SecurityHeaders, SecurityAuditLog, DepartmentMapper,
+│                              RbacMatrix, UserHierarchy, DeviceKeyHasher (2026-07-17), ...
+├── services/                   3 files: AuthService (session/token lifecycle),
+│                              BiometricAttendanceService, DeviceSyncService (Section 6.4)
+├── connectors/zkteco/          4 files — legacy direct-TCP ZKTeco protocol client
+│                              (ZKTecoConnector, ZKProtocol, AttendanceDownloader,
+│                              AttendanceParser), all @deprecated as of 2026-07-17 (Section 6.4)
+├── notifications/              NotificationService
+├── mail/                       MailService + templates/*.php (5 templates, all output-escaped)
+├── uploads/                    UploadService (MIME allow-list, size cap, magic-byte check — Phase 7)
+├── database/migrations/        17 files on disk — 16 applied through Migrator::migrations(),
+│                              plus ForeignKeyMigration applied separately (dbDelta can't parse
+│                              FK clauses reliably — see Section 7.2)
+└── cron/                       6 files/schedules — EmailQueueWorker (every minute), AutomationCronWorker
+                               (hourly), BiometricAttendanceCronWorker (hourly), DeviceSyncCron (every
+                               5 min, @deprecated no-op by default — Section 6.4), ActivitySessionCronWorker
+                               (hourly, 8h force-logout cap), ActivityHeartbeatCronWorker (every minute,
+                               online/offline presence)
 ```
 
-### 6.2 User / Profile
+### 6.2 Request Lifecycle
 
-**Storage:** `mock_profiles`
-
-```typescript
-interface Profile {
-  id: string               // "u1", "u2", ... "u33" (seed) | "u{ts}-{rand}" (created)
-  email: string
-  full_name: string
-  avatar_url?: string
-  company?: string
-  role: UserRole
-  departmentId?: string    // "dept-sales" | "dept-production" | "dept-marketing" | "dept-hr"
-  created_at?: string
-}
-
-interface User extends Profile {
-  name: string             // alias for full_name
-  password: string
-  designation?: string
-  phone?: string
-  address?: string
-  city?: string
-  bio?: string
-  joinDate: string
-  lastLogin?: string
-}
+```
+Request → WordPress core → rest_api_init
+  │
+  ├─ SecurityHeaders::applyBaselineHeaders()   (X-Content-Type-Options, X-Frame-Options,
+  │                                              CSP, Referrer-Policy, Permissions-Policy, HSTS)
+  ├─ SecurityHeaders::applyCorsHeaders()       (origin allow-list echo, never "*")
+  ├─ AuthMiddleware::restAuthenticationErrors  (decodes JWT cookie once per request,
+  │                                              wp_set_current_user() if valid)
+  ├─ PasswordGateMiddleware::enforce           (blocks all but /change-password if
+  │                                              must_change_password is set)
+  ├─ CsrfMiddleware::check   [priority 5]      (state-changing methods + authenticated
+  │                                              cookie → require matching X-CSRF-Token)
+  ├─ ErrorBoundaryMiddleware::wrap [priority 10] (catches any \Throwable, logs internally,
+  │                                              returns generic 500 — never leaks trace/message)
+  │
+  └─ Controller method
+        ├─ AuthMiddleware::currentClaims()/currentUserId()/currentRole()
+        ├─ RbacMiddleware::authorize($domain, $action)   ← unscoped everywhere except
+        │                                                   BudgetController's hand-rolled scoping
+        ├─ Validator::check() / Sanitize::*()
+        ├─ Repository call ($wpdb, always parameterized via $wpdb->prepare())
+        └─ ApiResponse::ok()/error()/validationError()/forbidden()/unauthorized()
+              → {success, data, error, meta?, details?} — every response, always this shape
 ```
 
-**Relationships:** User → Client (one-to-many: client accounts are profiles with `role: "client"`). User → Task (one-to-many via `assignedTo`). User → Project (many-to-many via `assignedTo[]`). User → File (one-to-many via `uploadedById`).
+### 6.3 Autoloading & Bootstrap
 
-**Ownership Rules:** Users can only edit their own profile. HR admin can edit any profile in their department. Super admin can edit all.
+`optivax-erp-backend.php` defines a lightweight PSR-4-ish autoloader (`OptivaxERP\Controllers\X` → `controllers/X.php`) and, in its constructor, wires every hook in one place: route registration (`rest_api_init`), the JWT auth filter (`rest_authentication_errors`), the password gate (`rest_pre_dispatch`), CSRF + error-boundary middleware (`rest_dispatch_request`), SMTP config (`phpmailer_init`), security headers (`rest_api_init`), and all 6 cron schedules. `Migrator::maybeUpgrade()` runs unconditionally on every request (cheap — a single `get_option()` check) so a schema bump reaches an already-deployed site on its next request, not just on plugin reactivation.
 
-### 6.3 Client
+### 6.4 Biometric Device Integration — Bridge-Ready Architecture (added 2026-07-17)
 
-**Storage:** `optivax_clients`
+**Why this exists:** the ERP is hosted on shared hosting (Hostinger). A ZKTeco K40 biometric device sits inside an office LAN, which shared hosting cannot open a TCP socket into — there is no network path from the public internet to a private office LAN without a VPN/port-forward the hosting provider doesn't provide. The original biometric pipeline (built Phase 2A/2B, documented in earlier revisions of this document and in memory as "biometric-system-analysis") assumed the ERP itself would dial the device directly over TCP (port 4370, ZKTeco standalone protocol). That assumption doesn't hold for this deployment target, so the backend was refactored into a **Bridge-Ready** architecture: the ERP is now a pure REST API server that only ever *receives* punches over HTTPS; a separate **Local Bridge Application** (not built as part of this work — explicitly out of scope) runs inside the office LAN, talks to the device itself, and pushes punches to the ERP.
 
-```typescript
-interface Client {
-  id: string               // matches Profile.id for portal-linked clients
-  name: string
-  email: string
-  phone: string
-  company: string
-  address: string
-  city: string
-  status: "active" | "inactive"
-  joinDate: string
-  totalProjects: number    // denormalized count
-  totalBilled: number      // denormalized sum
-  lastPaymentDate?: string
-  tags?: string[]
-  contactName?: string
-  companyName?: string
-  createdAt: string
-  createdBy: string        // user ID of creator
-  createdByName: string
-  assignedProductionMembers: string[]  // user IDs
-}
+```
+Physical Device (ZKTeco K40, office LAN)
+        │  TCP, port 4370 (LAN-local only)
+        ▼
+Local Bridge Application  (NOT part of this codebase — a future, separate app)
+        │  HTTPS POST, X-Device-Key header
+        ▼
+POST /it/devices/{deviceId}/punches/import   ← the ONLY supported path into the ERP
+        │
+        ▼
+BiometricAttendanceService::ingestBatch()   ← UNCHANGED — same chunked ingest,
+        │                                      dedup, aggregation pipeline as before
+        ▼
+it_biometric_punches → attendance_records (same aggregation AttendanceController's
+                        manual self-check-in already used — HR/Payroll/Reports need
+                        zero changes to reflect Bridge-sourced data)
 ```
 
-**Relationships:** Client → Project (one-to-many via `clientId`). Client → Invoice (one-to-many via `clientId`). Client → File (one-to-many via `clientId`). Client → Revision (one-to-many via `clientId`).
+**What changed vs. the original design:**
+- **Legacy direct-TCP path deprecated, not deleted.** `DeviceSyncService.php`, `connectors/zkteco/{ZKTecoConnector,ZKProtocol,AttendanceDownloader,AttendanceParser}.php`, and the `DeviceSyncCron` 5-minute tick are all still present and functional, but gated behind a WP option (`optivax_erp_enable_lan_device_sync`, a checkbox under Settings → OptiVax ERP, **off by default**). With it off, `DeviceSyncService::testConnection()`/`syncDevice()` throw a clear `\RuntimeException` explaining why, and the cron tick silently no-ops. This flag exists only for the edge case of an on-premise/LAN-hosted deployment of this same ERP; it must stay off on Hostinger.
+- **`POST /it/devices/{deviceId}/punches/import` hardened** as the primary/production endpoint (`BiometricAttendanceController::importPunches()`): request caps (5,000 punches / 8MB body → `413`), dual per-device + per-IP rate limiting (`RateLimiter` helper, previously only used by login), an `Idempotency-Key` header (new `it_device_import_requests` table, 14-day retention) so a Bridge can safely retry an upload after a timeout without double-counting — on top of, not instead of, the pre-existing exact-punch `UNIQUE KEY` dedup and the 120-second near-duplicate window `BiometricAttendanceService` already had. Future-timestamped punches (>5 min clock skew) are now rejected; old/offline punches (yesterday, last week, last month) are unaffected — offline-catch-up support was an explicit requirement.
+- **Response envelope gained** `processingTimeMs`, `deviceTime` (echoed from an optional request field), `serverTime` — lets a Bridge detect its own clock drift.
+- **Device status is now Bridge-reported, not TCP-polled.** New `it_devices` columns (`bridge_id`, `bridge_version`, `bridge_hostname`, `bridge_ip`, `bridge_os`, `bridge_last_seen`, `bridge_latency_ms`, `last_upload_duration_ms`, `last_upload_count`, `last_failed_upload`) are populated from an optional `bridge: {...}` object in the import request body, updated on every call (success or failure) via `ItDeviceRepository::recordBridgeStatus()`.
+- **`it_device_logs` gained richer per-upload audit fields**: `rejected_count`, `unmapped_count`, `punch_count`, `source_ip`, `bridge_id`, `idempotency_key` — alongside the existing full request/response body logging (`Logger`, channel `device-sync-http`, file-based).
+- **Device authentication hardened** — see Section 12.8; this is also where the 2026-07-17 Generate/Rotate API Key UI (Section 5, IT Support row) plugs in.
 
-**Ownership Rules:** Clients created by sales_admin or super_admin. `assignedProductionMembers` controls which production members see this client.
+**Everything downstream of ingestion is explicitly unchanged**, per the original task's hard constraint: `BiometricAttendanceService::aggregateDay()`, the attendance-exception sweep, payroll/reports/dashboard consumption of `attendance_records` — none of it was touched. This was verified by tool-call record each time (not just diff), since the whole `wordpress-backend/` tree is untracked in this repo's current git state (Section 14 build note).
 
-### 6.4 Project
-
-**Storage:** `mock_projects`
-
-```typescript
-interface Project {
-  id: string               // "proj-{timestamp}" | "proj-1" through "proj-10" (seed)
-  clientId: string         // FK → Client.id
-  name: string
-  description: string
-  status: "not-started" | "in-progress" | "completed" | "on-hold"
-  priority: "low" | "medium" | "high"
-  startDate: string        // ISO date string
-  deadline: string         // ISO date string
-  assignedTo: string[]     // FK[] → Profile.id
-  progress: number         // 0-100
-  budget: number
-  spent: number
-  files: string[]          // legacy file IDs
-  createdAt: string
-  updatedAt: string
-}
-```
-
-**Relationships:** Project → Client (many-to-one). Project → Task (one-to-many via `projectId`). Project → Deliverable (one-to-many via `projectId`). Project → File (one-to-many via `projectId`). Project → Revision (one-to-many via `projectId`).
-
-**Ownership Rules:** Only super_admin, management, sales_admin, and production_admin can create or edit projects. Assignment changes trigger revision entries and notifications.
-
-### 6.5 Task
-
-**Storage:** `mock_tasks`
-
-```typescript
-interface Task {
-  id: string               // "t1"-"t12" (seed) | "task-{timestamp}"
-  title: string
-  description?: string
-  status: "todo" | "in-progress" | "done" | "blocked"
-  priority: "low" | "medium" | "high"
-  assignedTo?: string      // FK → Profile.id
-  assigneeId?: string      // same as assignedTo (legacy alias)
-  assignee?: string        // display name
-  projectId?: string       // FK → Project.id
-  dueDate?: string
-  assigneeDept?: string    // "dept-sales" | "dept-production" | etc.
-  assigneeRole?: UserRole
-  budget?: number
-  budgetUsed?: number
-  category?: string
-  createdAt: string
-  updatedAt?: string
-}
-```
-
-**Relationships:** Task → Project (many-to-one). Task → Profile (many-to-one via `assignedTo`).
-
-**Ownership Rules:** Dept admins create and assign tasks within their department. Members can only update status on tasks assigned to them. Assignee picker enforces department scope (`[dept_admin, dept_member]` allowlist).
-
-### 6.6 File
-
-**Storage:** `mock_files`
-
-```typescript
-interface FileRecord {
-  id: string               // "file-{timestamp}"
-  name: string
-  size: number             // bytes
-  type: string             // MIME type
-  uploadedBy: string       // display name of uploader
-  uploadedById?: string    // FK → Profile.id
-  uploaderDept?: string    // "dept-marketing" | "dept-production" | etc.
-  uploadDate: string       // ISO timestamp
-  projectId?: string       // FK → Project.id (optional)
-  clientId?: string        // FK → Client.id (optional)
-  url?: string             // object URL or "#"
-  visibility?: FileVisibility
-  visibleTo?: string[]     // FK[] → Profile.id (for "specific" visibility)
-  description?: string
-  projectName?: string     // denormalized
-}
-
-type FileVisibility = "private" | "department" | "specific" | "project-team" | "client"
-```
-
-**Relationships:** File → Project (many-to-one, optional). File → Client (many-to-one, optional). File → Profile (many-to-one via `uploadedById`). File → Revision (implied: upload creates revision entry).
-
-**Ownership Rules:** Private files: only uploader. Department: all members of `uploaderDept`. Specific: only listed `visibleTo` IDs. Project-team: all `project.assignedTo` members. Client: only the matching client user.
-
-### 6.7 Deliverable
-
-**Storage:** `optivax_deliverables`
-
-```typescript
-interface Deliverable {
-  id: string               // "del-{timestamp}"
-  clientId: string         // FK → Client.id
-  clientName: string       // denormalized
-  projectId?: string       // FK → Project.id
-  projectName?: string     // denormalized
-  title: string
-  description: string
-  status: "Pending" | "In Progress" | "Review" | "Approved" | "Delivered"
-  dueDate: string
-  uploadedBy: string       // FK → Profile.id
-  uploadedByName: string   // denormalized
-  uploadedAt: string
-  reviewedBy?: string      // FK → Profile.id
-  reviewedByName?: string
-  reviewedAt?: string
-  approvedBy?: string      // FK → Profile.id
-  approvedByName?: string
-  approvedAt?: string
-  fileUrl?: string
-  notes?: string
-}
-```
-
-**Relationships:** Deliverable → Client (many-to-one). Deliverable → Project (many-to-one, optional). Deliverable → Profile (many-to-one via `uploadedBy`, `reviewedBy`, `approvedBy`).
-
-**Ownership Rules:** Members can only advance deliverables where `uploadedBy === user.id`, limited to Pending→In Progress→Review. Admins can transition to Approved and Delivered.
-
-### 6.8 Invoice
-
-**Storage:** `mock_invoices`
-
-```typescript
-interface Invoice {
-  id: string               // "inv-{timestamp}" | "inv-1" through "inv-13" (seed)
-  number: string           // "INV-YYYY-{padded}"
-  clientId: string         // FK → Client.id
-  projectId?: string       // FK → Project.id
-  description: string
-  amount: number
-  status: "paid" | "pending" | "overdue"
-  issueDate: string
-  dueDate: string
-  paidDate?: string
-  items: InvoiceItem[]
-  notes?: string
-  invoice_url?: string
-}
-
-interface InvoiceItem {
-  description: string
-  quantity: number
-  unitPrice: number
-  total: number
-}
-```
-
-**Relationships:** Invoice → Client (many-to-one). Invoice → Project (many-to-one, optional). Invoice → Payment (one-to-many).
-
-**Ownership Rules:** Only management, sales_admin, and super_admin can create/edit invoices. Only management and super_admin can approve (mark paid). Server auto-marks pending invoices as overdue if `dueDate < today`.
-
-### 6.9 Payment
-
-**Storage:** `mock_payments`
-
-```typescript
-interface Payment {
-  id: string               // "pay-{timestamp}" | "pay-1" through "pay-10" (seed)
-  invoiceId: string        // FK → Invoice.id
-  amount: number
-  date: string
-  method: "credit-card" | "bank-transfer" | "check" | "cash"
-  transactionId: string
-  notes?: string
-  checkImageUrl?: string
-  stripePaymentIntentId?: string
-  status?: string
-  created_at?: string
-}
-```
-
-**Relationships:** Payment → Invoice (many-to-one).
-
-**Ownership Rules:** Created automatically when invoice is marked paid. Amount must match invoice amount.
-
-### 6.10 Leave Request
-
-**Storage:** `optivax_leave_requests`
-
-```typescript
-interface LeaveRequest {
-  id: string
-  employeeId: string       // FK → Profile.id
-  employeeName: string     // denormalized
-  role: UserRole
-  department: string
-  type: "Annual" | "Sick" | "Personal" | "Unpaid" | "Maternity" | "Paternity"
-  startDate: string
-  endDate: string
-  days: number
-  reason: string
-  status: "Pending" | "Approved" | "Rejected"
-  submittedAt: string
-  reviewedBy?: string
-  reviewedAt?: string
-}
-```
-
-**Relationships:** LeaveRequest → Profile (many-to-one via `employeeId`).
-
-**Ownership Rules:** Employees submit own leave. HR admin approves/rejects all. Management can view all. Rejected count displayed in ManagementPanel dashboard.
-
-### 6.11 Attendance
-
-**Storage:** `mock_attendance`
-
-```typescript
-interface AttendanceRecord {
-  id: string
-  employeeId: string       // FK → Profile.id
-  employeeName: string
-  date: string
-  checkIn?: string         // HH:MM
-  checkOut?: string        // HH:MM
-  status: "present" | "absent" | "late" | "on-leave"
-  notes?: string
-}
-```
-
-**Relationships:** Attendance → Profile (many-to-one via `employeeId`).
-
-**Ownership Rules:** HR admin logs/edits all attendance. HR member views own records.
-
-### 6.12 Payroll / Employee Extras
-
-**Storage:** `optivax_employee_extra`
-
-```typescript
-interface EmployeeExtra {
-  userId: string           // FK → Profile.id
-  salary: number
-  salaryStatus: "Paid" | "Pending"
-  workMode: "Onsite" | "Remote" | "Hybrid"
-  leavesTaken: number
-}
-```
-
-**Relationships:** EmployeeExtra → Profile (one-to-one via `userId`).
-
-**Ownership Rules:** HR admin manages. Combined with leave data for net payroll calculation.
-
-### 6.13 Notification
-
-**Storage:** `mock_notifications`
-
-```typescript
-interface Notification {
-  id: string
-  userId: string           // FK → Profile.id (recipient)
-  type: "invoice" | "project" | "payment" | "system" | "profile" | "file"
-  title: string
-  message: string
-  read: boolean
-  createdAt: string
-  actionUrl?: string
-  actionLabel?: string
-}
-```
-
-**Relationships:** Notification → Profile (many-to-one via `userId`).
-
-**Ownership Rules:** Each user sees only own notifications (by userId). Super_admin sees all. Created automatically by: payment events, file share events, assignment changes, lead conversion, revision status changes.
-
-### 6.14 Audit Log
-
-**Storage:** `optivax_audit_logs`
-
-```typescript
-interface AuditLog {
-  id: string
-  action: string           // "CREATE" | "UPDATE" | "DELETE" | "LOGIN" | "EXPORT"
-  entityType: string       // "client" | "project" | "invoice" | "file" | etc.
-  entityId: string
-  entityName: string
-  performedBy: string      // FK → Profile.id
-  performedByName: string
-  performedByRole: UserRole
-  timestamp: string
-  description: string
-  department?: string
-  oldValue?: Record<string, unknown>
-  newValue?: Record<string, unknown>
-}
-```
-
-**Relationships:** AuditLog → Profile (many-to-one via `performedBy`).
-
-**Ownership Rules:** Append-only. Maximum 2000 entries (oldest pruned). Searchable by entity type, action, role, date range, full-text.
-
-### 6.15 Revision
-
-**Storage:** `mock_revisions`
-
-```typescript
-interface Revision {
-  id: string               // "rev-{timestamp}" | "rev-file-{timestamp}"
-  projectId: string        // FK → Project.id
-  clientId: string         // FK → Client.id
-  comment: string
-  status: "pending" | "in-progress" | "completed"
-  type?: "file_upload" | "assignment_change" | (client-submitted)
-  updatedBy?: string       // FK → Profile.id
-  created_at: string
-}
-```
-
-**Relationships:** Revision → Project (many-to-one). Revision → Client (many-to-one). Revision → Profile (many-to-one via `updatedBy`).
-
-**Ownership Rules:** Created by: client (manual request via portal), system (file upload audit), system (project assignment change). Production_member sees only revisions for projects they are assigned to.
+New migration: `DeviceBridgeMigration.php` (the `it_device_import_requests` idempotency-cache table — see Section 7.2). `OPTIVAX_ERP_DB_VERSION` bumped `1.6.0` → `1.7.0`; a one-time, idempotent backfill (`Migrator::backfillDeviceApiKeyHashes()`, runs on every activation/upgrade pass) hashes any pre-existing plaintext `api_key` into the new `api_key_hash` column so already-configured devices are never locked out by the auth-hardening change.
 
 ---
 
 <a name="section-7"></a>
-## SECTION 7 — WORKFLOW DOCUMENTATION
+## SECTION 7 — DATABASE SCHEMA
 
-### 7.1 Lead → Client → Project → Invoice → Payment
+### 7.1 Overview
 
-```
-SALES FUNNEL WORKFLOW
-─────────────────────
+MySQL via `$wpdb`. **69 tables** (recounted 2026-07-17 via a fresh `CREATE TABLE` grep — up from 67) across **17 migration files on disk**, **16 of which run through** `Migrator::migrations()` (`database/Migrator.php`) via `dbDelta()` for the additive schema (safe to re-run, never drops columns); the 17th, `ForeignKeyMigration.php`, is applied separately (`ForeignKeyMigration::apply()`) for real FK constraints, since `dbDelta()` can't reliably parse `FOREIGN KEY` clauses — checked against `information_schema` first, applied defensively (a failed constraint on live data is logged and skipped, not forced). Current `OPTIVAX_ERP_DB_VERSION`: **1.7.0** (up from 1.2.0 — Phase 3's schema-upgrade fix, soft-delete/audit columns, and the 2026-07-17 biometric Bridge-hardening columns/table all landed as version bumps since the last count).
 
-1. LEAD CAPTURE
-   Actor: sales_admin | sales_member
-   Page: /sales/leads
-   Action: Create lead with name, email, phone, company, source, estimated value
-   Storage: mock_leads
-   Notes: Leads are assignable to specific members
+### 7.2 Migration Files → Domain
 
-2. LEAD PROGRESSION
-   Actor: sales_admin | sales_member (own leads)
-   Page: /sales/leads
-   Action: Update status (New → Contacted → Qualified → Proposal → Won/Lost)
-   Storage: mock_leads (status update)
+| Migration | Covers |
+|---|---|
+| `IdentityOrgMigration.php` | Users mapping (role/department/status/token_version), refresh tokens, organizations |
+| `AuthMigration.php` | Auth-adjacent tables (JWT secret option is a `wp_options` row, not a table) |
+| `ClientMigration.php` | Clients, client ownership |
+| `ProjectTaskMigration.php` | Projects, tasks |
+| `BillingMigration.php` | Invoices, invoice line items, payments |
+| `PayrollMigration.php` | Payroll, salary slips, advance salary + audit log |
+| `HrAttendanceMigration.php` | Leave requests, legacy attendance tables (note: `activity_sessions`/`break_records` were duplicated here vs. `ActivityMigration.php` — the stale duplicates were removed in Phase 3, real tables live in `ActivityMigration.php`) |
+| `ActivityMigration.php` | Activity sessions, activity breaks (login/break tracking — real tables) |
+| `BudgetMigration.php` | Company budget, department allocations, member allocations, budget requests/returns, budget audit log |
+| `MarketingMigration.php` | Email templates/campaigns/automations, content calendar, social links/clicks/account metrics |
+| `SalesMigration.php` | Leads, sales widget tables (leads/deals/commissions — "at a glance" small tables), commissions, sales targets |
+| `ItSupportMigration.php` | Tickets, devices (`it_devices` — now also carries the hashed-key/rotation/expiry/revocation columns and the Bridge-status columns, Section 6.4), device logs (`it_device_logs` — now also carries per-upload accepted/rejected/unmapped/source-IP/bridge-id/idempotency-key columns), attendance exceptions |
+| `BiometricAttendanceMigration.php` | `it_biometric_punches` (raw ledger, dedupe `UNIQUE KEY (device_id, biometric_user_id, punch_type, punch_time_utc)`), `it_biometric_employee_map` (device↔employee linkage) |
+| `DeviceBridgeMigration.php` **(new, 2026-07-17)** | `it_device_import_requests` — the `Idempotency-Key` replay cache for the punch-import endpoint (Section 6.4), 14-day retention, swept opportunistically |
+| `FileMigration.php` | Files table (`uploaded_by_id` indexed as of Phase 6) |
+| `CrossCuttingMigration.php` | Notifications, email queue, audit logs, security audit logs, conversations, company settings, departments |
+| `ForeignKeyMigration.php` | Real `ALTER TABLE ... ADD CONSTRAINT` FK pass — 10 genuine parent-child relationships (invoice_items→invoices CASCADE, tasks.project_id→projects SET NULL, etc.), applied after all `dbDelta` migrations. Not part of `Migrator::migrations()`'s array — invoked directly, see 7.1. |
 
-3. LEAD CONVERSION → CLIENT
-   Actor: sales_admin
-   Page: /sales/leads (Convert button)
-   Action: Validate no duplicate email exists in optivax_clients
-   On Success:
-     → Create client record in optivax_clients
-     → Send notification to sales_admin
-     → Lead may be removed or marked converted
-   On Duplicate: Error toast, no client created
+### 7.3 Cross-Cutting Schema Conventions
 
-4. CLIENT MANAGEMENT
-   Actor: sales_admin | management | super_admin
-   Page: /sales/clients | /management/clients
-   Action: Assign production members, set status, edit contact details
+- **Soft delete:** opt-in via `AbstractRepository::$softDeletes = true`, applied to `clients`, `projects`, `tasks`, `invoices` (the 4 highest-value tables). `delete()` stamps `deleted_at`/`deleted_by` instead of a real `DELETE` for these; every other table is still a hard delete.
+- **Audit columns:** `created_by`/`updated_by` added where missing (Phase 3) — always server-stamped from the authenticated caller, never trusted from the request body.
+- **Indexes:** added incrementally across Phases 3, 6, 8 wherever a repository filters/sorts by an un-indexed column (`tasks.assignee_id`, `budget_audit.department`, `commissions.invoice_id`/`project_id`, `notifications.(user_id, created_at)`, `audit_logs.department`, `deleted_at` on the 4 soft-delete tables, `files.uploaded_by_id`).
+- **No multi-tenancy:** confirmed genuinely single-tenant — no `organization_id` in JWT claims, `CompanySettingsRepository` is a hardcoded singleton row. `OrganizationRoutes.php`/`SubscriptionRoutes.php` exist as unscoped listings (not a gap, a deliberate scope boundary — this app runs one company, not many tenants).
+- **Runaway-query safety net (Phase 6):** `AbstractRepository::list()` applies a generous default `LIMIT` (1000, overridable) whenever a caller doesn't opt into real pagination — protects `tasks`, `clients`, `projects`, `audit_logs`, and others from ever fully materializing as tables grow, without changing behavior at today's realistic row counts.
+- **Hashed-secret-at-rest pattern (2026-07-17):** `it_devices.api_key_hash` (SHA-256, via `helpers/DeviceKeyHasher.php`) is the first table in the schema to store only a hash of a shared secret rather than the plaintext — the legacy `it_devices.api_key` plaintext column is kept (additive-only migrations never drop a column) but is no longer written or read by application code. Precedent for any future device/API-key/webhook-secret table.
 
-5. PROJECT CREATION
-   Actor: super_admin | management | sales_admin | production_admin
-   Page: /admin/projects | /management/projects | /production/projects
-   Action: Create project linked to client, set budget, deadline, priority
-   Storage: mock_projects
-   Auto-generated: id, createdAt, updatedAt, files[], assignedTo[]
+### 7.4 Known Schema-Level Gap
 
-6. TEAM ASSIGNMENT
-   Actor: super_admin | management | production_admin | sales_admin
-   Page: ProjectModal (assignment panel)
-   Action: Select team members from checklist, save
-   Side effects:
-     → Revision entry created in mock_revisions (type: assignment_change)
-     → Notification sent to each newly assigned member
-
-7. TASK CREATION
-   Actor: dept_admin (within dept scope)
-   Page: /*/tasks
-   Action: Create task linked to projectId, assign to dept member
-   Storage: mock_tasks
-   Notes: assigneeDept and assigneeRole stored for scope enforcement
-
-8. DELIVERABLE SUBMISSION
-   Actor: production_member | production_admin
-   Page: /production/deliverables
-   Action: Create deliverable linked to client and project
-   Status flow: Pending → In Progress → Review (member max)
-             → Approved → Delivered (admin only)
-   Storage: optivax_deliverables
-
-9. INVOICE GENERATION
-   Actor: sales_admin | management | super_admin
-   Page: /*/billing → New Invoice
-   Action: Create invoice with line items, link to client and project
-   Storage: mock_invoices
-   Auto-generated: invoice number (INV-YYYY-NNN), id, issueDate
-   Server: auto-flags overdue if dueDate < today on every GET
-
-10. PAYMENT PROCESSING
-    Actor: management | super_admin
-    Page: /*/billing → Mark Paid button (requires canApprove("billing"))
-    Action: POST /saas/v1/invoices/mark-paid
-    Side effects:
-      → Invoice status: "paid", paidDate: today
-      → Project.spent += invoice.amount (auto-update)
-      → Payment notification sent to client userId
-    Storage: mock_invoices (updated), mock_notifications
-
-11. CLIENT VIEWS INVOICE
-    Actor: client
-    Page: /client/billing
-    Data: Filtered to own clientId, read-only display
-```
-
-### 7.2 Employee → Attendance → Leave → Payroll
-
-```
-HR OPERATIONS WORKFLOW
-──────────────────────
-
-1. EMPLOYEE ONBOARDING
-   Actor: hr_admin | super_admin
-   Page: /hr/users
-   Action: Create employee profile with role, department, designation, salary
-   Storage: mock_profiles + optivax_employee_extra
-
-2. DAILY ATTENDANCE
-   Actor: hr_admin (logs for others) | hr_member (owns records)
-   Page: /hr/attendance
-   Action: Log check-in/check-out, set status (present/absent/late/on-leave)
-   Storage: mock_attendance
-
-3. LEAVE REQUEST
-   Actor: Any employee (hr_member, sales_member, etc.)
-   Page: /hr/leave (own department route)
-   Action: Submit leave request with type, dates, reason
-   Storage: optivax_leave_requests (status: "Pending")
-
-4. LEAVE REVIEW
-   Actor: hr_admin
-   Page: /hr/leave
-   Action: Approve or Reject leave request
-   Storage: optivax_leave_requests (status: "Approved" | "Rejected")
-   Notes: Rejected count surfaced in ManagementPanel HR tile
-
-5. PAYROLL CALCULATION
-   Actor: hr_admin (view)
-   Page: /hr/payroll
-   Data sources:
-     - optivax_employee_extra (base salary)
-     - optivax_leave_requests (leavesTaken count)
-   Calculation: Net pay = salary − (unpaid leave deductions)
-   Storage: Read-only display, optivax_employee_extra for status
-
-6. MANAGEMENT REVIEW
-   Actor: management
-   Page: /management/dashboard
-   Data: HR Analytics tile shows headcount, active employees, pending leaves,
-         approved leaves, rejected leaves, attendance rate
-```
-
-### 7.3 Files → Revisions → Deliverables → Client Portal
-
-```
-DOCUMENT & REVISION WORKFLOW
-─────────────────────────────
-
-1. FILE UPLOAD (4-Step Modal)
-   Actor: Any authenticated employee (canCreate("files") = true)
-   Page: /*/files → Upload File button
-
-   Step 1 — Client Selection (optional)
-     Select client from optivax_clients or skip
-
-   Step 2 — Project + Description (optional)
-     Select project (filtered to selected client if chosen)
-     Add description text
-
-   Step 3 — Visibility Selection
-     Private     → only uploader can see
-     Department  → all members of uploaderDept
-     Specific    → choose specific users from multi-picker
-     Project Team → all users in project.assignedTo[]
-     Client      → client with matching clientId
-
-   Step 4 — File Upload
-     Select local file, triggers upload on change
-
-   Server actions on POST /saas/v1/files/create:
-     → Save file record to mock_files
-     → Create revision entry (type: file_upload, status: completed)
-     → Send notifications if visibility is:
-         "specific"     → each user in visibleTo[]
-         "client"       → the client (notification → /client/files)
-         "project-team" → each project.assignedTo[] member
-
-2. FILE VISIBILITY ENFORCEMENT (GET /saas/v1/files/list)
-   super_admin, management: see ALL files
-   All other roles:
-     no visibility field → visible to all staff (legacy)
-     "private"      → uploadedById === userId
-     "department"   → uploaderDept === userDept
-     "specific"     → visibleTo.includes(userId)
-     "project-team" → project.assignedTo.includes(userId)
-     "client"       → role === "client" && clientId === userId
-
-3. CLIENT REVISION REQUEST
-   Actor: client
-   Page: /client/revisions → Submit Revision
-   Action: Submit revision comment linked to a project
-   Storage: mock_revisions (status: "pending")
-
-4. PRODUCTION REVIEWS REVISION
-   Actor: production_admin | production_member (own projects)
-   Page: /production/revisions
-   Action: View revisions, update status (pending → in-progress → completed)
-   Notes: production_member only sees revisions for assigned projects
-
-5. MANAGEMENT OVERSIGHT
-   Actor: management
-   Page: /management/revisions
-   Action: View all revisions, update status
-   Notes: Sees all revisions across clients
-
-6. CLIENT TRACKS STATUS
-   Actor: client
-   Page: /client/revisions
-   Action: View own revision requests and their current status
-```
+`users_mapping.department_id` stores a fixed 6-value slug string (`dept-sales`, `dept-marketing`, etc. — see `helpers/DepartmentMapper.php`), **not a foreign key into the real `departments` table** (UUID-keyed, `repositories/DepartmentRepository.php`, managed via `Admin/Departments.tsx`). These are two disconnected systems — see Section 13, C2.
 
 ---
 
 <a name="section-8"></a>
-## SECTION 8 — SERVICE LAYER
+## SECTION 8 — REST API REFERENCE
 
-### 8.1 Architecture Overview
-
-```
-React Component
-      │
-      ▼
-   Hook (useX.ts)
-      │  manages: state, loading, error, cache
-      │
-      ▼
-  Service (xService.ts)
-      │  manages: endpoint construction, type marshaling
-      │
-      ▼
-   api client (lib/client.ts)
-      │  manages: headers, auth token injection, fetch
-      │
-      ▼
-  Mock Server (mock/server.ts)
-      │  manages: routing, RBAC filtering, storage R/W
-      │
-      ▼
-  localStorage
-```
-
-### 8.2 API Client (`src/lib/client.ts`)
-
-The `api` object wraps `window.fetch` with:
-- Automatic `Content-Type: application/json` header
-- `X-Mock-UserId: {user.id}` header injection
-- `X-Mock-UserRole: {user.role}` header injection
-- Response deserialization and error propagation
-- `fetchSession()` — reads active session from localStorage
+### 8.1 Response Envelope (every endpoint, always)
 
 ```typescript
-api.get<T>(url: string): Promise<T>
-api.post<T>(url: string, body: unknown): Promise<T>
-api.put<T>(url: string, body: unknown): Promise<T>
-api.delete<T>(url: string, body: unknown): Promise<T>
+interface SaasApiResponse<T> {
+  success: boolean;
+  data: T | null;
+  error: string | null;
+  meta?: Record<string, unknown>;   // present only when pagination was requested
+  details?: unknown;                 // present only on validation errors (422)
+}
 ```
 
-### 8.3 Complete Endpoint Registry
+Status codes used consistently: 200/201 success, 401 unauthenticated, 403 forbidden, 404 not found, 422 validation error, 429 rate-limited (Phase 7), 500 uncaught exception (message always generic — `ErrorBoundaryMiddleware` logs the real detail server-side only).
 
-#### Auth
-| Method | Endpoint | Description |
+### 8.2 Pagination / Sort / Search (opt-in, Phase 2)
+
+Any `list()` call can accept `?page=&perPage=&sortBy=&sortDir=&q=`. `sortBy` is whitelisted against a per-resource server-defined filter-column map (never raw client input reaching `ORDER BY` — this is also why the codebase has zero dynamic-SQL-injection findings on sort columns, verified fresh in Phase 8). When pagination isn't requested, the response is unpaginated (backward-compatible) but still capped by the Section 7.3 safety-net limit.
+
+### 8.3 Route Files → Frontend Service Map
+
+39 route files register all endpoints under `/wp-json/saas/v1/*`. Selected high-traffic mappings:
+
+| Route file | Frontend service | Resource |
 |---|---|---|
-| POST | `/saas/v1/auth/signup` | Register new account |
-| POST | `/saas/v1/auth/login` | Authenticate user |
-| GET | `/saas/v1/auth/session` | Get current session |
-| POST | `/saas/v1/auth/logout` | Clear session |
-
-#### Profiles
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/profiles/list` | Get profiles (filterable by id, email) |
-| POST | `/saas/v1/profiles/create` | Create profile |
-| PUT | `/saas/v1/profiles/update` | Update profile |
-| DELETE | `/saas/v1/profiles/delete` | Delete profile |
-
-#### Clients
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/clients/list` | Get clients (filterable by id, email, assignedTo) |
-| POST | `/saas/v1/clients/create` | Create client |
-| PUT | `/saas/v1/clients/update` | Update client |
-| DELETE | `/saas/v1/clients/delete` | Delete client |
-
-#### Projects
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/projects/list` | Get projects (filterable by id, clientId, assignedTo) |
-| POST | `/saas/v1/projects/create` | Create project |
-| PUT | `/saas/v1/projects/update` | Update project |
-| DELETE | `/saas/v1/projects/delete` | Delete project |
-
-#### Tasks
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/tasks/list` | Get tasks (filterable by assignedTo, projectId) |
-| POST | `/saas/v1/tasks/create` | Create task |
-| PUT | `/saas/v1/tasks/update` | Update task |
-| DELETE | `/saas/v1/tasks/delete` | Delete task |
-
-#### Invoices
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/invoices/list` | Get invoices (auto-overdue detection) |
-| POST | `/saas/v1/invoices/generate` | Create invoice (auto-number) |
-| PUT | `/saas/v1/invoices/update` | Update invoice |
-| POST | `/saas/v1/invoices/mark-paid` | Mark paid + notify client |
-| DELETE | `/saas/v1/invoices/delete` | Delete invoice |
-
-#### Files
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/files/list` | Get files (visibility-filtered by role) |
-| POST | `/saas/v1/files/create` | Upload file + create revision + send notifications |
-| DELETE | `/saas/v1/files/delete` | Delete file |
-
-#### Payments
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/payments/list` | Get payments |
-| POST | `/saas/v1/payments/create` | Create payment record |
-
-#### Revisions
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/revisions/list` | Get revisions (role-scoped) |
-| POST | `/saas/v1/revisions/create` | Create revision |
-| PUT | `/saas/v1/revisions/update` | Update revision status |
-
-#### Notifications
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/notifications/list` | Get notifications (userId-filtered) |
-| POST | `/saas/v1/notifications/create` | Create notification |
-| PUT | `/saas/v1/notifications/update` | Update notification (mark read) |
-| PUT | `/saas/v1/notifications/mark-all-read` | Mark all read for user |
-| DELETE | `/saas/v1/notifications/delete` | Delete single notification |
-| DELETE | `/saas/v1/notifications/delete-all` | Delete all for user |
-
-#### Leads
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/leads/list` | Get leads (member-scoped to own) |
-| POST | `/saas/v1/leads/create` | Create lead |
-| PUT | `/saas/v1/leads/update` | Update lead |
-| DELETE | `/saas/v1/leads/delete` | Delete lead |
-| POST | `/saas/v1/leads/convert` | Convert lead to client (duplicate check) |
-
-#### Email Marketing
-| Method | Endpoint | Description |
-|---|---|---|
-| GET/POST/PUT/DELETE | `/saas/v1/email/templates` | Template CRUD |
-| GET/POST/PUT/DELETE | `/saas/v1/email/campaigns` | Campaign CRUD |
-| GET/POST/PUT | `/saas/v1/email/automations` | Automation CRUD |
-
-#### Stripe / Payments
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/config/stripe` | Get Stripe publishable key |
-| POST | `/saas/v1/create-payment-intent` | Create payment intent |
-| POST | `/saas/v1/settings/stripe` | Save Stripe settings |
-
-#### SSE
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/saas/v1/sse/notifications` | Server-Sent Events stream for real-time notifications |
-
-### 8.4 Page → Hook → Service → Endpoint → Storage Map
-
-| Page | Hook | Service | Endpoint | Storage Key |
-|---|---|---|---|---|
-| Files | `useFiles` | `FileService` | GET /files/list, POST /files/create | `mock_files` |
-| Clients | `useClients` | `ClientService` | GET /clients/list | `optivax_clients` |
-| Projects | `useProjects` | `ProjectService` | GET /projects/list | `mock_projects` |
-| Tasks | — | — | GET /tasks/list | `mock_tasks` |
-| Billing | `useInvoices` | `InvoiceService` | GET /invoices/list | `mock_invoices` |
-| Notifications | `useNotifications` | `NotificationService` | GET /notifications/list | `mock_notifications` |
-| Leads | `useLeads` | `LeadService` | GET /leads/list | `mock_leads` |
-| Revisions | — | — | GET /revisions/list | `mock_revisions` |
-| Audit Logs | — | `AuditLogService` | localStorage direct | `optivax_audit_logs` |
-| Employees | — | `UserService` | GET /profiles/list | `mock_profiles` |
-| Payroll | — | — | localStorage direct | `optivax_employee_extra` |
-| Leave | — | — | localStorage direct | `optivax_leave_requests` |
-| Attendance | — | — | localStorage direct | `mock_attendance` |
-| Deliverables | — | — | localStorage direct | `optivax_deliverables` |
-| Email Marketing | `useCampaigns` / `useTemplates` / `useAutomations` | `EmailService` | GET/POST/PUT/DELETE /email/* | `email_*` |
-| Social Tracking | `useSocialTracking` | — | localStorage direct | `social_links`, `social_clicks`, `social_account_metrics` |
+| `AuthRoutes.php` | `authService.ts` | login, session, logout, logout-all, refresh, change-password, request-reset, confirm-reset |
+| `ProfileRoutes.php` | `userService.ts` | employee/user CRUD |
+| `ClientRoutes.php` | `clientService.ts` | client CRUD, client-role self-scoping via `ClientScopeMiddleware` |
+| `ProjectRoutes.php` | `projectService.ts` | project CRUD |
+| `TaskRoutes.php` | `taskService.ts` | task CRUD |
+| `InvoiceRoutes.php`, `PaymentRoutes.php`, `StripeRoutes.php` | `invoiceService.ts`, Stripe Elements | billing + real Stripe PaymentIntent flow |
+| `FileRoutes.php` | `fileService.ts` | file list/create/delete — dual-path create (real multipart upload via `UploadService`, or JSON-metadata-only for the current frontend contract) |
+| `NotificationRoutes.php` + `NotificationStreamController.php` | `notificationService.ts`, `useSSE.ts` | CRUD + SSE stream |
+| `AuditLogRoutes.php`, `SecurityAuditLogRoutes.php` | `auditLogService.ts` | two independent logs (see Section 5) |
+| `PayrollRoutes.php`, `EmployeeExtraRoutes.php` | `payrollService.ts` | payroll/salary slip/advance-salary |
+| `LeaveRequestRoutes.php`, `AttendanceRoutes.php`, `ActivityRoutes.php` | HR/attendance services | leave, attendance, login/break session tracking |
+| `BudgetRoutes.php` | `budgetService.ts` | company/department/member budget + requests |
+| `EmailMarketingRoutes.php` | `useEmailMarketing.ts` | templates/campaigns/audience CRUD only — **no send endpoint exists** |
+| `LeadRoutes.php`, `SalesOpsRoutes.php`, `SalesWidgetRoutes.php`, `CommissionRoutes.php` | Sales services | leads, targets/tasks, small "at-a-glance" widgets, commissions (manual entry) |
+| `ItSupportRoutes.php` | `itSupportService.ts` (`DeviceService`, `ITTicketService`, etc.) | tickets, devices, device logs, attendance exceptions, `POST /it/devices/{id}/generate-api-key` (super_admin/it_admin only — Section 12.8), `.../rotate-key`, `.../revoke-key` |
+| `BiometricAttendanceRoutes.php` **(2026-07-17)** | `itSupportService.ts` (`DeviceService`) | `POST /it/devices/{id}/punches/import` — device-key auth, the primary Bridge-push ingestion endpoint (Section 6.4); `.../punches/reprocess` (RBAC, re-aggregate without touching hardware); legacy `.../test-connection` + `.../live-sync` (RBAC, real TCP — disabled unless LAN-sync opt-in is on); `/it/punches/list`, `/it/biometric-mapping/*` |
+| `ConversationRoutes.php` | `conversationService.ts` | client messaging (sales roles excluded) |
+| `DepartmentRoutes.php`, `CompanySettingsRoutes.php` | `departmentService.ts`, `companySettingsService.ts` | org config |
 
 ---
 
 <a name="section-9"></a>
-## SECTION 9 — DATABASE MODEL (ERD)
+## SECTION 9 — STATE MANAGEMENT (FRONTEND)
 
-### 9.1 Entity Relationship Diagram
+React Context API exclusively — no Redux/Zustand.
+
+Composed in `src/main.tsx` (not inside `App.tsx` itself — `<App/>` is the innermost element the provider chain wraps; `<Router>`/`<AppLayout>` are composed inside `App.tsx`, re-verified 2026-07-17):
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         OPTIVAX DATA MODEL                              │
-└─────────────────────────────────────────────────────────────────────────┘
-
-[Profile/User]
-  id PK
-  email UNIQUE
-  full_name
-  role FK→UserRole
-  departmentId
-  ──────────────────┐
-  │                 │
-  │                 │
-  ▼                 ▼
-[Client]        [EmployeeExtra]
-  id PK           userId FK→Profile.id (1:1)
-  email UNIQUE    salary
-  clientId FK     salaryStatus
-    →Profile.id   workMode
-  companyName     leavesTaken
-  totalProjects ◄─────────────────┐
-  totalBilled ◄──────────────┐    │
-  assignedProductionMembers[] │    │
-       FK[]→Profile.id       │    │
-  │                          │    │
-  ├──────────────────────────┼────┼──────────────────────┐
-  │                          │    │                      │
-  ▼                          │    │                      ▼
-[Project]                    │    │              [Invoice]
-  id PK                      │    │                id PK
-  clientId FK→Client.id      │    │                clientId FK→Client.id
-  assignedTo[] FK[]           │    │                projectId FK→Project.id
-    →Profile.id               │    │                amount
-  budget                     │    │                status (paid/pending/overdue)
-  spent ◄────────────────────┘    │                items[]
-  progress                        │                │
-  │                               │                ▼
-  ├──────────────────────────┐    │            [Payment]
-  │                          │    │              id PK
-  ▼                          │    │              invoiceId FK→Invoice.id
-[Task]                    [Deliverable]           amount
-  id PK                    id PK                  method
-  projectId FK→Project.id  projectId FK→Project.id
-  assignedTo FK→Profile.id clientId FK→Client.id
-  assigneeDept             uploadedBy FK→Profile.id
-  assigneeRole             status (5-stage)
-                           reviewedBy FK→Profile.id
-                           approvedBy FK→Profile.id
-
-[File]
-  id PK
-  projectId FK→Project.id (opt)
-  clientId FK→Client.id (opt)
-  uploadedById FK→Profile.id
-  uploaderDept
-  visibility (private/dept/specific/project-team/client)
-  visibleTo[] FK[]→Profile.id
-
-[Revision]
-  id PK
-  projectId FK→Project.id
-  clientId FK→Client.id
-  updatedBy FK→Profile.id
-  type (file_upload/assignment_change/client-request)
-  status (pending/in-progress/completed)
-
-[Notification]
-  id PK
-  userId FK→Profile.id
-  type
-  read
-
-[LeaveRequest]
-  id PK
-  employeeId FK→Profile.id
-  status (Pending/Approved/Rejected)
-
-[Attendance]
-  id PK
-  employeeId FK→Profile.id
-  date
-  status
-
-[AuditLog]
-  id PK
-  performedBy FK→Profile.id
-  entityType
-  entityId (polymorphic FK)
-  action
+main.tsx:
+  <ToastProvider>
+    └── <AuthProvider>
+          └── <ActivityProvider>
+                └── <ThemeProvider>
+                      └── <AppWrapper>       (react-helmet-async)
+                            └── <App/>
+                                  ├── <Router>
+                                  │     └── <AppLayout>
+                                  │           └── [page components]
+                                  └── (SidebarContext's provider lives lower, inside AppLayout — not part of this top-level chain)
 ```
 
-### 9.2 Foreign Key Summary
+All 5 contexts (`AuthContext`, `ActivityContext`, `ToastContext`, `ThemeContext`, `SidebarContext`) memoize their `value` object and handler functions (`useMemo`/`useCallback`) as of Phase 4 — an unrelated re-render (e.g. the activity poll) no longer cascades through every consumer.
 
-| Child Table | FK Field | References |
-|---|---|---|
-| Client | `id` (portal-linked) | Profile.id |
-| Project | `clientId` | Client.id |
-| Project | `assignedTo[]` | Profile.id[] |
-| Task | `projectId` | Project.id |
-| Task | `assignedTo` | Profile.id |
-| Invoice | `clientId` | Client.id |
-| Invoice | `projectId` | Project.id |
-| Payment | `invoiceId` | Invoice.id |
-| File | `projectId` | Project.id |
-| File | `clientId` | Client.id |
-| File | `uploadedById` | Profile.id |
-| File | `visibleTo[]` | Profile.id[] |
-| Deliverable | `clientId` | Client.id |
-| Deliverable | `projectId` | Project.id |
-| Deliverable | `uploadedBy` | Profile.id |
-| Deliverable | `reviewedBy` | Profile.id |
-| Deliverable | `approvedBy` | Profile.id |
-| Revision | `projectId` | Project.id |
-| Revision | `clientId` | Client.id |
-| Revision | `updatedBy` | Profile.id |
-| Notification | `userId` | Profile.id |
-| LeaveRequest | `employeeId` | Profile.id |
-| Attendance | `employeeId` | Profile.id |
-| EmployeeExtra | `userId` | Profile.id |
-| AuditLog | `performedBy` | Profile.id |
+**AuthContext** — holds `user: User | null` (restored via `AuthService.getSession()` against the HttpOnly cookie, never `localStorage`), exposes `login/logout/register/updateProfile` plus the RBAC shorthand methods (`canView/canCreate/canEdit/canDelete/canExport/canApprove/canAssign`, all backed by `hasPermissionScoped`).
+
+**Real-time notifications:** `useSSE.ts` connects to `/saas/v1/notifications/stream`, dispatches a `saas:notification` DOM event on receipt, reconnects with exponential backoff (timer properly tracked/cleared as of Phase 4's memory-leak fixes). Cross-tab sync via `BroadcastChannel` + a `storage` event fallback.
 
 ---
 
 <a name="section-10"></a>
-## SECTION 10 — STATE MANAGEMENT
+## SECTION 10 — WORKFLOW DOCUMENTATION
 
-### 10.1 Context Architecture
+### 10.1 Lead → Client → Project → Invoice → Payment (real, verified end-to-end)
 
-The platform uses React Context API exclusively — no Redux, no Zustand, no external state library.
+Lead capture/progression (Sales) → conversion to client (duplicate-email checked server-side) → project creation (client-scoped) → team assignment → task creation (department-scoped assignee picker) → deliverable submission (5-stage: Pending → In Progress → Review [member ceiling] → Approved → Delivered [admin only]) → invoice generation (auto-numbered) → **real Stripe payment** (PaymentIntent created + verified server-side against outstanding balance, wrapped in a DB transaction; re-confirmed genuinely fixed in Phase 8, no trace of the old client-side fake-confirm bug) → client views invoice (scoped to own `clientId`).
 
-```
-<App>
-  └── <AuthProvider>          (src/context/AuthContext.tsx)
-        └── <ToastProvider>   (src/context/ToastContext.tsx)
-              └── <Router>
-                    └── <AppLayout>
-                          └── [page components]
-```
+### 10.2 Employee → Attendance → Leave → Payroll (real, consistent)
 
-### 10.2 AuthContext
+Onboarding (`ProfileController::create()`) → daily attendance / login-break session tracking (`ActivityRepository`, server-enforced daily break limits) → leave request/review → **payroll calculation**, single source of truth in `src/domain/payroll/calculations.ts` (net = basic − deductions, no allowances/bonuses per the 2026-07-02 standardization), imported consistently by every payroll-touching page, with a matching server-side invariant (`netSalary ≤ basicSalary`, never negative) rejecting any forged/buggy slip.
 
-**State Managed:**
-- `user: User | null` — currently authenticated user with all profile fields
-- `isLoading: boolean` — true during session initialization on mount
+**Known break in this chain:** employee↔department assignment (Section 13, C2) — an admin creating an employee cannot reliably place them in the department the admin actually manages.
 
-**Initialization:**
-```
-App mount
-  → fetchSession() reads mock_session from localStorage
-  → converts MockUserSession → User object
-  → sets user state
-  → useSSE(!!user) activates SSE connection when user exists
-```
+### 10.3 Files → Revisions → Client Portal
 
-**Exposed Methods:**
-| Method | Description |
-|---|---|
-| `login(email, password)` | Authenticates, sets user state, returns role home path |
-| `logout()` | Clears session, nulls user state |
-| `register(email, password, name, role?)` | Creates account, auto-logs in |
-| `updateProfile(data)` | Updates own profile, merges into user state |
-| `checkPermission(domain, action)` | Direct matrix lookup (hasPermission) |
-| `canView(domain)` | `hasPermissionScoped` shorthand |
-| `canCreate(domain)` | `hasPermissionScoped` shorthand |
-| `canEdit(domain)` | `hasPermissionScoped` shorthand |
-| `canDelete(domain)` | `hasPermissionScoped` shorthand |
-| `canExport(domain)` | `hasPermissionScoped` shorthand |
-| `canApprove(domain)` | `hasPermissionScoped` shorthand |
-| `canAssign(domain)` | `hasPermissionScoped` shorthand |
+4-step upload modal (client → project+description → visibility → file) → `UploadService::handleUpload()` (MIME allow-list + 25MB cap + magic-byte content-sniff, Phase 7) → visibility enum stored (`private`/`department`/`specific`/`project-team`/`client`) → client submits/tracks revision requests → production reviews (own assigned projects only, for members) → management oversight (all revisions).
 
-### 10.3 Permissions Flow
+**Known break:** the visibility enum is stored but never enforced on read (Section 13, H5) — every internal role with `files:VIEW` sees every file today regardless of the selected visibility.
 
-```
-Component calls: canCreate("files")
-      │
-      ▼
-AuthContext.canCreate("files")
-      │
-      ▼
-rbacCanCreate(user, "files")    [from rbac.ts]
-      │
-      ▼
-hasPermissionScoped(user, "files", "CREATE")
-      │
-      ├─ user.role === "super_admin"? → true
-      ├─ user.role === "management"?  → hasPermission(user, "files", "CREATE")
-      │                                 → RBAC_MATRIX["management"]["files"].includes("CREATE")
-      │                                 → true (management has files: [VIEW,CREATE,EDIT,DELETE,EXPORT])
-      │
-      ├─ domain in CROSS_CUTTING_DOMAINS? ("files" → yes)
-      │    → skip scope restriction
-      │    → hasPermission(user, "files", "CREATE")
-      │    → RBAC_MATRIX[role]["files"].includes("CREATE")
-      │
-      └─ else (non-cross-cutting, non-admin)
-           → if action !== "VIEW" && primary !== domain → false
-           → else hasPermission(user, domain, action)
-```
+### 10.4 What's NOT a real workflow yet (see Section 13 for full detail)
 
-### 10.4 ToastContext
-
-Provides `showToast(message: string, type: "success" | "error" | "info" | "warning")`.
-- Auto-dismissed after timeout
-- Stacked in corner overlay
-- Used by all pages for operation feedback
-
-### 10.5 Notifications Flow
-
-```
-EVENT TRIGGERS notification creation:
-  - Invoice mark-paid     → client notification (server-side)
-  - File upload (shared)  → recipient notifications (server-side)
-  - Lead conversion       → sales_admin notification (server-side)
-  - Project assignment    → new assignee notifications (ProjectModal client-side)
-
-REAL-TIME DELIVERY:
-  useSSE hook
-    → connects GET /saas/v1/sse/notifications
-    → receives "notification" events
-    → dispatches "saas:notification" DOM event
-    → reconnects with exponential backoff on disconnect
-
-CROSS-TAB SYNC:
-  NotificationService
-    → broadcastNotification() via BroadcastChannel("optivax-notifications")
-    → localStorage "storage" event listener in useNotifications
-    → Both channels trigger state refresh on other tabs
-
-BADGE COUNT:
-  useNotifications() → unreadCount
-    → derived from notifications where read === false
-    → shown in sidebar bell icon
-```
+Budget "used" tracking, sales commission calculation, email campaign sending, and the automation-rules feature are all present in the UI but do not perform the real business action their name implies — each is documented individually in Section 13 rather than described here as if functioning.
 
 ---
 
 <a name="section-11"></a>
 ## SECTION 11 — FILE MANAGEMENT SYSTEM
 
-### 11.1 Upload Flow
+### 11.1 Upload Path
 
-```
-User clicks "Upload File" (visible when canCreate("files") === true)
-      │
-      ▼
-4-Step Modal Opens
-  ┌─────────────────────────────────────────────────────────┐
-  │  Step 1: Client Selection                               │
-  │    ● Dropdown from optivax_clients                     │
-  │    ● "Skip" button → proceeds to Step 2 with no client │
-  │    ● "Next" button → proceeds with selected client      │
-  └─────────────────────────────────────────────────────────┘
-      │
-      ▼
-  ┌─────────────────────────────────────────────────────────┐
-  │  Step 2: Project + Description                          │
-  │    ● Projects filtered to selected client (if chosen)  │
-  │    ● All projects if no client selected                 │
-  │    ● Description text input (optional)                  │
-  │    ● "Back" to Step 1, "Next" to Step 3                 │
-  └─────────────────────────────────────────────────────────┘
-      │
-      ▼
-  ┌─────────────────────────────────────────────────────────┐
-  │  Step 3: Visibility Selection                           │
-  │    ● Private — only you                                 │
-  │    ● Department — your entire department                │
-  │    ● Specific Users — searchable multi-picker           │
-  │    ● Project Team — project.assignedTo[]                │
-  │    ● Client — the attached client                       │
-  │    ● User picker appears when "Specific Users" chosen   │
-  │    ● Next disabled if Specific chosen with 0 users      │
-  └─────────────────────────────────────────────────────────┘
-      │
-      ▼
-  ┌─────────────────────────────────────────────────────────┐
-  │  Step 4: File Upload                                    │
-  │    ● Summary card: client, project, desc, visibility   │
-  │    ● File input → triggers upload on change             │
-  │    ● Uploading... state with spinner                    │
-  └─────────────────────────────────────────────────────────┘
-      │
-      ▼
-POST /saas/v1/files/create
-  Payload: { name, size, type, uploadedBy (name),
-             uploadedById, uploaderDept, uploadDate,
-             projectId?, clientId?, description?,
-             visibility, visibleTo? }
-  Server actions:
-    1. Write file record to mock_files
-    2. Write revision entry to mock_revisions
-       (type: "file_upload", status: "completed")
-    3. Send notifications:
-       - visibility "specific" → each visibleTo[] user
-       - visibility "client"   → clientId user → /client/files
-       - visibility "project-team" → project.assignedTo[] users
-      │
-      ▼
-File appears immediately in list (React state update via setFiles)
-```
+`FileRoutes.php`'s `POST /files/create` handles two shapes: a real `multipart/form-data` upload (routed through `UploadService::handleUpload()`, backed by a real WP Media Library attachment) or the current frontend's JSON-metadata-only contract (`src/hooks/useFiles.ts` — no real file bytes leave the browser today, just a client-side `blob:` URL + metadata, routed through `FileRepository::create()` directly). Both paths exist in the same endpoint; only the multipart one has real server-side file storage behind it.
 
-### 11.2 Visibility Enforcement Matrix
+### 11.2 Upload Hardening (Phase 7)
 
-| Visibility | Server Filter Logic |
+- 25MB application-level size cap, checked before `wp_handle_upload()`.
+- Explicit MIME allow-list (`UploadService::ALLOWED_MIMES`) — images, PDF, Office docs, csv/txt, zip. Deliberately excludes `.svg` (script-injection risk) and everything else WP core's broader default allow-list would otherwise permit.
+- Independent post-upload content sniff (`finfo_open(FILEINFO_MIME_TYPE)` against the actual bytes on disk) — rejects and deletes the file if its real content doesn't match the claimed/allowed type, catching what `wp_handle_upload()`'s own check might miss.
+- Filename sanitization via WP core's `sanitize_file_name(basename(...))` — adequate against path traversal, verified in Phase 7.
+
+### 11.3 Visibility Model (designed, not enforced — see C13/H5)
+
+| Level | Intended audience |
 |---|---|
-| `private` | `f.uploadedById === mockUserId` |
-| `department` | `f.uploaderDept === currentUser.departmentId` |
-| `specific` | `f.visibleTo.includes(mockUserId)` |
-| `project-team` | `project.assignedTo.includes(mockUserId)` |
-| `client` | `mockUserRole === "client" && f.clientId === mockUserId` |
-| legacy (no visibility field) | Visible to all staff, hidden from clients |
+| `private` | uploader only |
+| `department` | all members of `uploaderDept` |
+| `specific` | explicit `visibleTo[]` user-ID list |
+| `project-team` | all `project.assignedTo[]` members |
+| `client` | the matching client (`clientId === user.id`) |
 
-**Bypass roles:** `super_admin` and `management` see all files regardless of visibility.
-
-### 11.3 Visual Indicators
-
-Each file card displays a colored visibility badge:
-- Private → grey
-- Department → purple
-- Specific Users → blue
-- Project Team → indigo
-- Client → green
-
-### 11.4 Delete Permissions
-
-| Role | Can Delete Files |
-|---|---|
-| super_admin | ✓ All files |
-| management | ✓ All files |
-| production_admin | ✓ All files |
-| marketing_admin | ✓ All files |
-| hr_admin | ✓ All files |
-| sales_admin | ✓ All files |
-| *_member | ✗ |
-| client | ✗ |
+`FileRoutes.php`'s list endpoint only enforces `client_id` scoping for the `client` role — no code path filters by `visibility`/`visibleTo` for any internal role. This is a documented, unfixed gap (Phase 8 H5), not a design choice.
 
 ---
 
 <a name="section-12"></a>
-## SECTION 12 — PROJECT MANAGEMENT SYSTEM
+## SECTION 12 — SECURITY MODEL
 
-### 12.1 Project Lifecycle
+Full detail in `PHASE7_SECURITY_REPORT.md`; summary of current state:
 
-```
-not-started → in-progress → on-hold → completed
-                  │
-                  └── can return to any prior status
-```
+### 12.1 Authentication
 
-### 12.2 Team Assignment
+- **JWT** (HS256, `firebase/php-jwt`) in an **HttpOnly, Secure, SameSite=None** cookie (`optivax_at`) — never an `Authorization` header, never `localStorage`. 15-minute access-token TTL. Secret: random, generated once, persisted in `wp_options` (no rotation mechanism — a documented, accepted limitation).
+- **Refresh token:** a random string, only its SHA-256 hash stored server-side (`refresh_tokens` table), rotated on every use. **Reuse detection** (Phase 7): presenting an already-rotated token is now distinguished from an unknown/expired one and treated as a theft signal — revokes every session for that user, not just the one request.
+- **Session revocation on logout is real** — `token_version` is bumped server-side, immediately invalidating every previously-issued access token (not just client-side cookie deletion).
+- **Self-role-escalation guard:** `ProfileController.php`'s self-update path unconditionally strips `role`/`departmentId`/`status` from the request body before any DB write when a user updates their own profile.
+- **Password policy** (Phase 7): minimum 8 characters, must contain a letter and a number, rejected against a common-password blocklist. Applies to both change-password and reset-confirm.
 
-The project assignment panel (visible to super_admin, management, production_admin, sales_admin) allows:
+### 12.2 CSRF (Phase 7 — closed a real Critical gap)
 
-1. **View current assignees** — displayed as read-only chips showing name · department · designation
-2. **Search and select new assignees** — searchable checklist of all staff (excludes clients and super_admin)
-3. **Toggle assignment** — checkbox per user, changes tracked in `formData.assignedTo[]`
+Double-submit-cookie pattern: a non-HttpOnly `optivax_csrf` cookie is issued alongside the access-token cookie; every state-changing (`POST`/`PUT`/`PATCH`/`DELETE`) request to an authenticated cookie session must carry a matching `X-CSRF-Token` header (`middleware/CsrfMiddleware.php`, hooked before the error boundary). The frontend's single shared `api` object (`src/lib/client.ts`) attaches this automatically on every mutating call — coverage is comprehensive by construction, since `fetch()` is called nowhere else in `src/`.
 
-**On save with assignment change:**
-- Calculate `added` (new IDs not in previous list) and `removed` (previous IDs not in new list)
-- Write revision entry: `{ type: "assignment_change", comment: "Added: X | Removed: Y", status: "pending" }`
-- Send notification to each newly added user: `"You have been assigned to project {name}"`
+### 12.3 Rate Limiting / Brute Force (Phase 7)
 
-### 12.3 Project → Task Hierarchy
+Transient-backed dual limiter (`helpers/RateLimiter.php`) on login (5 failed/IP+account/15min, 20 failed/IP/15min) and password-reset-request (3/IP+account/hour, 10/IP/hour). Both return `429` with a `retryAfterSeconds` detail.
 
-Tasks must have a `projectId`. The task creation modal enforces project selection:
-- Dept admin task picker shows projects in a dropdown
-- `assigneeDept` and `assigneeRole` are stored on each task for scope enforcement
-- Dept member assignee picker uses explicit allowlist: `[${dept}_admin, ${dept}_member]`
+### 12.4 CORS & Headers
 
-### 12.4 Deliverable Lifecycle
+Real origin allow-list (never `*`), read from a WP admin setting (`optivax_erp_allowed_origins`) — correctly paired with `Access-Control-Allow-Credentials: true` only inside the matched-origin branch. API responses carry `X-Content-Type-Options`, `X-Frame-Options: DENY`, a strict `default-src 'none'` CSP, `Referrer-Policy`, `Permissions-Policy`, and conditional HSTS. The deployed SPA (`vercel.json`) separately carries its own header set + CSP (`script-src 'self'` with no `unsafe-inline` — the one inline script `index.html` used to have was moved to `public/theme-init.js` specifically to keep this strict).
 
-```
-PRODUCTION MEMBER flow:
-  Create deliverable → Pending
-  → Advance (own deliverables only)
-  Pending → In Progress → Review (member maximum)
+### 12.5 RBAC
 
-PRODUCTION ADMIN flow:
-  Review → Approved
-  Approved → Delivered
+See Section 3.3 — the mechanism (`authorizeScoped()`) is real and correctly designed, but is **not actually used** by most controllers (Phase 1 hand-fixed 9 specific ownership gaps; Phase 8 confirmed the general mechanism itself remains unwired everywhere else). This is the single largest open security-adjacent finding as of this document's date.
 
-STATUS DEFINITIONS:
-  Pending     — submitted, awaiting work
-  In Progress — actively being worked on
-  Review      — submitted for internal review
-  Approved    — admin has approved quality
-  Delivered   — client has received the deliverable
-```
+### 12.6 Injection / XSS / Path Traversal — verified clean (re-confirmed fresh, Phase 7 and 8)
 
-### 12.5 Revision Tracking
+Zero SQL injection found across every repository spot-checked in both phases (all queries parameterized via `$wpdb->prepare()`; the one client-influenced `ORDER BY` path is column-whitelisted). Zero `dangerouslySetInnerHTML` in the frontend; all 5 mail templates escape every interpolated variable. No endpoint accepts a client-supplied filesystem path.
 
-Every project-related change that produces a revision:
-| Trigger | Revision Type | Creator |
-|---|---|---|
-| Client submits revision request | (client request) | client (via `/client/revisions`) |
-| Project assignment changes | `assignment_change` | ProjectModal (automatic) |
-| File uploaded to project | `file_upload` | Server (automatic) |
+### 12.7 Audit Logging — two systems, different maturity
+
+`SecurityAuditLog` (auth-domain events — login/logout/password-change/reset/user-lifecycle/role-department-changes, plus Phase 7's new `login_rate_limited`/`csrf_check_failed`/`refresh_token_reuse_detected`) is thoroughly, correctly server-triggered. The general `AuditLog` (business actions — client/project/invoice/etc. changes) is **entirely client-triggered** (`AuditLogService.add()` called from the frontend as a side effect) — a malicious or simply-buggy client can skip logging entirely; confirmed in Phase 8 that zero export/download actions anywhere actually call it despite being RBAC-gated as sensitive.
+
+### 12.8 Device / Bridge Authentication (added 2026-07-17)
+
+The one headless, non-browser endpoint in this plugin — a biometric device's Local Bridge Application posting punches — has no cookie session and no CSRF token to present, so it uses a separate, webhook-style shared-secret scheme instead of the JWT/RBAC model above:
+
+- **Hashed at rest, never plaintext.** `DeviceApiKeyMiddleware` compares `hash('sha256', $providedKey)` (`helpers/DeviceKeyHasher.php`) against `it_devices.api_key_hash` via `hash_equals()` (timing-safe). The legacy plaintext `api_key` column still exists (additive-only schema) but is no longer written or read.
+- **One-time reveal.** A key's plaintext value exists in an HTTP response exactly once — at generation (`POST /it/devices/{id}/generate-api-key`) or rotation (`.../rotate-key`) — and is never recoverable from any `GET`/list endpoint afterward (`ItDeviceRepository::toDto()` always returns `apiKey: null`; only `create()`/`rotateApiKey()` overlay the real value onto that one response).
+- **Cryptographically secure, ≥64 characters.** `random_bytes(40)` → 80 hex characters (`DeviceKeyHasher::generate()`), comfortably clearing the 64-character minimum.
+- **Expiry + revocation enforced.** `api_key_expires_at`/`api_key_revoked_at` are checked on every authenticated request; a Bridge presenting an expired or revoked key gets a `403` with an explicit remediation message, not a generic auth failure.
+- **Every auth failure is audit-logged and rate-limited** — unknown device, wrong key, revoked, expired: all write a `device_key_auth_failed` row to `SecurityAuditLog` (previously this endpoint had zero audit trail on failure) and count against a dual per-device + per-IP `RateLimiter` bucket.
+- **RBAC for key management is narrower than the general `it_support` domain.** The generic `/rotate-key`/`/revoke-key` routes are gated by the normal `it_support` EDIT permission (which includes `it_member`); the newer, UI-facing `/generate-api-key` route (backing the Devices.tsx "Generate/Rotate API Key" buttons) hand-checks the caller's role directly against `['super_admin', 'it_admin']` — `it_member` cannot issue or rotate a device credential, only view its masked last-4 characters. This is a deliberate exception to the domain/action RBAC matrix (Section 3), since that matrix has no way to express a narrower-than-domain role restriction for one specific action.
+- **Backward-compatible by construction.** A one-time migration backfill (`Migrator::backfillDeviceApiKeyHashes()`, Section 6.4) hashes every pre-existing plaintext key on the first deploy after this change, so no already-configured device/Bridge is locked out.
 
 ---
 
 <a name="section-13"></a>
-## SECTION 13 — BILLING SYSTEM
+## SECTION 13 — KNOWN GAPS & PRODUCTION READINESS
 
-### 13.1 Invoice Workflow
+**Final Score (Phase 8, 2026-07-11): 61/100 — not recomputed as of this revision (2026-07-17).** The work since Phase 8 (Sections 6.4, 12.8) was additive security/architecture hardening on the biometric subsystem, not a fix pass against the Phase 8 checklist, so the score is carried forward unchanged rather than re-derived without doing the full audit again. Full original detail, risk table, and remediation guidance in `PHASE8_FINAL_PRODUCTION_AUDIT_REPORT.md`. Summary of open items, with two re-verified 2026-07-17:
 
-```
-CREATE INVOICE
-Actor: sales_admin | management | super_admin
-Page: /*/billing → New Invoice
+### Critical (block production deploy)
+- **C1 — Deployment zips are stale**, predate the Phase 7 security fixes entirely (not re-checked this pass — status unknown, assume still stale until re-verified). Must be regenerated before any deploy (commands in the Phase 8 report).
+- **C2 — Employee↔department assignment is broken**: two disconnected department systems (Section 7.4). Confirmed live as of Phase 8, matches a user-reported bug; not re-checked this pass.
+- **C3 — RBAC's `authorizeScoped()` mechanism is unused** (Section 3.3/12.5) — **re-verified 2026-07-17: still true, `authorizeScoped()` has zero call sites anywhere.** The specific example this finding originally cited (`CommissionController.php` cross-department editing) is **no longer reproducible as described** — that controller now has its own hand-rolled `ensureSameDepartment()` ownership check (Section 3.3). The underlying architectural gap (no systematic scoping mechanism, ad hoc per-controller instead) is unchanged; controllers beyond Budget/Commission were not re-audited, so equivalent exposure elsewhere is plausible but unconfirmed either way.
+- **C4 — `Production/Deliverables.tsx`** has no loading state and no error handling at all — a failed fetch is indistinguishable from an empty list. Not re-checked this pass.
+- **C5 — `Common/Reports.tsx` is 100% mock data**, no backend exists for it at all. Not re-checked this pass.
 
-Fields:
-  - Client (required) — FK to optivax_clients
-  - Project (optional) — FK to mock_projects
-  - Invoice number — Auto-generated: INV-{YYYY}-{NNN}
-  - Issue date, Due date
-  - Line items: description, quantity, unit price, total
-  - Notes (optional)
+### High
+- 5 more pages with the same silent-empty-on-error pattern as C4 (Sales/SalesTargets, Sales/TeamPerformance, ITSupport/Devices, ITSupport/AttendanceReports, ITSupport/AttendanceDashboard) — not re-checked this pass; ITSupport/Devices.tsx did gain real loading/error handling for its new API-key flows specifically (toasts on failure), but its original fetch-list error path was not re-audited. `Production/MyClients.tsx` has an infinite-spinner bug on fetch failure (not re-checked); email campaigns cannot send (H3, not re-checked); **Budget `usedAmount` is permanently frozen at zero (H4) — re-confirmed 2026-07-17**, still a straight client-supplied delete+reinsert (`BudgetMemberRepository::replaceAll()`), nothing queries real invoices/payments to derive it; file visibility is unenforced (H5, Section 11.3, not re-checked).
 
-Server:
-  - Stores to mock_invoices
-  - Status defaults to "pending"
-  - Auto-detects overdue on every GET request
+### Medium
+- Commission auto-calculation missing (manual-only); automation feature is a UI-only toggle with zero backend enforcement; notifications aren't server-triggered by real business events; one payroll write endpoint (`bulkSaveAdvanceRequests`) has no scoping (likely intentional, needs confirmation); ~15 dead frontend files Phase 6's sweep missed; 16 ESLint errors (individually triaged — mostly benign defensive empty-catch blocks + unused imports); 2 unused dependencies (`react-dropzone`, `@types/deno`, **re-confirmed absent from package.json 2026-07-17**); a stray scratch file in the plugin source tree. (All not re-checked this pass except where noted.)
 
-EDIT INVOICE
-  - Gated by canEdit("billing")
-  - management and super_admin: full edit
-  - sales_admin: can edit (not delete/approve)
+### Minor
+- Cosmetic ESLint findings, 8 missing-hook-dependency warnings, one menu-link gap (it_member → `/it/reports`), a few unnecessary `as any` casts, two self-documented intentional stubs (`LeadController::convert()`, notification business-event triggers explicitly deferred).
+- **New (2026-07-17):** the plugin bootstrap file's own docblock header still reads `Version: 2.0.0-phase2a` while the `OPTIVAX_ERP_VERSION` constant two lines below it reads `2.6.0-bridge-ready` — cosmetic version-string drift, no functional effect (Section 6.1).
 
-MARK PAID
-  - Button visible only when canApprove("billing")
-  - Only: management, super_admin
-  - POST /saas/v1/invoices/mark-paid
-  - Sets: status="paid", paidDate=today
-  - Side effects:
-      → project.spent += invoice.amount
-      → Client notification: "Invoice {number} for ${amount} has been marked as paid"
-
-DELETE INVOICE
-  - Gated by canDelete("billing") 
-  - Only: management, super_admin
-```
-
-### 13.2 Payment Records
-
-Payments are created automatically when an invoice is marked paid. Each payment record stores:
-- Payment method (credit-card, bank-transfer, check, cash)
-- Transaction ID
-- Check image URL (for check payments)
-- Stripe PaymentIntent ID (for card payments)
-
-### 13.3 Overdue Detection
-
-The server auto-computes overdue status on every invoice GET:
-```typescript
-if (invoice.status === "pending" && new Date(invoice.dueDate) < new Date()) {
-  invoice.status = "overdue";
-}
-```
-This is computed at query time, not persisted — the stored status remains "pending" until explicitly marked paid or updated.
-
-### 13.4 Stripe Integration Status
-
-| Feature | Status |
-|---|---|
-| Publishable key endpoint | Implemented (mock key: `pk_test_mock_optivax_dev`) |
-| Payment intent creation | Implemented (returns mock clientSecret) |
-| Webhook handling | Not implemented |
-| Real card processing | Not implemented |
-| Stripe settings storage | Implemented (optivax_stripe_settings) |
-
-The Stripe integration is scaffolded but uses mock credentials. The `POST /saas/v1/create-payment-intent` endpoint simulates a successful payment intent response. Actual card tokenization and webhook confirmation are not yet wired.
+### Verified solid (do not re-flag without new evidence)
+Stripe payment flow, payroll calculation consistency, Projects/Tasks/Clients/Attendance core CRUD, REST API structural integrity (zero duplicate routes, all callbacks resolve), database schema/migration integrity, `npm audit` (0 vulnerabilities), TypeScript build (clean). **Added 2026-07-17:** device/Bridge API-key hashing (never plaintext at rest, one-time reveal, expiry/revocation enforced, audit-logged failures — Section 12.8); `tsc -b` and `php -l` both clean across all files touched by the Bridge-Ready refactor and the Generate/Rotate API Key feature; verified by direct tool-call record (not just diff) that the refactor touched nothing in the attendance-aggregation/payroll/reports consumption path (Section 6.4).
 
 ---
 
 <a name="section-14"></a>
-## SECTION 14 — REPORTING SYSTEM
+## SECTION 14 — BUILD, PERFORMANCE & DEPLOYMENT
 
-### 14.1 Dashboard KPIs by Role
+### 14.1 Build
 
-#### Super Admin / Admin Dashboard
-- Total clients, total projects, total revenue
-- Recent activity feed
-- Cross-department status tiles
+```bash
+npm ci
+npm run build      # tsc -b && vite build → dist/
+npm run build:wp   # build + sync dist/ → wordpress-theme/optivax-react-theme/build/
+```
 
-#### Sales Dashboard
-- Total leads, conversion rate, pipeline value
-- Leads by source (breakdown chart)
-- Monthly revenue trend
-- Top performers (by target achievement)
-- Active campaigns count
+Production `dist/` is **3.3MB** (down from 11MB pre-Phase-6 — 7.3MB of unused TailAdmin template demo images and 12 unused npm dependencies were removed; see `PHASE6_PERFORMANCE_REPORT.md`). Route-level code-splitting means every page ships its own chunk; `vendor-charts` (apexcharts) and `vendor-react` are the only manually-grouped vendor chunks.
 
-#### Production Dashboard
-- Deliverables by status (Pending / In Progress / Review / Approved / Delivered)
-- Project progress distribution
-- Team workload (tasks per member)
-- Overdue deliverables count
+### 14.2 Deployment Paths
 
-#### Marketing Dashboard
-- Email campaign stats (sent, open rate, click rate)
-- Social link clicks by platform
-- Lead attribution by channel
-- Automation trigger counts
+Either (a) a standalone SPA deploy (Vercel — `vercel.json` has the SPA rewrite + full security-header/CSP config), or (b) synced into the WordPress theme (`npm run build:wp`) for a theme-embedded deploy. The WordPress plugin (`wordpress-backend/optivax-erp-backend/`) is packaged and deployed separately (zip → WP Admin/WP-CLI install).
 
-#### HR Dashboard
-- Total headcount by department
-- Active / on-leave / inactive employee split
-- Pending leave requests
-- Attendance rate (this month)
-- Payroll status breakdown
+### 14.3 Environment Configuration
 
-#### Management Dashboard
-- Financial summary: total billed, collected, outstanding
-- Project pipeline: by status
-- HR Analytics tile: headcount, active, pending/approved/rejected leaves
-- Department performance comparison
-- Recent audit activity
+`VITE_API_URL` must be set to the real backend origin before any production build — `.env.production` is deliberately left empty (safe default) rather than pointing at a placeholder, and `src/config/environment.ts` logs a loud console error if a production build ever resolves to `localhost`. The WP admin's `optivax_erp_allowed_origins` setting must list the real frontend origin(s) for CORS to function (a runtime DB option, not visible from source — verify in the live admin).
 
-#### Client Dashboard
-- Active project count + progress
-- Invoice summary: paid vs pending vs overdue
-- Unread notifications count
-- Recent files count
+### 14.4 Verification Gap (standing, called out explicitly in Phase 8)
 
-### 14.2 Reports Page
+No phase to date has run any backend PHP change against a live WordPress+MySQL instance — every backend change across all 8 audit phases, plus the 2026-07-17 Bridge-Ready/device-key work, has been `php -l` syntax-checked only (frontend changes were additionally `tsc -b` type-checked). Staging verification is a hard prerequisite before any production deploy, called out in the Phase 8 Deployment Checklist — this now also specifically includes a real Local Bridge Application round-trip against `POST /it/devices/{deviceId}/punches/import` and the Settings → OptiVax ERP checkbox save behavior (Section 6.4), neither of which has been exercised against a live instance either.
 
-The Reports page (`/*/reports`) is role-filtered and displays charts and tables relevant to the requesting department. Content adapts based on `user.role`:
-- Sales: pipeline funnel, lead source breakdown, target achievement
-- Production: deliverable completion rate, project health
-- Marketing: campaign performance, social analytics
-- HR: attendance, leave utilization, payroll summary
-- Management: cross-department aggregate view
+### 14.5 Frontend Deployment Ambiguity (open question, 2026-07-17)
 
-### 14.3 Export Capability
-
-Roles with `canExport(domain)` can trigger data export (CSV/PDF where implemented). Export gating:
-
-| Role | Exportable Domains |
-|---|---|
-| super_admin | All |
-| management | All (VIEW+EXPORT on all) |
-| sales_admin | sales, reports, files |
-| production_admin | production, reports, files |
-| marketing_admin | marketing, reports, files |
-| hr_admin | hr, reports, files |
-| *_member | None |
+Two deployment paths coexist in this repo (14.2) and it is **not established in this document which one the live production site actually uses** — `vercel.json` (with a full SPA/CSP header config) suggests a standalone Vercel deployment, and a prior security audit referred to it as "the deployed SPA," but `wordpress-theme/optivax-react-theme/` + `npm run build:wp` also exist as a working alternative (build synced into a WP theme, same-origin with the backend). Whichever is true changes where a frontend-only change (like the Devices.tsx API-key UI) needs to be deployed. Confirm against the live site before assuming either.
 
 ---
 
 <a name="section-15"></a>
-## SECTION 15 — SECURITY MODEL
+## SECTION 15 — AUDIT HISTORY
 
-### 15.1 Authentication
+| Phase | Date | Focus | Report |
+|---|---|---|---|
+| 1 | 2026-07-10 | Security/RBAC hardening — 9 ownership-check gaps fixed | `PHASE1_SECURITY_RBAC_REPORT.md` |
+| 2 | 2026-07-10 | REST API audit — pagination/sort/search + global error boundary added | `PHASE2_API_AUDIT_REPORT.md` |
+| 3 | 2026-07-10 | Database audit — schema-upgrade path, FK constraints, soft-delete, 2 N+1 fixes | `PHASE3_DATABASE_AUDIT_REPORT.md` |
+| 4 | 2026-07-10 | Frontend audit — code-splitting, loading states, memoization, memory leaks | `PHASE4_FRONTEND_AUDIT_REPORT.md` |
+| 5 | 2026-07-10 | Business logic audit — 8 workflow bugs fixed, 5 feature gaps documented | `PHASE5_BUSINESS_LOGIC_AUDIT_REPORT.md` |
+| 6 | 2026-07-10 | Performance audit — dead code/deps removed (11MB→3.3MB dist), 3rd N+1 fixed | `PHASE6_PERFORMANCE_REPORT.md` |
+| 7 | 2026-07-11 | Production security audit — CSRF (Critical), rate limiting, upload hardening | `PHASE7_SECURITY_REPORT.md` |
+| 8 | 2026-07-11 | Final production audit — Score 61/100, 5 Critical/5 High/9 Medium/5 Minor findings | `PHASE8_FINAL_PRODUCTION_AUDIT_REPORT.md` |
 
-```
-Login Flow:
-  User submits email + password
-      │
-      ▼
-  POST /saas/v1/auth/login
-      │
-      ▼
-  Server: reads mock_passwords[email]
-          bcrypt compare (mock implementation)
-          if match: create session token
-          write to mock_session in localStorage
-          return { user, session }
-      │
-      ▼
-  Client: AuthContext.login() sets user state
-          Returns roleHome path (e.g., "/sales/dashboard")
-          React Router navigates to role home
+Earlier module-specific work (pre-dating the numbered phase series): Payroll Standardization, Client Ownership Module, Activity Tracking Module (all 2026-07-02/03) — still accurate, referenced above where relevant.
 
-Session:
-  - Stored in localStorage["mock_session"]
-  - fetchSession() on app mount restores user
-  - logout() clears mock_session and nulls user state
-  - No JWT, no expiry, no refresh token (mock limitation)
-```
+### 15.1 Post-Phase-8 Feature Work (not numbered phase audits — no standalone report file)
 
-### 15.2 Route Protection
-
-Every non-public route is wrapped by `<ProtectedRoute>`:
-
-```typescript
-<ProtectedRoute allowedDomain="sales" allowedRoles={["sales_admin", "sales_member"]}>
-  {/* routes */}
-</ProtectedRoute>
-```
-
-**ProtectedRoute behavior:**
-1. If no authenticated user → redirect to `/login`
-2. If user role not in `allowedRoles` → redirect to role home (prevents cross-role URL manipulation)
-3. If role is allowed → render children
-
-**Nested protection** (e.g., admin-only within dept route):
-```typescript
-<Route element={<ProtectedRoute allowedDomain="production" allowedRoles={["production_admin", "hr_admin", "management"]} />}>
-  <Route path="/production/users" element={<Employees />} />
-</Route>
-```
-
-### 15.3 Data Isolation
-
-Server-level filtering enforced on every read:
-
-| Entity | Filter Applied By Server |
-|---|---|
-| Files | Visibility rules per requesting role |
-| Revisions | production_member → own projects only; other non-admin → empty |
-| Clients | client role → own record only |
-| Projects | client role → own clientId only |
-| Invoices | client role → own clientId only |
-| Notifications | all roles → own userId only (except super_admin) |
-| Leads | sales_member → assignedTo === userId |
-
-### 15.4 RBAC Enforcement Points
-
-RBAC is enforced at **three layers**:
-
-1. **Route Layer** — `ProtectedRoute` prevents rendering wrong role's pages
-2. **UI Layer** — Buttons/forms conditionally rendered based on `canCreate/canEdit/canDelete(domain)`
-3. **Server Layer** — Mock server reads `X-Mock-UserRole` header and applies data scope filters
-
-### 15.5 Privilege Escalation Prevention
-
-The signup endpoint validates role:
-```typescript
-const PRIVILEGED_ROLES = ["super_admin", "management", "sales_admin", "production_admin", 
-                          "marketing_admin", "hr_admin", "sales_member", "production_member",
-                          "marketing_member", "hr_member"];
-// Public signup cannot claim a privileged role → defaults to "client"
-```
-
-All privileged accounts must be created by an existing super_admin through the employee management interface.
-
-### 15.6 Audit Trail
-
-Every significant action is logged to `optivax_audit_logs` via `AuditLogService.add()`:
-
-```typescript
-{
-  action: "CREATE" | "UPDATE" | "DELETE" | "LOGIN" | "EXPORT" | "APPROVE"
-  entityType: "client" | "project" | "invoice" | "file" | "user" | ...
-  entityId: string
-  entityName: string
-  performedBy: string     // user ID
-  performedByName: string
-  performedByRole: UserRole
-  timestamp: string
-  description: string
-  oldValue?: {}           // previous state for UPDATE
-  newValue?: {}           // new state for UPDATE
-}
-```
-
-- Maximum 2000 entries retained (oldest pruned automatically)
-- Full-text search + filters by: entity type, action, role, date range
-- Accessible to: super_admin, management only
+| Date | Work | Where documented |
+|---|---|---|
+| 2026-07-17 | **Bridge-Ready biometric architecture refactor** — deprecated direct ERP→device TCP sync (opt-in-only now, off by default), hardened the Bridge-push punch-import endpoint (rate limiting, payload caps, idempotency keys, future-timestamp rejection, richer response/audit fields) | Section 6.4 of this document |
+| 2026-07-17 | **Device API-key hardening + Generate/Rotate API Key UI** — SHA-256 hashing at rest (was plaintext), ≥64-char cryptographically secure generation, one-time reveal, expiry/revocation, dedicated super_admin/it_admin-only endpoint, IT Support → Devices page UI (confirm dialog → one-time reveal dialog with copy) | Sections 5, 12.8 of this document |
+| 2026-07-17 | **This document's own refresh** — every count/claim in Sections 3.3, 5, 6, 7, 8, 9, 13 re-verified directly against source (not carried forward from Phase 8 unchanged); several stale figures corrected (page count, file/table counts, DB version, the `authorizeScoped()`/CommissionController finding) | This revision, throughout |
 
 ---
 
 <a name="section-16"></a>
-## SECTION 16 — CURRENT LIMITATIONS
+## SECTION 16 — FINAL SUMMARY
 
-### 16.1 Fully Implemented
+OptiVax Global has moved from a fully-mocked, in-browser prototype (v1.0 of this document) to a real WordPress+MySQL backend with a genuinely hardened security posture (Phase 7 closed a real Critical CSRF gap; brute-force, upload, and header hardening are all real and verified) and a lean, optimized frontend build (Phase 6). Core CRUD across Projects/Tasks/Clients/Attendance/Payroll is solid and consistently implemented. Real Stripe payments work end-to-end.
 
-| Feature | Status |
-|---|---|
-| Role-based authentication (11 roles) | ✅ Complete |
-| Protected route enforcement | ✅ Complete |
-| RBAC matrix with scope enforcement | ✅ Complete |
-| 4-step file upload with visibility | ✅ Complete |
-| File visibility enforcement (server-side) | ✅ Complete |
-| File upload → revision → notification pipeline | ✅ Complete |
-| Deliverable 5-stage lifecycle | ✅ Complete |
-| Invoice overdue auto-detection | ✅ Complete |
-| Invoice mark-paid → project.spent update | ✅ Complete |
-| Client notification on payment | ✅ Complete |
-| Lead-to-client conversion with duplicate prevention | ✅ Complete |
-| Project assignment panel with revision trail | ✅ Complete |
-| Task dept-scope enforcement (assignee allowlist) | ✅ Complete |
-| Management dashboard with HR analytics | ✅ Complete |
-| Cross-tab notification sync | ✅ Complete |
-| SSE connection with reconnect backoff | ✅ Complete |
-| Email marketing (templates, campaigns, automations) | ✅ Complete |
-| Social link tracking with persistent metrics | ✅ Complete |
-| Audit log with search and filters | ✅ Complete |
-| HR leave request workflow | ✅ Complete |
-| Payroll display with leave deductions | ✅ Complete |
-| Designation field on employees | ✅ Complete |
-| Revision visibility scoping by role | ✅ Complete |
-| Production member deliverable advancement limit | ✅ Complete |
-| Management files access (CREATE/EDIT/DELETE) | ✅ Complete |
-| HR department files page and route | ✅ Complete |
-| Cross-cutting domain scope exemption (files etc.) | ✅ Complete |
+Since Phase 8, the biometric-attendance subsystem was re-architected for the platform's actual hosting reality: shared hosting cannot reach a device on an office LAN, so the ERP no longer tries — it's now a pure REST receiver, with device credentials hashed at rest for the first time anywhere in this schema (Section 6.4, 12.8). This work also served as this document's first post-Phase-8 fact-check: several figures had drifted (page/file/table counts, DB version) and one Critical finding (C3) needed a real correction rather than a blind carry-forward — the specific Commission cross-department example it cited turned out to already be mitigated, though the general RBAC-scoping gap it points at is still real and unaddressed.
 
-### 16.2 Partially Implemented
-
-| Feature | Gap |
-|---|---|
-| Stripe payments | Scaffolded with mock key; no real card tokenization or webhook |
-| Email automation triggers | Rules exist in UI; no actual email sending |
-| Campaign analytics | Mock data; not derived from real send events |
-| Social click tracking | Tracking link stored; click events simulated |
-| Reports export | Export permission gated but CSV/PDF generation not implemented |
-| Attendance bulk import | Manual entry only; no CSV upload |
-| Commission calculation | Records display; automatic calculation from targets/sales not wired |
-| Profile avatar upload | UI field exists; actual image upload not persisted beyond URL |
-| Campaign budget vs spend tracking | Display only; no spend deduction automation |
-
-### 16.3 Mock Only (Backend Required for Production)
-
-| Feature | Notes |
-|---|---|
-| Session management | localStorage session, no JWT, no expiry |
-| Password storage | Stored as plaintext strings in `mock_passwords` |
-| SSE notifications | Simulated; no real event stream from server |
-| File storage | `URL.createObjectURL()` — files exist only in memory/tab |
-| Email delivery | EmailService writes to localStorage; no SMTP |
-| Stripe webhooks | No callback handler |
-| Multi-user real-time collaboration | Each browser has own localStorage; no shared backend |
-| Audit log persistence | Cleared on `localStorage.clear()`; no server-side log |
-
-### 16.4 Future Features (Not Yet Started)
-
-| Feature | Notes |
-|---|---|
-| Two-factor authentication | Not in scope for current build |
-| Role change audit | No log entry for profile role updates |
-| Client self-service billing | Clients cannot pay invoices through portal |
-| Mobile app | Web-only; no React Native counterpart |
-| Subscription billing (recurring) | Subscription model exists in data but no billing automation |
-| API rate limiting | Not applicable (in-browser mock) |
-| Data backup / export | No full-platform data export |
-| Multi-language support | English only |
-| Dark mode persistence | Likely functional but not documented |
-| Webhook integrations (Slack, Zapier) | Not implemented |
-
----
-
-<a name="section-17"></a>
-## SECTION 17 — PRODUCTION READINESS
-
-### 17.1 Scoring Summary
-
-| Dimension | Score | Rationale |
-|---|---|---|
-| **Architecture** | 8.5 / 10 | Clean separation of concerns: context → hook → service → mock API → storage. Routes well-structured. Mock server cleanly mimics REST. Deduction: no backend, no true persistence layer. |
-| **RBAC** | 9.0 / 10 | 11 roles × 11 domains × 7 actions matrix. Scope enforcement with cross-cutting exemptions correctly implemented. Route, UI, and server-level enforcement. Deduction: `checkPermission` bypasses scope (uses `hasPermission` directly) — minor inconsistency. |
-| **Security** | 5.5 / 10 | Routes protected, privilege escalation prevented, data isolation enforced. Significant deductions: passwords plaintext in localStorage, session has no expiry, no HTTPS enforcement, no CSRF protection, no real auth backend. |
-| **Data Integrity** | 8.0 / 10 | Foreign key relationships consistent throughout. Denormalized fields (totalBilled, totalProjects) correctly seeded. Invoice/payment amounts consistent. Overdue auto-detection on read. Deduction: denormalized counts not auto-updated on create/delete (only on mark-paid). |
-| **Workflow** | 9.0 / 10 | All major business workflows implemented end-to-end: lead → client → project → deliverable → invoice → payment → client notification. File → revision → notification chain complete. HR leave/attendance/payroll linked. Deduction: no email actually sent, Stripe not real. |
-| **Maintainability** | 8.0 / 10 | TypeScript strict mode, clear file organization, consistent service layer pattern. Seed data well-structured. Deduction: some pages access localStorage directly without going through a service; some denormalized fields could drift. |
-| **Scalability** | 3.0 / 10 | localStorage has ~5MB cap. Single-browser single-user architecture. No database, no API server, no horizontal scaling. All data lost on `localStorage.clear()`. This is appropriate for a demo/prototype, not production. |
-
-**Overall Production Readiness: 7.3 / 10** *(as a production-ready prototype; 4.5/10 as a deployable SaaS)*
-
-### 17.2 Path to Production
-
-The following changes are required before production deployment:
-
-#### Critical (Must Have)
-1. Replace localStorage with a real database (PostgreSQL recommended for relational data, S3/Blob for files)
-2. Replace mock auth with real authentication (Supabase Auth, Auth0, or custom JWT with refresh tokens)
-3. Hash passwords with bcrypt before storage
-4. Deploy Node.js/Express or equivalent backend to serve the API endpoints defined by the mock server
-5. Replace `URL.createObjectURL()` file URLs with real cloud file storage (S3, Cloudflare R2)
-6. Implement real Stripe webhook confirmation for payment processing
-7. Add HTTPS enforcement and proper CORS policy
-
-#### High Priority
-8. Implement real email delivery via SendGrid or Postmark for email marketing and notifications
-9. Replace SSE simulation with real server-sent events or WebSocket connection
-10. Add proper session management with JWT expiry and refresh token rotation
-11. Add API rate limiting and input sanitization
-
-#### Medium Priority
-12. Migrate denormalized fields (totalBilled, totalProjects) to computed views or triggers
-13. Add pagination to all list endpoints (currently returns all records)
-14. Implement proper audit log backend storage with retention policy
-15. Add comprehensive error boundary and error reporting (Sentry)
-
----
-
-<a name="section-18"></a>
-## SECTION 18 — FINAL SUMMARY
-
-### Executive Summary
-
-**OptiVax Global SaaS CRM** is a fully-featured, role-based client relationship and business operations platform serving a digital services agency model. The platform manages the complete client and employee lifecycle from lead acquisition through project delivery, invoicing, payment collection, and HR operations — all within a unified, permission-controlled interface.
-
-### Platform Strengths
-
-**Comprehensive Role Architecture**
-Eleven distinct roles with granular RBAC across eleven permission domains and seven action types. Every significant user interaction — route access, button visibility, data retrieval — passes through permission checks at multiple enforcement layers. The scope restriction system ensures that departmental users cannot accidentally access cross-department data while still providing legitimate cross-cutting access to infrastructure domains like files, notifications, and reports.
-
-**Complete Business Workflow Coverage**
-The platform implements end-to-end workflows for every major business process:
-- Sales pipeline from lead capture through client conversion
-- Project management from creation through completion with team assignment audit trails
-- Production delivery through a five-stage deliverable lifecycle
-- Client-facing portal with billing, file access, and revision request tracking
-- Financial management with invoice generation, overdue detection, and payment confirmation
-- HR operations including leave management, attendance tracking, and payroll display
-
-**Production-Quality Data Architecture**
-All data entities carry proper foreign key relationships, denormalized display fields for performance, and role-scoped server-side filtering. The file visibility system (five distinct levels including private, department, project-team, specific users, and client) is enforced at the API layer with automatic bypass for administrator roles.
-
-**Audit and Compliance Ready**
-Every significant platform action is captured in a structured audit log with actor identity, role, entity references, old/new values, and timestamp. A maximum of 2000 entries with full-text search and multi-filter querying supports compliance review. Both management and super_admin roles have read-only access to the complete audit trail.
-
-### Intended Audiences
-
-| Audience | How to Use This Document |
-|---|---|
-| **Client (Non-Technical)** | Sections 1, 2, 7, 13, 14 — understand what the platform does and who uses it |
-| **Developer Onboarding** | Sections 4, 5, 8, 10 — understand routes, pages, service layer, and state management |
-| **Backend Engineer** | Sections 6, 8, 9, 16.3 — understand data model and what to build for production |
-| **Security Review** | Sections 3, 15, 16.2, 17 — understand RBAC, auth model, and gaps |
-| **Product Manager** | Sections 7, 16, 17 — understand workflows, gaps, and production requirements |
-| **QA / Testing** | Sections 2, 3, 4, 7 — understand role behaviors, expected routes, and workflow sequences |
-| **Future Maintainer** | Sections 6, 8, 9, 10 — understand the data model, service patterns, and context architecture |
-
-### Technology Decisions
-
-The choice of an in-browser mock server over a real API backend is the defining architectural decision of this build. It enables:
-- **Zero infrastructure cost** for demonstration and development
-- **Instant data reset** by clearing localStorage
-- **Full API simulation** with real HTTP semantics, role-scoped filtering, and side-effect chains
-- **No deployment dependency** — the entire platform runs from a single `npm run dev`
-
-This is the appropriate approach for a prototype, proof-of-concept, or design system. The mock server's endpoint contracts are clean enough that swapping in a real backend requires implementing the same URL patterns against a real database — the frontend layer requires no changes.
-
-### Production Migration Path
-
-The fastest path to a production-deployable version is:
-1. Deploy the existing frontend as-is to Vercel/Netlify
-2. Build a Node.js/Express backend implementing every `/saas/v1/*` endpoint defined in `server.ts`
-3. Connect to PostgreSQL for relational data and S3 for file storage
-4. Replace `mockLogin` / `fetchSession` with Supabase Auth or a custom JWT implementation
-5. Configure real Stripe webhooks for payment confirmation
-6. Point the `api` client in `lib/client.ts` to the real backend URL
-
-The service layer and hook architecture are production-ready. The UI components and RBAC logic require no modification for a real backend deployment.
-
----
-
-*Document generated: 2026-06-20*  
-*Platform version: 1.0 (prototype)*  
-*Codebase: React 19 / TypeScript 5.7 / Vite 6*
+What remains before a clean production deploy: regenerating stale deployment artifacts, resolving the employee-department data-integrity bug, generalizing the RBAC scoping mechanism that today only protects the endpoints Phase 1 and this revision's Commission/Budget spot-checks specifically visited, confirming which of the two frontend deployment paths (Section 14.5) is actually live, and being honest with users about which features are fully real (most of them) versus still cosmetic (Reports, Budget utilization tracking, commission auto-calc, email campaign sending, automation rules). None of these require a re-architecture — they're bounded, well-understood pieces of work, detailed with file:line precision in `PHASE8_FINAL_PRODUCTION_AUDIT_REPORT.md` and, for the newer subsystem, in Section 6.4 of this document.

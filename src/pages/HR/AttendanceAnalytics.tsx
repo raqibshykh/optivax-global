@@ -5,18 +5,18 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import {
-  loadYearData,
+  AttendanceService,
   computeMonthlyReport,
-  STAFF_USERS,
   MONTHS,
   monthLabel,
   DEPT_LABELS,
   DEPT_IDS,
   getAccessibleDepts,
-  getUsersInDept,
   ROLE_TO_DEPT,
+  type AttendanceRecord,
   type MonthlyReport,
-} from "../../mock/attendanceData";
+  type StaffUser,
+} from "../../services/attendanceService";
 
 const TODAY     = new Date();
 const CUR_YEAR  = TODAY.getFullYear();
@@ -41,8 +41,8 @@ function baseChartOptions(type: string): ApexOptions {
 
 function computeMonthlyTrend(
   year: number,
-  records: ReturnType<typeof loadYearData>,
-  accessibleUsers: typeof STAFF_USERS,
+  records: AttendanceRecord[],
+  accessibleUsers: StaffUser[],
 ) {
   const months = Array.from({ length: CUR_YEAR === year ? CUR_MONTH : 12 }, (_, i) => i + 1);
   const presentPct: number[] = [];
@@ -70,15 +70,16 @@ function computeMonthlyTrend(
 function computeDeptComparison(
   year: number,
   month: number,
-  records: ReturnType<typeof loadYearData>,
+  records: AttendanceRecord[],
   accessibleDepts: string[] | "all",
+  allStaffUsers: StaffUser[],
 ) {
   const depts  = accessibleDepts === "all" ? DEPT_IDS : accessibleDepts;
   const labels: string[] = [];
   const pcts:   number[] = [];
 
   for (const deptId of depts) {
-    const users = getUsersInDept(deptId);
+    const users = allStaffUsers.filter((u) => (u.departmentId || ROLE_TO_DEPT[u.role] || "") === deptId);
     if (users.length === 0) continue;
     const rpts = users.map((u) => computeMonthlyReport(u.id, u.name, u.role, month, year, records));
     const avg  = rpts.reduce((s, r) => s + r.attendancePercentage, 0) / rpts.length;
@@ -92,8 +93,8 @@ function computeDeptComparison(
 function computeLeaveDistribution(
   year: number,
   month: number,
-  records: ReturnType<typeof loadYearData>,
-  accessibleUsers: typeof STAFF_USERS,
+  records: AttendanceRecord[],
+  accessibleUsers: StaffUser[],
 ) {
   const rpts = accessibleUsers.map((u) =>
     computeMonthlyReport(u.id, u.name, u.role, month, year, records)
@@ -130,31 +131,36 @@ export default function AttendanceAnalytics() {
   const [year,       setYear]       = useState(CUR_YEAR);
   const [month,      setMonth]      = useState(CUR_MONTH);
   const [deptFilter, setDeptFilter] = useState("all");
-  const [records,    setRecords]    = useState<ReturnType<typeof loadYearData>>([]);
+  const [records,    setRecords]    = useState<AttendanceRecord[]>([]);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [loading,    setLoading]    = useState(true);
 
   const accessibleDepts = useMemo(() => getAccessibleDepts(role), [role]);
 
   useEffect(() => {
     setLoading(true);
-    setTimeout(() => {
-      setRecords(loadYearData(year));
+    AttendanceService.getYearData(year).then((data) => {
+      setRecords(data);
       setLoading(false);
-    }, 0);
+    });
   }, [year]);
+
+  useEffect(() => {
+    AttendanceService.getStaffUsers().then(setStaffUsers);
+  }, []);
 
   const visibleUsers = useMemo(() => {
     const activeDepts = deptFilter !== "all" ? [deptFilter]
       : accessibleDepts === "all" ? DEPT_IDS : accessibleDepts;
-    if (activeDepts.length === 0) return STAFF_USERS;
-    return STAFF_USERS.filter((u) => {
-      const d = (u as { departmentId?: string }).departmentId || ROLE_TO_DEPT[u.role] || "";
+    if (activeDepts.length === 0) return staffUsers;
+    return staffUsers.filter((u) => {
+      const d = u.departmentId || ROLE_TO_DEPT[u.role] || "";
       return (activeDepts as string[]).includes(d);
     });
-  }, [accessibleDepts, deptFilter]);
+  }, [accessibleDepts, deptFilter, staffUsers]);
 
   const trend     = useMemo(() => computeMonthlyTrend(year, records, visibleUsers), [year, records, visibleUsers]);
-  const deptComp  = useMemo(() => computeDeptComparison(year, month, records, deptFilter === "all" ? accessibleDepts : [deptFilter]), [year, month, records, deptFilter, accessibleDepts]);
+  const deptComp  = useMemo(() => computeDeptComparison(year, month, records, deptFilter === "all" ? accessibleDepts : [deptFilter], staffUsers), [year, month, records, deptFilter, accessibleDepts, staffUsers]);
   const leaveDist = useMemo(() => computeLeaveDistribution(year, month, records, visibleUsers), [year, month, records, visibleUsers]);
 
   const monthReports = useMemo<MonthlyReport[]>(() =>

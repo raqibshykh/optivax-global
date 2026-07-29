@@ -1,18 +1,25 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { RequirePermission } from "../../components/auth/RequirePermission";
 import { safeParse } from "../../lib/storage";
 import type { LeaveRequest } from "../Client/Profile";
+import { LeaveRequestService } from "../../services/leaveRequestService";
+import { EmployeeExtraService } from "../../services/employeeExtraService";
 import { UserService, UserProfile } from "../../services/userService";
 import { notifyUserCreated, logAttendanceModified } from "../../services/notificationHelpers";
 import { useAuth } from "../../context/AuthContext";
-import { storeMockPassword } from "../../lib/client";
-import { getAdvanceRequests } from "../../mock/payrollData";
+import { useDepartments } from "../../context/DepartmentContext";
+import { PayrollService } from "../../services/payrollService";
+import { UNKNOWN_DEPARTMENT } from "../../domain/department/calculations";
 
-const LEAVE_REQUESTS_KEY = "optivax_leave_requests";
-const EXTRA_KEY = "optivax_employee_extra";
+// NOTE: ATTENDANCE_KEY below ("optivax_attendance") is a THIRD, distinct
+// attendance-marking feature (admin marks Present/Absent/Late per employee
+// per date, local to this dashboard widget) — it is NOT the same key as the
+// HR/Attendance.tsx self-check-in log ("mock_attendance", now migrated to
+// AttendanceService.getSelfRecords()/etc.) and is out of scope for this
+// migration; left reading/writing localStorage directly as before.
 const ATTENDANCE_KEY = "optivax_attendance";
 
 type AttendanceStatus = "Present" | "Absent" | "Late";
@@ -43,6 +50,7 @@ interface CreateUserForm {
 
 export default function HRPanel() {
   const { user: currentUser } = useAuth();
+  const { getDepartmentName } = useDepartments();
   const [activeTab, setActiveTab] = useState("directory");
 
   // ── Create User form state ────────────────────────────────────────────────
@@ -69,9 +77,8 @@ export default function HRPanel() {
         company: "Optivax Global",
         role: createForm.role,
         created_at: new Date().toISOString(),
+        password: createForm.password,
       });
-      // Store password so the new user can log in
-      storeMockPassword(createForm.email, createForm.password);
       if (currentUser) {
         notifyUserCreated(
           currentUser.id, currentUser.name, currentUser.role,
@@ -101,42 +108,22 @@ export default function HRPanel() {
       .then((all) => {
         const nonClients = all.filter((u) => u.role !== "client");
         setEmployees(nonClients);
-
-        // Load extra data; seed defaults for any employee missing an entry
-        const stored = safeParse<Record<string, EmployeeExtraData>>(
-          localStorage.getItem(EXTRA_KEY),
-          {}
-        );
-        const merged = { ...stored };
-        for (const emp of nonClients) {
-          if (!merged[emp.id]) {
-            merged[emp.id] = { userId: emp.id, leavesTaken: 2, salary: 45000, salaryStatus: "Unpaid", workMode: "Onsite" };
-          }
-        }
-        setExtraData(merged);
       })
       .catch(() => setEmployees([]))
       .finally(() => setIsLoadingEmployees(false));
+
+    EmployeeExtraService.getAll()
+      .then(setExtraData)
+      .catch(() => setExtraData({}));
   }, []);
 
-  // ── Leave Requests — persisted in localStorage ────────────────────────
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() =>
-    safeParse<LeaveRequest[]>(localStorage.getItem(LEAVE_REQUESTS_KEY), [])
-  );
+  // ── Leave Requests ──────────────────────────────────────────────────────
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
 
   useEffect(() => {
-    localStorage.setItem(LEAVE_REQUESTS_KEY, JSON.stringify(leaveRequests));
-  }, [leaveRequests]);
-
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === LEAVE_REQUESTS_KEY)
-        setLeaveRequests(safeParse<LeaveRequest[]>(e.newValue, []));
-      if (e.key === EXTRA_KEY)
-        setExtraData(safeParse<Record<string, EmployeeExtraData>>(e.newValue, {}));
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    LeaveRequestService.getEmployeeRequests()
+      .then(setLeaveRequests)
+      .catch(() => setLeaveRequests([]));
   }, []);
 
   // ── Attendance — persisted per date ──────────────────────────────────
@@ -167,9 +154,12 @@ export default function HRPanel() {
   // ── Derived ───────────────────────────────────────────────────────────
   const pendingLeaves = leaveRequests.filter((r) => r.status === "Pending").length;
 
-  const pendingAdvance = useMemo(() =>
-    getAdvanceRequests().filter(r => r.status === "pending").length,
-  []);
+  const [pendingAdvance, setPendingAdvance] = useState(0);
+  useEffect(() => {
+    PayrollService.getAdvanceRequests()
+      .then((all) => setPendingAdvance(all.filter(r => r.status === "pending").length))
+      .catch(() => setPendingAdvance(0));
+  }, []);
 
   const deptCount = new Set(
     employees.map((u) => u.departmentId || (u.role ? u.role.split("_")[0] : "other"))
@@ -184,19 +174,31 @@ export default function HRPanel() {
     );
   });
 
-  // Group filtered employees by department
+  // Group filtered employees by department. Grouped by the raw key (real departmentId, legacy
+  // "dept-<domain>" slug, or a short role-prefix fallback word) for correct bucketing — the
+  // DISPLAY label is resolved separately at render time via getDepartmentName(), never shown
+  // as this raw key directly (that was the bug: an unmangled real departmentId is a UUID).
   const employeeGroups = filteredEmployees.reduce<Record<string, UserProfile[]>>((acc, emp) => {
-    const key = emp.departmentId
-      ? emp.departmentId.replace("dept-", "")
-      : (emp.role ? emp.role.split("_")[0] : "other");
+    const key = emp.departmentId || (emp.role ? emp.role.split("_")[0] : "other");
     acc[key] = acc[key] ?? [];
     acc[key].push(emp);
     return acc;
   }, {});
 
+  const groupDisplayLabel = (key: string): string => {
+    const resolved = getDepartmentName(key);
+    if (resolved !== UNKNOWN_DEPARTMENT) return resolved;
+    return key.length > 20 ? UNKNOWN_DEPARTMENT : key.replace("dept-", "");
+  };
+
   // ── Leave handlers ────────────────────────────────────────────────────
-  const handleLeaveAction = (id: string, action: "Approved" | "Rejected") => {
-    setLeaveRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: action } : r)));
+  const handleLeaveAction = async (id: string, action: "Approved" | "Rejected") => {
+    try {
+      await LeaveRequestService.updateEmployeeRequestStatus(id, action);
+      setLeaveRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: action } : r)));
+    } catch {
+      // no-op — the list will reflect the last confirmed server state on next reload
+    }
   };
 
   const [leaveFilter, setLeaveFilter] = useState<"All" | "Pending" | "Approved" | "Rejected">("All");
@@ -389,8 +391,8 @@ export default function HRPanel() {
                   {Object.entries(employeeGroups).map(([dept, emps]) => (
                     <div key={dept}>
                       <div className="flex items-center gap-3 mb-3">
-                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 capitalize">
-                          {dept} Department
+                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                          {groupDisplayLabel(dept)} Department
                         </h4>
                         <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
                           {emps.length} {emps.length === 1 ? "employee" : "employees"}
@@ -567,9 +569,7 @@ export default function HRPanel() {
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                       {employees.map((emp) => {
                         const status = getStatusForDate(emp.id, attendanceDate);
-                        const dept = emp.departmentId
-                          ? emp.departmentId.replace("dept-", "")
-                          : (emp.role ? emp.role.split("_")[0] : "—");
+                        const dept = emp.departmentId ? getDepartmentName(emp.departmentId) : "—";
                         const workMode = extraData[emp.id]?.workMode ?? "Onsite";
                         return (
                           <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
@@ -582,7 +582,7 @@ export default function HRPanel() {
                                 {emp.role ?? "—"}
                               </span>
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400 capitalize">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                               {dept}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">

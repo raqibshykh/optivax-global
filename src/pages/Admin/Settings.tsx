@@ -6,8 +6,10 @@ import { api } from "../../lib/client";
 import {
   getCompanySettings,
   saveCompanySettings,
+  COMPANY_DEFAULTS,
   type CompanySettings,
 } from "../../services/companySettingsService";
+import { UserService } from "../../services/userService";
 
 const LOGO_MAX_BYTES = 512 * 1024; // 500 KB
 
@@ -22,11 +24,11 @@ export default function Settings() {
   const canEditBranding = ["super_admin", "hr_admin"].includes(user?.role ?? "");
 
   // ── Company branding state ─────────────────────────────────────────────────
-  const [company, setCompany] = useState<CompanySettings>(getCompanySettings());
+  const [company, setCompany] = useState<CompanySettings>(COMPANY_DEFAULTS);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setCompany(getCompanySettings());
+    getCompanySettings().then(setCompany).catch(() => {});
   }, []);
 
   const setField = <K extends keyof CompanySettings>(key: K, val: CompanySettings[K]) =>
@@ -49,9 +51,9 @@ export default function Settings() {
     e.target.value = "";
   };
 
-  const handleSaveCompany = () => {
+  const handleSaveCompany = async () => {
     try {
-      saveCompanySettings(company);
+      await saveCompanySettings(company);
       showToast("Company profile saved successfully.", "success");
     } catch {
       showToast("Failed to save company profile.", "error");
@@ -65,11 +67,47 @@ export default function Settings() {
   // ── Stripe state ───────────────────────────────────────────────────────────
   const [stripeEnabled, setStripeEnabled]   = useState(false);
   const [publishableKey, setPublishableKey] = useState("");
+  // Secret Key / Webhook Secret are write-only: the server never returns them
+  // (StripeSettingsRepository::getPublicConfig() only exposes the
+  // publishable key), so these always start blank — a blank submit leaves
+  // the already-saved value untouched (see saveConfig()'s doc comment).
   const [secretKey, setSecretKey]           = useState("");
   const [webhookSecret, setWebhookSecret]   = useState("");
   const [secretVisible, setSecretVisible]   = useState(false);
+  const [webhookVisible, setWebhookVisible] = useState(false);
+  const [savingStripe, setSavingStripe]     = useState(false);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    api
+      .get<{ enabled: boolean; publishableKey: string }>("/saas/v1/config/stripe")
+      .then((res) => {
+        setStripeEnabled(!!res?.enabled);
+        setPublishableKey(res?.publishableKey ?? "");
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdmin]);
 
   const saveStripeSettings = async () => {
+    if (publishableKey && !publishableKey.startsWith("pk_live_")) {
+      showToast('Publishable Key must be a live key starting with "pk_live_".', "error");
+      return;
+    }
+    if (secretKey && !secretKey.startsWith("sk_live_")) {
+      showToast('Secret Key must be a live key starting with "sk_live_".', "error");
+      return;
+    }
+    if (webhookSecret && !webhookSecret.startsWith("whsec_")) {
+      showToast('Webhook Secret must start with "whsec_".', "error");
+      return;
+    }
+    if (stripeEnabled && !publishableKey) {
+      showToast("Enter a Publishable Key before enabling Stripe Payment.", "error");
+      return;
+    }
+
+    setSavingStripe(true);
     try {
       await api.post("/saas/v1/settings/stripe", {
         enabled: stripeEnabled,
@@ -77,9 +115,14 @@ export default function Settings() {
         secretKey,
         webhookSecret,
       });
+      // Never keep secrets in memory longer than the single request that sends them.
+      setSecretKey("");
+      setWebhookSecret("");
       showToast("Stripe settings saved.", "success");
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Failed to save Stripe settings.", "error");
+    } finally {
+      setSavingStripe(false);
     }
   };
 
@@ -381,8 +424,10 @@ export default function Settings() {
             <button
               type="button"
               onClick={() => {
-                localStorage.setItem("optivax_notif_settings", JSON.stringify({ emailNotifs, paymentReminders }));
-                showToast("Notification preferences saved.", "success");
+                if (!user) return;
+                UserService.update(user.id, { notificationPreferences: { emailNotifs, paymentReminders } })
+                  .then(() => showToast("Notification preferences saved.", "success"))
+                  .catch(() => showToast("Failed to save preferences.", "error"));
               }}
               className="px-4 py-2 text-sm font-medium text-white bg-brand-500 border border-transparent rounded-lg hover:bg-brand-600"
             >
@@ -399,18 +444,6 @@ export default function Settings() {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Restricted to Super Admin</p>
             </div>
             <div className="p-6 space-y-4">
-              {import.meta.env.DEV && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-4 py-3">
-                  <span className="text-amber-600 dark:text-amber-400 text-lg leading-none">⚠</span>
-                  <div>
-                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Development mode — mock storage only</p>
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                      In production, the Stripe <strong>secret key</strong> must <strong>never</strong> be sent to or stored by the browser.
-                      Remove this field and store it exclusively in your server-side environment variables (<code>STRIPE_SECRET_KEY</code>).
-                    </p>
-                  </div>
-                </div>
-              )}
               <div className="flex items-center space-x-3">
                 <input type="checkbox" id="stripe-enabled" checked={stripeEnabled} onChange={e => setStripeEnabled(e.target.checked)} className="w-4 h-4 text-brand-600 border-gray-300 rounded" />
                 <label htmlFor="stripe-enabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Stripe Payment</label>
@@ -420,24 +453,28 @@ export default function Settings() {
                 <input type="text" value={publishableKey} onChange={e => setPublishableKey(e.target.value)} className={inputCls} placeholder="pk_live_..." />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Stripe Secret Key
-                  <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">Dev/mock only</span>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Stripe Secret Key</label>
                 <div className="relative">
-                  <input type={secretVisible ? "text" : "password"} value={secretKey} onChange={e => setSecretKey(e.target.value)} className={`${inputCls} pr-16`} placeholder="sk_live_..." />
+                  <input type={secretVisible ? "text" : "password"} value={secretKey} onChange={e => setSecretKey(e.target.value)} className={`${inputCls} pr-16`} placeholder="sk_live_..." autoComplete="off" />
                   <button type="button" className="absolute inset-y-0 right-0 px-3 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" onClick={() => setSecretVisible(v => !v)}>
                     {secretVisible ? "Hide" : "Show"}
                   </button>
                 </div>
+                <p className="text-xs text-gray-400 mt-1">Leave blank to keep the currently saved secret key.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Stripe Webhook Secret</label>
-                <input type="text" value={webhookSecret} onChange={e => setWebhookSecret(e.target.value)} className={inputCls} placeholder="whsec_..." />
+                <div className="relative">
+                  <input type={webhookVisible ? "text" : "password"} value={webhookSecret} onChange={e => setWebhookSecret(e.target.value)} className={`${inputCls} pr-16`} placeholder="whsec_..." autoComplete="off" />
+                  <button type="button" className="absolute inset-y-0 right-0 px-3 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" onClick={() => setWebhookVisible(v => !v)}>
+                    {webhookVisible ? "Hide" : "Show"}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Leave blank to keep the currently saved webhook secret.</p>
               </div>
               <div className="flex justify-end">
-                <button type="button" onClick={saveStripeSettings} className="px-4 py-2 text-sm font-medium text-white bg-brand-500 border border-transparent rounded-lg hover:bg-brand-600">
-                  Save Stripe Settings
+                <button type="button" onClick={saveStripeSettings} disabled={savingStripe} className="px-4 py-2 text-sm font-medium text-white bg-brand-500 border border-transparent rounded-lg hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {savingStripe ? "Saving…" : "Save Stripe Settings"}
                 </button>
               </div>
             </div>

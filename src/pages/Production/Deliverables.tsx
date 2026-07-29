@@ -1,16 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
+import LoadingState from "../../components/common/LoadingState";
+import ErrorState from "../../components/common/ErrorState";
 import { useAuth } from "../../context/AuthContext";
-import { Deliverable, DeliverableStatus, StoredClient } from "../../types";
-import { safeParse } from "../../lib/storage";
+import { Client, Deliverable, DeliverableStatus } from "../../types";
 import {
   notifyDeliverableUploaded,
   notifyDeliverableApproved,
 } from "../../services/notificationHelpers";
-
-export const DELIVERABLES_KEY = "optivax_deliverables";
-export const CLIENTS_KEY = "optivax_clients";
-const PROJECTS_KEY = "mock_projects";
+import { DeliverableService } from "../../services/deliverableService";
+import { ClientService } from "../../services/clientService";
+import { ProjectService } from "../../services/projectService";
 
 const STATUS_ORDER: DeliverableStatus[] = ["Pending", "In Progress", "Review", "Approved", "Delivered"];
 
@@ -25,16 +25,6 @@ const STATUS_COLORS: Record<DeliverableStatus, string> = {
 function fmt(d: string) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
-
-const readDeliverables = (): Deliverable[] =>
-  safeParse<Deliverable[]>(localStorage.getItem(DELIVERABLES_KEY), []);
-
-const writeDeliverables = (items: Deliverable[]) => {
-  localStorage.setItem(DELIVERABLES_KEY, JSON.stringify(items));
-};
-
-const readClients = (): StoredClient[] =>
-  safeParse<StoredClient[]>(localStorage.getItem(CLIENTS_KEY), []);
 
 interface SimpleProject {
   id: string;
@@ -62,25 +52,40 @@ const emptyForm: DeliverableFormData = {
 export default function Deliverables() {
   const { user, checkPermission } = useAuth();
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
-  const [clients, setClients] = useState<StoredClient[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [allProjects, setAllProjects] = useState<SimpleProject[]>([]);
   const [filter, setFilter] = useState<DeliverableStatus | "">("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<DeliverableFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const isAdmin = checkPermission("production", "EDIT");
   const isMember = !isAdmin && (user?.role === "production_member");
   const isClient = user?.role === "client";
-  const isManagement = !isAdmin && !isMember && !isClient;
 
-  useEffect(() => {
-    setDeliverables(readDeliverables());
-    setClients(readClients());
-    const rawProjects = safeParse<SimpleProject[]>(localStorage.getItem(PROJECTS_KEY) ?? "[]", []);
-    setAllProjects(rawProjects);
+  const loadDeliverables = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [deliverablesData, clientsData, projectsData] = await Promise.all([
+        DeliverableService.getAll(),
+        ClientService.getAll(),
+        ProjectService.getAll(),
+      ]);
+      setDeliverables(deliverablesData);
+      setClients(clientsData);
+      setAllProjects(projectsData);
+    } catch (err: unknown) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load deliverables");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => { loadDeliverables(); }, [loadDeliverables]);
 
   const visibleDeliverables = deliverables.filter((d) => {
     if (isClient) return d.status === "Approved" || d.status === "Delivered";
@@ -88,71 +93,70 @@ export default function Deliverables() {
     return true; // admin, management, super_admin see all
   }).filter((d) => !filter || d.status === filter);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !form.title || !form.clientId || !form.dueDate) return;
     setSaving(true);
-    const newItem: Deliverable = {
-      id: `del-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      clientId: form.clientId,
-      clientName: form.clientName,
-      projectId: form.projectId || undefined,
-      projectName: form.projectName || undefined,
-      title: form.title,
-      description: form.description,
-      status: "Pending",
-      dueDate: form.dueDate,
-      uploadedBy: user.id,
-      uploadedByName: user.name,
-      uploadedAt: new Date().toISOString(),
-      notes: form.notes || undefined,
-    };
-    const updated = [newItem, ...readDeliverables()];
-    writeDeliverables(updated);
-    setDeliverables(updated);
-    notifyDeliverableUploaded(user.id, user.name, user.role, form.title, newItem.id, form.clientName);
-    setForm(emptyForm);
-    setShowForm(false);
-    setSaving(false);
+    try {
+      const newItem = await DeliverableService.create({
+        clientId: form.clientId,
+        clientName: form.clientName,
+        projectId: form.projectId || undefined,
+        projectName: form.projectName || undefined,
+        title: form.title,
+        description: form.description,
+        status: "Pending",
+        dueDate: form.dueDate,
+        uploadedBy: user.id,
+        uploadedByName: user.name,
+        uploadedAt: new Date().toISOString(),
+        notes: form.notes || undefined,
+      });
+      setDeliverables((prev) => [newItem, ...prev]);
+      notifyDeliverableUploaded(user.id, user.name, user.role, form.title, newItem.id, form.clientName);
+      setForm(emptyForm);
+      setShowForm(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const advanceStatus = (id: string) => {
+  const advanceStatus = async (id: string) => {
     if (!user) return;
+    const current = deliverables.find((d) => d.id === id);
+    if (!current) return;
     setStatusUpdating(id);
-    const all = readDeliverables();
-    const updated = all.map((d) => {
-      if (d.id !== id) return d;
-      const idx = STATUS_ORDER.indexOf(d.status);
-      const nextStatus = idx < STATUS_ORDER.length - 1 ? STATUS_ORDER[idx + 1] : d.status;
+    try {
+      const idx = STATUS_ORDER.indexOf(current.status);
+      const nextStatus = idx < STATUS_ORDER.length - 1 ? STATUS_ORDER[idx + 1] : current.status;
       const patch: Partial<Deliverable> = { status: nextStatus };
       if (nextStatus === "Approved") {
         patch.approvedBy = user.id;
         patch.approvedByName = user.name;
         patch.approvedAt = new Date().toISOString();
-        notifyDeliverableApproved(user.id, user.name, d.clientId, d.clientName, d.title, d.id);
       }
       if (nextStatus === "Review") {
         patch.reviewedBy = user.id;
         patch.reviewedByName = user.name;
         patch.reviewedAt = new Date().toISOString();
       }
-      return { ...d, ...patch };
-    });
-    writeDeliverables(updated);
-    setDeliverables(updated);
-    setStatusUpdating(null);
+      const updatedItem = await DeliverableService.update(id, patch);
+      setDeliverables((prev) => prev.map((d) => (d.id === id ? updatedItem : d)));
+      if (nextStatus === "Approved") {
+        notifyDeliverableApproved(user.id, user.name, current.clientId, current.clientName, current.title, current.id);
+      }
+    } finally {
+      setStatusUpdating(null);
+    }
   };
 
-  const revertStatus = (id: string) => {
-    const all = readDeliverables();
-    const updated = all.map((d) => {
-      if (d.id !== id) return d;
-      const idx = STATUS_ORDER.indexOf(d.status);
-      const prev = idx > 0 ? STATUS_ORDER[idx - 1] : d.status;
-      return { ...d, status: prev };
-    });
-    writeDeliverables(updated);
-    setDeliverables(updated);
+  const revertStatus = async (id: string) => {
+    const current = deliverables.find((d) => d.id === id);
+    if (!current) return;
+    const idx = STATUS_ORDER.indexOf(current.status);
+    const prevStatus = idx > 0 ? STATUS_ORDER[idx - 1] : current.status;
+    const updatedItem = await DeliverableService.update(id, { status: prevStatus });
+    setDeliverables((prev) => prev.map((d) => (d.id === id ? updatedItem : d)));
   };
 
   return (
@@ -199,7 +203,11 @@ export default function Deliverables() {
       </div>
 
       {/* Deliverables list */}
-      {visibleDeliverables.length === 0 ? (
+      {isLoading ? (
+        <LoadingState label="Loading deliverables..." />
+      ) : loadError ? (
+        <ErrorState message={loadError} onRetry={loadDeliverables} />
+      ) : visibleDeliverables.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {isClient

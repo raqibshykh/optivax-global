@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
 import { useAuth } from "../../context/AuthContext";
+import { useDepartments } from "../../context/DepartmentContext";
 import { api } from "../../lib/client";
-import { ActivitySession } from "../../mock/activityData";
-import { mockUsers } from "../../mock/users";
+import { ActivitySession } from "../../types/activity";
+import { UserService, type UserProfile } from "../../services/userService";
 
 const POLL_MS = 5000;
 
@@ -33,14 +35,21 @@ function formatDuration(ms: number): string {
 }
 
 function getViewableDeptPrefix(role: string): string | null {
-  if (["super_admin", "management", "hr_admin"].includes(role)) return null;
+  // it_admin mirrors the server's own company-wide session visibility
+  // (ActivityController::sessions()'s org-wide exception for IT Support) —
+  // must stay in sync with that, or the backend would return every
+  // department's rows while this client-side roster filter kept hiding
+  // everyone outside IT.
+  if (["super_admin", "management", "hr_admin", "it_admin"].includes(role)) return null;
   if (role.endsWith("_admin")) return role.replace("_admin", "");
   return null;
 }
 
 export default function LiveActivityDashboard() {
   const { user } = useAuth();
+  const { getDepartmentName } = useDepartments();
   const [sessions, setSessions] = useState<ActivitySession[]>([]);
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [, forceTick] = useState(0);
   const today = new Date().toISOString().slice(0, 10);
 
@@ -61,6 +70,10 @@ export default function LiveActivityDashboard() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [today]);
 
+  useEffect(() => {
+    UserService.getAll().then(setProfiles).catch(() => setProfiles([]));
+  }, []);
+
   // Forces a re-render every second so live durations tick — the underlying
   // timestamps always come from the server via `sessions`, never from local state.
   useEffect(() => {
@@ -75,10 +88,10 @@ export default function LiveActivityDashboard() {
   // actual session data access is already enforced server-side).
   const deptPrefix = getViewableDeptPrefix(user.role);
   const roster = user.role.endsWith("_member")
-    ? mockUsers.filter((u) => u.id === user.id)
+    ? profiles.filter((u) => u.id === user.id)
     : deptPrefix
-      ? mockUsers.filter((u) => u.role.startsWith(deptPrefix))
-      : mockUsers.filter((u) => u.role !== "client");
+      ? profiles.filter((u) => u.role.startsWith(deptPrefix))
+      : profiles.filter((u) => u.role !== "client");
 
   const latestByUser = new Map<string, ActivitySession>();
   for (const s of sessions) {
@@ -97,13 +110,18 @@ export default function LiveActivityDashboard() {
     (acc, r) => { acc[r.status] += 1; return acc; },
     { working: 0, dinner: 0, casual: 0, offline: 0 } as Record<LiveStatus, number>
   );
+  const onlineUsers = counts.working + counts.dinner + counts.casual;
 
   return (
     <>
       <PageMeta title="Live Activity Dashboard | Optivax CRM" description="Real-time employee status" />
       <PageBreadcrumb pageTitle="Live Activity Dashboard" />
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Online Users</p>
+          <p className="mt-2 text-2xl font-bold text-brand-600 dark:text-brand-400">{onlineUsers}</p>
+        </div>
         {(Object.keys(STATUS_META) as LiveStatus[]).map((key) => (
           <div key={key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
@@ -124,7 +142,7 @@ export default function LiveActivityDashboard() {
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-800/50">
-                {["Name", "Department", "Designation", "Status", "Login Time", "Session Duration", "Break Duration"].map((h) => (
+                {["Name", "Department", "Designation", "Status", "Login Time", "Session Duration", "Break Duration", "Browser", "Device", "IP Address"].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -132,8 +150,13 @@ export default function LiveActivityDashboard() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
               {rows.map(({ user: u, session, status, openBreak }) => (
                 <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{u.name}</td>
-                  <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">{u.departmentId?.replace("dept-", "").replace(/-/g, " ") ?? "—"}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <Avatar src={u.avatar_url} name={u.full_name} size="sm" />
+                      <span>{u.full_name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{getDepartmentName(u.departmentId)}</td>
                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{u.designation ?? "—"}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_META[status].badge}`}>
@@ -143,6 +166,11 @@ export default function LiveActivityDashboard() {
                   </td>
                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                     {session ? new Date(session.loginTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                    {session?.autoLogout && (
+                      <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" title="Session was ended automatically after 8 hours">
+                        Auto
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                     {session && !session.logoutTime
@@ -152,6 +180,9 @@ export default function LiveActivityDashboard() {
                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                     {openBreak ? formatDuration(Date.now() - new Date(openBreak.startTime).getTime()) : "—"}
                   </td>
+                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{session?.browser ?? "—"}</td>
+                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{session?.device ?? "—"}</td>
+                  <td className="px-4 py-3 text-gray-500 font-mono text-xs whitespace-nowrap">{session?.ipAddress ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

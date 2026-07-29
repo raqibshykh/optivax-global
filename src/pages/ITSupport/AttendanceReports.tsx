@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
-import { getAttendanceExceptions, getDeviceSyncLogs, getDevices } from "../../mock/itSupportData";
-import { mockUsers } from "../../mock/users";
+import LoadingState from "../../components/common/LoadingState";
+import ErrorState from "../../components/common/ErrorState";
+import {
+  AttendanceExceptionService, DeviceSyncLogService, DeviceService,
+  type AttendanceException, type DeviceSyncLog, type BiometricDevice,
+} from "../../services/itSupportService";
+import { UserService, type UserProfile } from "../../services/userService";
+import { AttendanceService, computeYearlyReport, type AttendanceRecord } from "../../services/attendanceService";
+import { useDepartments } from "../../context/DepartmentContext";
 
-const STAFF = mockUsers.filter(u => u.role !== "client");
 const DEPTS = ["All Departments", "Sales", "Production", "Marketing", "HR", "IT Support"];
 
 function getDeptId(dept: string) {
@@ -12,16 +18,48 @@ function getDeptId(dept: string) {
 }
 
 export default function AttendanceReports() {
+  const { getDepartmentName } = useDepartments();
   const [selectedDept, setSelectedDept]   = useState("All Departments");
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
-  const exceptions  = getAttendanceExceptions();
-  const syncLogs    = getDeviceSyncLogs();
-  const devices     = getDevices();
+  const [exceptions, setExceptions] = useState<AttendanceException[]>([]);
+  const [syncLogs, setSyncLogs]     = useState<DeviceSyncLog[]>([]);
+  const [devices, setDevices]       = useState<BiometricDevice[]>([]);
+  const [staff, setStaff]           = useState<UserProfile[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [isLoading, setIsLoading]   = useState(true);
+  const [loadError, setLoadError]   = useState<string | null>(null);
+
+  const currentYear = new Date().getFullYear();
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [exceptionsData, syncLogsData, devicesData, users, yearData] = await Promise.all([
+        AttendanceExceptionService.getAll(),
+        DeviceSyncLogService.getAll(),
+        DeviceService.getAll(),
+        UserService.getAll(),
+        AttendanceService.getYearData(currentYear),
+      ]);
+      setExceptions(exceptionsData);
+      setSyncLogs(syncLogsData);
+      setDevices(devicesData);
+      setStaff(users.filter(u => u.role !== "client"));
+      setAttendanceRecords(yearData);
+    } catch (err: unknown) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load attendance reports");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const staffFiltered = selectedDept === "All Departments"
-    ? STAFF
-    : STAFF.filter(u => u.departmentId === getDeptId(selectedDept));
+    ? staff
+    : staff.filter(u => u.departmentId === getDeptId(selectedDept));
 
   const totalExceptions = exceptions.length;
   const missingPunches  = exceptions.filter(e => e.exceptionType === "missing-punch" || e.exceptionType === "no-record").length;
@@ -31,12 +69,27 @@ export default function AttendanceReports() {
     : 0;
 
   const deptSummary = ["Sales", "Production", "Marketing", "HR", "IT Support"].map(dept => {
-    const id   = getDeptId(dept);
-    const staff = STAFF.filter(u => u.departmentId === id);
-    const exc   = exceptions.filter(e => e.department === dept);
-    const rate  = staff.length > 0 ? Math.round(((staff.length - exc.length) / staff.length) * 100) : 100;
-    return { dept, staffCount: staff.length, exceptions: exc.length, attendanceRate: rate };
+    const id       = getDeptId(dept);
+    const deptStaff = staff.filter(u => u.departmentId === id);
+    const exc      = exceptions.filter(e => e.department === dept);
+    const rate     = deptStaff.length > 0 ? Math.round(((deptStaff.length - exc.length) / deptStaff.length) * 100) : 100;
+    return { dept, staffCount: deptStaff.length, exceptions: exc.length, attendanceRate: rate };
   });
+
+  // Real per-employee annual attendance percentage from actual check-in records
+  // (attendance_records table), replacing the exception-count-based guesses
+  // this page used to show.
+  const attendanceRateByUser = new Map<string, number>();
+  for (const u of staff) {
+    attendanceRateByUser.set(
+      u.id,
+      computeYearlyReport(u.id, u.full_name, u.role, currentYear, attendanceRecords).annualAttendancePercentage
+    );
+  }
+  const staffWithRates = staffFiltered.filter(u => attendanceRateByUser.has(u.id));
+  const overallAttendanceRate = staffWithRates.length > 0
+    ? Math.round(staffWithRates.reduce((sum, u) => sum + (attendanceRateByUser.get(u.id) ?? 0), 0) / staffWithRates.length)
+    : null;
 
   return (
     <>
@@ -56,11 +109,17 @@ export default function AttendanceReports() {
         </button>
       </div>
 
+      {isLoading ? (
+        <LoadingState label="Loading attendance reports..." />
+      ) : loadError ? (
+        <ErrorState message={loadError} onRetry={loadData} />
+      ) : (
+      <>
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: "Total Staff",         value: String(staffFiltered.length),  color: "text-gray-800 dark:text-white" },
-          { label: "Attendance Rate",     value: "85%",                          color: "text-green-600 dark:text-green-400" },
+          { label: "Attendance Rate",     value: overallAttendanceRate !== null ? `${overallAttendanceRate}%` : "—", color: "text-green-600 dark:text-green-400" },
           { label: "Total Exceptions",    value: String(totalExceptions),        color: totalExceptions > 0 ? "text-yellow-600 dark:text-yellow-400" : "text-green-600 dark:text-green-400" },
           { label: "Device Sync Rate",    value: `${successRate}%`,              color: successRate >= 90 ? "text-green-600 dark:text-green-400" : "text-orange-600 dark:text-orange-400" },
         ].map(c => (
@@ -178,11 +237,11 @@ export default function AttendanceReports() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
               {staffFiltered.map(u => {
                 const empExc = exceptions.filter(e => e.employeeId === u.id);
-                const rate   = Math.max(70, 100 - empExc.length * 5);
+                const rate   = attendanceRateByUser.get(u.id) ?? 0;
                 return (
                   <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{u.name}</td>
-                    <td className="px-4 py-3 text-gray-500 capitalize">{u.departmentId?.replace("dept-", "").replace(/-/g, " ") ?? "—"}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{u.full_name}</td>
+                    <td className="px-4 py-3 text-gray-500">{getDepartmentName(u.departmentId)}</td>
                     <td className="px-4 py-3 text-gray-500 capitalize">{u.role.replace(/_/g, " ")}</td>
                     <td className="px-4 py-3 text-gray-500">{empExc.length}</td>
                     <td className="px-4 py-3">
@@ -201,6 +260,8 @@ export default function AttendanceReports() {
           </table>
         </div>
       </div>
+      </>
+      )}
     </>
   );
 }

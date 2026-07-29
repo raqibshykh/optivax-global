@@ -1,7 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
-import { getDeviceSyncLogs, getDevices, type SyncResult } from "../../mock/itSupportData";
+import {
+  DeviceSyncLogService, DeviceService,
+  type SyncResult, type DeviceSyncLog, type BiometricDevice,
+} from "../../services/itSupportService";
 
 const RESULT_COLORS: Record<SyncResult, string> = {
   success: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
@@ -11,8 +14,13 @@ const RESULT_COLORS: Record<SyncResult, string> = {
 };
 
 export default function DeviceLogs() {
-  const logs    = useMemo(() => getDeviceSyncLogs(), []);
-  const devices = useMemo(() => getDevices(), []);
+  const [logs, setLogs]       = useState<DeviceSyncLog[]>([]);
+  const [devices, setDevices] = useState<BiometricDevice[]>([]);
+
+  useEffect(() => {
+    DeviceSyncLogService.getAll().then(setLogs).catch(() => {});
+    DeviceService.getAll().then(setDevices).catch(() => {});
+  }, []);
 
   const [filterDevice, setFilterDevice]   = useState("all");
   const [filterResult, setFilterResult]   = useState<"all" | SyncResult>("all");
@@ -75,7 +83,7 @@ export default function DeviceLogs() {
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-800/50">
-                {["Device", "Started At", "Completed At", "Result", "Records", "Triggered By", "Errors"].map(h => (
+                {["Device", "Started At", "Completed At", "Duration", "Result", "Connection", "Downloaded", "Processed", "Duplicates", "Triggered By", "Errors"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                 ))}
               </tr>
@@ -83,7 +91,7 @@ export default function DeviceLogs() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">No sync logs found.</td>
+                  <td colSpan={11} className="px-4 py-8 text-center text-sm text-gray-500">No sync logs found.</td>
                 </tr>
               )}
               {filtered.map(log => (
@@ -93,10 +101,14 @@ export default function DeviceLogs() {
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                     {log.completedAt ? new Date(log.completedAt).toLocaleString() : "—"}
                   </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{log.durationMs != null ? `${log.durationMs} ms` : "—"}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${RESULT_COLORS[log.result]}`}>{log.result}</span>
                   </td>
+                  <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">{log.connectionResult ?? "—"}</td>
+                  <td className="px-4 py-3 text-gray-500">{log.downloadedRecords ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-500 font-medium">{log.recordsSynced}</td>
+                  <td className="px-4 py-3 text-gray-500">{log.duplicates ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">
                     {log.triggeredBy === "manual" && log.triggeredByName ? log.triggeredByName : "Auto"}
                   </td>

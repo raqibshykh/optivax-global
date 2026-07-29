@@ -3,8 +3,8 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../lib/client";
-import { ActivitySession, BreakRecord, getActivityStats, seedActivitySessions } from "../../mock/activityData";
-import { exportCSV } from "../../mock/attendanceData";
+import { ActivitySession, BreakRecord, getActivityStats } from "../../types/activity";
+import { exportCSV } from "../../lib/csvExport";
 
 type Tab = "login" | "logout" | "hours" | "meal" | "casual" | "warnings";
 
@@ -17,7 +17,10 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "warnings", label: "Late Returns / Warnings" },
 ];
 
-const CROSS_DEPT_ROLES = ["super_admin", "management", "hr_admin"];
+// it_admin mirrors ActivityController::sessions()'s server-side org-wide
+// exception for IT Support — kept in sync with that, display-only here
+// (the actual data scoping is enforced server-side regardless of this list).
+const CROSS_DEPT_ROLES = ["super_admin", "management", "hr_admin", "it_admin"];
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -37,7 +40,6 @@ export default function ActivityReports() {
   const [dateTo, setDateTo]     = useState(todayStr());
   const [sessions, setSessions] = useState<ActivitySession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [seedMsg, setSeedMsg]   = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,12 +67,12 @@ export default function ActivityReports() {
 
   const handleExport = () => {
     if (tab === "login") {
-      exportCSV(["Name", "Role", "Date", "Login Time"],
-        sessions.map((s) => [s.userName, s.userRole, s.date, fmtTime(s.loginTime)]),
+      exportCSV(["Name", "Role", "Date", "Login Time", "Browser", "Device", "IP Address"],
+        sessions.map((s) => [s.userName, s.userRole, s.date, fmtTime(s.loginTime), s.browser ?? "", s.device ?? "", s.ipAddress ?? ""]),
         "login_history.csv");
     } else if (tab === "logout") {
-      exportCSV(["Name", "Role", "Date", "Logout Time"],
-        sessions.map((s) => [s.userName, s.userRole, s.date, s.logoutTime ? fmtTime(s.logoutTime) : "Active"]),
+      exportCSV(["Name", "Role", "Date", "Logout Time", "Auto Logout"],
+        sessions.map((s) => [s.userName, s.userRole, s.date, s.logoutTime ? fmtTime(s.logoutTime) : "Active", s.autoLogout ? "Yes" : "No"]),
         "logout_history.csv");
     } else if (tab === "hours") {
       exportCSV(["Name", "Role", "Date", "Session Minutes", "Break Minutes", "Active Minutes"],
@@ -89,15 +91,6 @@ export default function ActivityReports() {
         warningBreaks.map(({ session, brk }) => [session.userName, session.date, brk.label, brk.allowedMinutes, brk.actualMinutes ?? "", brk.exceededMinutes ?? ""]),
         "warnings.csv");
     }
-  };
-
-  const handleGenerateSample = () => {
-    const res = seedActivitySessions();
-    setSeedMsg(res.seeded ? `Generated ${res.count} sample sessions.` : "Sample data skipped — sessions already exist.");
-    // Re-fetch to reflect newly seeded data.
-    api.get<{ sessions: ActivitySession[] }>("/saas/v1/activity/sessions", { params: { dateFrom, dateTo } })
-      .then((r) => setSessions(r.sessions ?? []))
-      .catch(() => {});
   };
 
   return (
@@ -120,13 +113,6 @@ export default function ActivityReports() {
           className="px-4 py-2 text-sm rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium">
           Export CSV
         </button>
-        {user.role === "super_admin" && sessions.length === 0 && !isLoading && (
-          <button onClick={handleGenerateSample}
-            className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
-            Generate Sample Data
-          </button>
-        )}
-        {seedMsg && <span className="text-xs text-gray-500">{seedMsg}</span>}
         {!canCrossDept && (
           <span className="text-xs text-gray-400 ml-auto">Showing data for your department only</span>
         )}
@@ -167,28 +153,36 @@ export default function ActivityReports() {
           ) : tab === "login" ? (
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
               <thead><tr className="bg-gray-50 dark:bg-gray-800/50">
-                {["Name", "Role", "Date", "Login Time"].map((h) => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
+                {["Name", "Role", "Date", "Login Time", "Browser", "Device", "IP Address"].map((h) => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {sessions.map((s) => (
                   <tr key={s.id}><td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{s.userName}</td>
                     <td className="px-4 py-3 text-gray-500 capitalize">{s.userRole.replace(/_/g, " ")}</td>
                     <td className="px-4 py-3 text-gray-500">{s.date}</td>
-                    <td className="px-4 py-3 text-gray-500">{fmtTime(s.loginTime)}</td></tr>
+                    <td className="px-4 py-3 text-gray-500">{fmtTime(s.loginTime)}</td>
+                    <td className="px-4 py-3 text-gray-500">{s.browser ?? "—"}</td>
+                    <td className="px-4 py-3 text-gray-500">{s.device ?? "—"}</td>
+                    <td className="px-4 py-3 text-gray-500 font-mono text-xs">{s.ipAddress ?? "—"}</td></tr>
                 ))}
               </tbody>
             </table>
           ) : tab === "logout" ? (
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
               <thead><tr className="bg-gray-50 dark:bg-gray-800/50">
-                {["Name", "Role", "Date", "Logout Time"].map((h) => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
+                {["Name", "Role", "Date", "Logout Time", "Auto Logout"].map((h) => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {sessions.map((s) => (
                   <tr key={s.id}><td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{s.userName}</td>
                     <td className="px-4 py-3 text-gray-500 capitalize">{s.userRole.replace(/_/g, " ")}</td>
                     <td className="px-4 py-3 text-gray-500">{s.date}</td>
-                    <td className="px-4 py-3 text-gray-500">{s.logoutTime ? fmtTime(s.logoutTime) : <span className="text-green-600 dark:text-green-400">Active</span>}</td></tr>
+                    <td className="px-4 py-3 text-gray-500">{s.logoutTime ? fmtTime(s.logoutTime) : <span className="text-green-600 dark:text-green-400">Active</span>}</td>
+                    <td className="px-4 py-3">
+                      {s.autoLogout && (
+                        <span className="px-2 py-0.5 text-xs rounded-full font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">Auto (8h)</span>
+                      )}
+                    </td></tr>
                 ))}
               </tbody>
             </table>

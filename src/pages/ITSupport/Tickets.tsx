@@ -1,13 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { useAuth } from "../../context/AuthContext";
+import { useDepartments } from "../../context/DepartmentContext";
 import { useToast } from "../../context/ToastContext";
 import {
-  getITTickets, saveITTickets,
+  ITTicketService,
   type ITTicket, type TicketCategory, type TicketPriority, type TicketStatus,
-} from "../../mock/itSupportData";
-import { mockUsers } from "../../mock/users";
+} from "../../services/itSupportService";
+import { UserService } from "../../services/userService";
 import { notifyTicketCreated, notifyTicketAssigned, notifyTicketStatusChanged } from "../../services/notificationHelpers";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -27,9 +30,6 @@ const STATUS_COLORS: Record<TicketStatus, string> = {
   escalated:     "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
 };
 
-// Only IT staff are assignable
-const IT_MEMBERS = mockUsers.filter(u => u.role === "it_admin" || u.role === "it_member");
-
 type TicketForm = {
   title: string;
   description: string;
@@ -46,6 +46,7 @@ const SLA_DAYS: Record<TicketPriority, number> = { critical: 1, high: 2, medium:
 
 export default function Tickets() {
   const { user } = useAuth();
+  const { getDepartmentName } = useDepartments();
   const { showToast } = useToast();
 
   // ── Role guards ───────────────────────────────────────────────────────────
@@ -64,7 +65,22 @@ export default function Tickets() {
   const canManageTickets = isITStaff || isSuperAdmin;
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [tickets, setTickets] = useState<ITTicket[]>(() => getITTickets());
+  const [tickets, setTickets] = useState<ITTicket[]>([]);
+  // Only IT staff are assignable
+  const [itMembers, setItMembers] = useState<{ id: string; name: string; role: string; avatarUrl?: string }[]>([]);
+
+  useEffect(() => {
+    ITTicketService.getAll().then(setTickets).catch(() => {});
+    UserService.getAll()
+      .then((users) =>
+        setItMembers(
+          users
+            .filter((u) => u.role === "it_admin" || u.role === "it_member")
+            .map((u) => ({ id: u.id, name: u.full_name, role: u.role, avatarUrl: u.avatar_url }))
+        )
+      )
+      .catch(() => {});
+  }, []);
 
   const [filterStatus,   setFilterStatus]   = useState<"all" | TicketStatus>("all");
   const [filterPriority, setFilterPriority] = useState<"all" | TicketPriority>("all");
@@ -99,48 +115,44 @@ export default function Tickets() {
   const myAssigned      = tickets.filter(t => t.assignedTo === user?.id).length;
 
   // ── Ticket mutations ──────────────────────────────────────────────────────
-  const persist = (updated: ITTicket[]) => {
-    setTickets(updated);
-    saveITTickets(updated);
+  const updateTicket = async (id: string, patch: Partial<ITTicket>) => {
+    const fullPatch = { ...patch, updatedAt: new Date().toISOString() };
+    const updated = await ITTicketService.update(id, fullPatch);
+    setTickets(prev => prev.map(t => t.id === id ? updated : t));
+    if (detailTicket?.id === id) setDetailTicket(prev => prev ? { ...prev, ...updated } : null);
   };
 
-  const updateTicket = (id: string, patch: Partial<ITTicket>) => {
-    const updated = tickets.map(t => t.id === id ? { ...t, ...patch, updatedAt: new Date().toISOString() } : t);
-    persist(updated);
-    if (detailTicket?.id === id) setDetailTicket(prev => prev ? { ...prev, ...patch } : null);
-  };
-
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!canCreateTicket) return;
     if (!form.title || !form.description) {
       showToast("Title and description are required.", "error");
       return;
     }
     const now = new Date();
-    const newTicket: ITTicket = {
-      id: `tkt-${Date.now()}`,
+    const newTicketData: Omit<ITTicket, "id"> = {
       ...form,
       status: "open",
       requestedBy: user?.id ?? "unknown",
       requestedByName: user?.name ?? "Unknown",
-      requestedByDept: user?.departmentId?.replace("dept-", "").replace(/-/g, " ") ?? "Unknown",
+      requestedByDept: getDepartmentName(user?.departmentId),
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       slaDeadline: addDays(now, SLA_DAYS[form.priority]),
     };
-    persist([newTicket, ...tickets]);
+    const created = await ITTicketService.create(newTicketData);
+    setTickets(prev => [created, ...prev]);
     if (user) {
-      notifyTicketCreated(user.id, user.name, user.role, newTicket.id, newTicket.title, newTicket.priority);
+      notifyTicketCreated(user.id, user.name, user.role, created.id, created.title, created.priority);
     }
     setIsCreateOpen(false);
     setForm(EMPTY_FORM);
     showToast("Ticket submitted to IT Support.", "success");
   };
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (!detailTicket || !assignTo) return;
-    const member = IT_MEMBERS.find(u => u.id === assignTo);
-    updateTicket(detailTicket.id, {
+    const member = itMembers.find(u => u.id === assignTo);
+    await updateTicket(detailTicket.id, {
       assignedTo: assignTo,
       assignedToName: member?.name,
       status: detailTicket.status === "open" ? "in-progress" : detailTicket.status,
@@ -152,45 +164,45 @@ export default function Tickets() {
     showToast(`Ticket assigned to ${member?.name}.`, "success");
   };
 
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     if (!detailTicket || !noteText.trim()) return;
     const stamp = `[${new Date().toLocaleString()} — ${user?.name}]`;
-    updateTicket(detailTicket.id, {
+    await updateTicket(detailTicket.id, {
       notes: detailTicket.notes ? `${detailTicket.notes}\n\n${stamp} ${noteText}` : `${stamp} ${noteText}`,
     });
     setNoteText("");
     showToast("Note added.", "success");
   };
 
-  const handleAccept = (id: string) => {
-    updateTicket(id, { status: "in-progress", assignedTo: user?.id, assignedToName: user?.name });
+  const handleAccept = async (id: string) => {
+    await updateTicket(id, { status: "in-progress", assignedTo: user?.id, assignedToName: user?.name });
     showToast("Ticket accepted and set to In Progress.", "success");
   };
 
-  const handleResolve = (id: string) => {
+  const handleResolve = async (id: string) => {
     const t = tickets.find(tk => tk.id === id);
-    updateTicket(id, { status: "resolved", resolvedAt: new Date().toISOString() });
+    await updateTicket(id, { status: "resolved", resolvedAt: new Date().toISOString() });
     if (user && t) notifyTicketStatusChanged(user.id, user.name, user.role, t.requestedBy, id, t.title, "resolved");
     showToast("Ticket resolved.", "success");
   };
 
-  const handleEscalate = (id: string) => {
+  const handleEscalate = async (id: string) => {
     const t = tickets.find(tk => tk.id === id);
-    updateTicket(id, { status: "escalated" });
+    await updateTicket(id, { status: "escalated" });
     if (user && t) notifyTicketStatusChanged(user.id, user.name, user.role, t.requestedBy, id, t.title, "escalated");
     showToast("Ticket escalated.", "success");
   };
 
-  const handleClose = (id: string) => {
+  const handleClose = async (id: string) => {
     const t = tickets.find(tk => tk.id === id);
-    updateTicket(id, { status: "closed" });
+    await updateTicket(id, { status: "closed" });
     if (user && t) notifyTicketStatusChanged(user.id, user.name, user.role, t.requestedBy, id, t.title, "closed");
     showToast("Ticket closed.", "success");
   };
 
-  const handleReopen = (id: string) => {
+  const handleReopen = async (id: string) => {
     const t = tickets.find(tk => tk.id === id);
-    updateTicket(id, { status: "open", resolvedAt: undefined });
+    await updateTicket(id, { status: "open", resolvedAt: undefined });
     if (user && t) notifyTicketStatusChanged(user.id, user.name, user.role, t.requestedBy, id, t.title, "open");
     showToast("Ticket reopened.", "success");
   };
@@ -353,11 +365,15 @@ export default function Tickets() {
                     </td>
                     <td className="px-4 py-3 text-gray-500 capitalize">{t.category}</td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                      <div>{t.requestedByName}</div>
-                      <div className="text-xs text-gray-400">{t.requestedByDept}</div>
+                      <EmployeeIdentity name={t.requestedByName} department={t.requestedByDept} size="sm" />
                     </td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                      {t.assignedToName ?? <span className="italic text-gray-400">Unassigned</span>}
+                      {t.assignedToName ? (
+                        <div className="flex items-center gap-1.5">
+                          <Avatar src={itMembers.find(m => m.id === t.assignedTo)?.avatarUrl} name={t.assignedToName} size="xs" />
+                          <span>{t.assignedToName}</span>
+                        </div>
+                      ) : <span className="italic text-gray-400">Unassigned</span>}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${PRIORITY_COLORS[t.priority]}`}>{t.priority}</span>
@@ -464,8 +480,20 @@ export default function Tickets() {
 
               {/* Meta grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div><span className="text-gray-500">Requested by: </span><span className="font-medium text-gray-800 dark:text-white">{detailTicket.requestedByName} ({detailTicket.requestedByDept})</span></div>
-                <div><span className="text-gray-500">Assigned to: </span><span className="font-medium text-gray-800 dark:text-white">{detailTicket.assignedToName ?? "Unassigned"}</span></div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">Requested by:</span>
+                  <Avatar name={detailTicket.requestedByName} size="xs" />
+                  <span className="font-medium text-gray-800 dark:text-white">{detailTicket.requestedByName} ({detailTicket.requestedByDept})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">Assigned to:</span>
+                  {detailTicket.assignedToName ? (
+                    <>
+                      <Avatar src={itMembers.find(m => m.id === detailTicket.assignedTo)?.avatarUrl} name={detailTicket.assignedToName} size="xs" />
+                      <span className="font-medium text-gray-800 dark:text-white">{detailTicket.assignedToName}</span>
+                    </>
+                  ) : <span className="font-medium text-gray-800 dark:text-white">Unassigned</span>}
+                </div>
                 <div><span className="text-gray-500">Created: </span><span className="text-gray-700 dark:text-gray-300">{new Date(detailTicket.createdAt).toLocaleString()}</span></div>
                 <div><span className="text-gray-500">SLA Deadline: </span>
                   <span className={`font-medium ${new Date(detailTicket.slaDeadline) < new Date() && detailTicket.status !== "resolved" && detailTicket.status !== "closed" ? "text-red-600 dark:text-red-400" : "text-gray-700 dark:text-gray-300"}`}>
@@ -512,7 +540,7 @@ export default function Tickets() {
                         <select className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                           value={assignTo} onChange={e => setAssignTo(e.target.value)}>
                           <option value="">— Select member —</option>
-                          {IT_MEMBERS.map(m => <option key={m.id} value={m.id}>{m.name} ({m.role.replace("_", " ")})</option>)}
+                          {itMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({m.role.replace("_", " ")})</option>)}
                         </select>
                         <button onClick={handleAssign}
                           className="px-3 py-2 text-sm rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium whitespace-nowrap">

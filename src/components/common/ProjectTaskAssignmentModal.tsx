@@ -1,11 +1,16 @@
 import { useState, useEffect } from "react";
-import { safeParse } from "../../lib/storage";
+import { ProjectService } from "../../services/projectService";
+import { TaskService } from "../../services/taskService";
+import { UserService } from "../../services/userService";
+import { NotificationService } from "../../services/notificationService";
+import { RevisionService } from "../../services/revisionService";
 
 interface SimpleProject {
   id: string;
   name: string;
   clientId?: string;
   status?: string;
+  assignedTo?: string[];
 }
 
 interface SimpleTask {
@@ -43,42 +48,6 @@ export interface AssignmentResult {
   assignedAt: string;
 }
 
-const PROJECTS_KEY    = "mock_projects";
-const TASKS_KEY       = "mock_tasks";
-const PROFILES_KEY    = "mock_profiles";
-const ASSIGNMENTS_KEY = "mock_assignments";
-const NOTIFS_KEY      = "mock_notifications";
-const REVISIONS_KEY   = "mock_revisions";
-
-function loadProjects(): SimpleProject[] {
-  return safeParse<SimpleProject[]>(localStorage.getItem(PROJECTS_KEY) ?? "[]", []);
-}
-
-function loadTasksForProject(projectId: string): SimpleTask[] {
-  const all = safeParse<SimpleTask[]>(localStorage.getItem(TASKS_KEY) ?? "[]", []);
-  return all.filter((t) => t.projectId === projectId);
-}
-
-function loadEmployees(): SimpleUser[] {
-  return safeParse<SimpleUser[]>(localStorage.getItem(PROFILES_KEY) ?? "[]", []).filter(
-    (u) => u.role !== "client"
-  );
-}
-
-function writeNotification(notif: object) {
-  try {
-    const existing = safeParse<object[]>(localStorage.getItem(NOTIFS_KEY) ?? "[]", []);
-    localStorage.setItem(NOTIFS_KEY, JSON.stringify([notif, ...existing]));
-  } catch {}
-}
-
-function writeRevision(rev: object) {
-  try {
-    const existing = safeParse<object[]>(localStorage.getItem(REVISIONS_KEY) ?? "[]", []);
-    localStorage.setItem(REVISIONS_KEY, JSON.stringify([rev, ...existing]));
-  } catch {}
-}
-
 export default function ProjectTaskAssignmentModal({
   isOpen,
   onClose,
@@ -98,8 +67,14 @@ export default function ProjectTaskAssignmentModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setProjects(loadProjects());
-    setEmployees(loadEmployees());
+    (async () => {
+      const [projectsData, employeesData] = await Promise.all([
+        ProjectService.getAll(),
+        UserService.getAll(),
+      ]);
+      setProjects(projectsData);
+      setEmployees(employeesData.filter((u) => u.role !== "client"));
+    })();
     setSelectedProjectId(preSelectedProjectId ?? "");
     setAssignType("project");
     setSelectedTaskId("");
@@ -108,12 +83,15 @@ export default function ProjectTaskAssignmentModal({
   }, [isOpen, preSelectedProjectId]);
 
   useEffect(() => {
-    if (selectedProjectId) {
-      setTasks(loadTasksForProject(selectedProjectId));
-      setSelectedTaskId("");
-    } else {
+    if (!selectedProjectId) {
       setTasks([]);
+      return;
     }
+    setSelectedTaskId("");
+    (async () => {
+      const allTasks = await TaskService.getAll();
+      setTasks(allTasks.filter((t) => t.projectId === selectedProjectId));
+    })();
   }, [selectedProjectId]);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
@@ -124,13 +102,12 @@ export default function ProjectTaskAssignmentModal({
   const selectedTask    = unassignedTasks.find((t) => t.id === selectedTaskId);
 
   // Project assignment: check if user is already in assignedTo list
-  const selectedProjectData = projects.find((p) => p.id === selectedProjectId) as any;
-  const alreadyOnProject    =
-    selectedUserId &&
-    Array.isArray(selectedProjectData?.assignedTo) &&
-    selectedProjectData.assignedTo.includes(selectedUserId);
+  const alreadyOnProject =
+    !!selectedUserId &&
+    Array.isArray(selectedProject?.assignedTo) &&
+    selectedProject.assignedTo.includes(selectedUserId);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedProjectId || !selectedUserId) return;
     if (assignType === "task" && !selectedTaskId) return;
     if (assignType === "project" && alreadyOnProject) return;
@@ -151,71 +128,61 @@ export default function ProjectTaskAssignmentModal({
       assignedAt:   now,
     };
 
-    // Persist the assignment record
-    const existing = safeParse<AssignmentResult[]>(
-      localStorage.getItem(ASSIGNMENTS_KEY) ?? "[]",
-      []
-    );
-    localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify([result, ...existing]));
+    try {
+      // Task assignment — update the task's assigneeId via the TaskService
+      if (assignType === "task" && selectedTaskId) {
+        await TaskService.update(selectedTaskId, {
+          assigneeId: selectedUserId,
+          assignee: selectedUser?.full_name ?? "",
+        });
+      }
 
-    // Task assignment — update the task's assigneeId in storage
-    if (assignType === "task" && selectedTaskId) {
-      const allTasks = safeParse<SimpleTask[]>(localStorage.getItem(TASKS_KEY) ?? "[]", []);
-      const updated  = allTasks.map((t) =>
-        t.id === selectedTaskId
-          ? { ...t, assigneeId: selectedUserId, assignee: selectedUser?.full_name ?? "" }
-          : t
-      );
-      localStorage.setItem(TASKS_KEY, JSON.stringify(updated));
-    }
-
-    // Project assignment — update project's assignedTo list
-    if (assignType === "project" && selectedProjectId) {
-      const allProjects = safeParse<SimpleProject[]>(
-        localStorage.getItem(PROJECTS_KEY) ?? "[]",
-        []
-      );
-      const updated = allProjects.map((p: any) => {
-        if (p.id !== selectedProjectId) return p;
-        const assignedTo: string[] = Array.isArray(p.assignedTo) ? p.assignedTo : [];
+      // Project assignment — update project's assignedTo list via the ProjectService
+      if (assignType === "project" && selectedProjectId) {
+        const assignedTo: string[] = Array.isArray(selectedProject?.assignedTo)
+          ? [...selectedProject.assignedTo]
+          : [];
         if (!assignedTo.includes(selectedUserId)) assignedTo.push(selectedUserId);
-        return { ...p, assignedTo };
+        await ProjectService.update(selectedProjectId, { assignedTo });
+      }
+
+      // Notify assignee
+      await NotificationService.create({
+        userId:    selectedUserId,
+        type:      "system",
+        title:     assignType === "task" ? "Task Assigned to You" : "Project Assigned to You",
+        message:
+          assignType === "task"
+            ? `You have been assigned task "${selectedTask?.title}" on project "${selectedProject?.name}".`
+            : `You have been assigned to project "${selectedProject?.name}".`,
+        read:      false,
+        createdAt: now,
+        actionUrl: "/tasks",
       });
-      localStorage.setItem(PROJECTS_KEY, JSON.stringify(updated));
+
+      // Write revision / audit entry.
+      // NOTE: this also subsumes the record previously written to the local-only
+      // "mock_assignments" array — that array had no other readers anywhere in the
+      // app (verified via grep), so rather than inventing a new service/endpoint for
+      // a write-only duplicate of this same audit event, its info (assignee/task/
+      // project) is folded into this single RevisionService entry.
+      await RevisionService.create({
+        projectId: selectedProjectId,
+        clientId: selectedProject?.clientId ?? "",
+        comment:
+          assignType === "task"
+            ? `Task "${selectedTask?.title}" assigned to ${selectedUser?.full_name ?? selectedUserId} on project "${selectedProject?.name}".`
+            : `User ${selectedUser?.full_name ?? selectedUserId} added to project "${selectedProject?.name}".`,
+        status:    "completed",
+        type:      "task_assign",
+        updatedBy: "",
+      });
+
+      setSaved(true);
+      onAssigned?.(result);
+    } finally {
+      setIsSaving(false);
     }
-
-    // Notify assignee
-    writeNotification({
-      id:        `notif-assign-${Date.now()}`,
-      userId:    selectedUserId,
-      type:      "system",
-      title:     assignType === "task" ? "Task Assigned to You" : "Project Assigned to You",
-      message:
-        assignType === "task"
-          ? `You have been assigned task "${selectedTask?.title}" on project "${selectedProject?.name}".`
-          : `You have been assigned to project "${selectedProject?.name}".`,
-      read:      false,
-      createdAt: now,
-      actionUrl: "/tasks",
-    });
-
-    // Write revision / audit entry
-    writeRevision({
-      id:        `rev-assign-${Date.now()}`,
-      type:      "task_assign",
-      status:    "completed",
-      projectId: selectedProjectId,
-      comment:
-        assignType === "task"
-          ? `Task "${selectedTask?.title}" assigned to ${selectedUser?.full_name ?? selectedUserId} on project "${selectedProject?.name}".`
-          : `User ${selectedUser?.full_name ?? selectedUserId} added to project "${selectedProject?.name}".`,
-      updatedBy:  "",
-      created_at: now,
-    });
-
-    setIsSaving(false);
-    setSaved(true);
-    onAssigned?.(result);
   };
 
   if (!isOpen) return null;

@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import Avatar from "../../components/common/Avatar";
 import { useAuth } from "../../context/AuthContext";
 import {
-  getAdvanceRequests, saveAdvanceRequests, appendAdvanceAuditEntry,
+  PayrollService,
   type AdvanceSalaryRequest, type AdvanceStatus,
-} from "../../mock/payrollData";
+} from "../../services/payrollService";
 import { useToast } from "../../context/ToastContext";
 import { notifyAdvanceSalaryRequested } from "../../services/notificationHelpers";
 
@@ -122,8 +123,10 @@ function RequestCard({ req }: { req: AdvanceSalaryRequest }) {
 
       {req.approvedByName && (
         <div className="pt-3 border-t border-gray-200 dark:border-gray-700 space-y-1">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {req.status === "rejected" ? "Rejected" : req.status === "paid" ? "Marked paid" : "Approved"} by {req.approvedByName}
+          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+            {req.status === "rejected" ? "Rejected" : req.status === "paid" ? "Marked paid" : "Approved"} by
+            <Avatar name={req.approvedByName} size="xs" />
+            <span>{req.approvedByName}</span>
             {req.approvedAt && ` on ${new Date(req.approvedAt).toLocaleDateString()}`}
           </p>
           {req.rejectionReason && (
@@ -149,8 +152,9 @@ export default function AdvanceSalaryRequest() {
   const [filterStatus, setFilter]   = useState<AdvanceStatus | "all">("all");
 
   useEffect(() => {
-    const all = getAdvanceRequests();
-    setRequests(all.filter(r => r.employeeId === user?.id));
+    PayrollService.getAdvanceRequests()
+      .then((all) => setRequests(all.filter(r => r.employeeId === user?.id)))
+      .catch(() => setRequests([]));
   }, [user?.id]);
 
   const myVisible = useMemo(() =>
@@ -160,7 +164,7 @@ export default function AdvanceSalaryRequest() {
 
   const hasPending = requests.some(r => r.status === "pending");
 
-  const handleSubmit = (amount: number, reason: string) => {
+  const handleSubmit = async (amount: number, reason: string) => {
     const dept = getDeptFromRole(user?.role ?? "");
     const newReq: AdvanceSalaryRequest = {
       id: `adv-${Date.now()}`,
@@ -174,9 +178,9 @@ export default function AdvanceSalaryRequest() {
       status:      "pending",
     };
 
-    const all = getAdvanceRequests();
-    saveAdvanceRequests([...all, newReq]);
-    appendAdvanceAuditEntry({
+    const all = await PayrollService.getAdvanceRequests();
+    await PayrollService.saveAdvanceRequests([...all, newReq]);
+    await PayrollService.appendAdvanceAuditEntry({
       action: "REQUEST_CREATED",
       requestId: newReq.id,
       employeeId: newReq.employeeId,

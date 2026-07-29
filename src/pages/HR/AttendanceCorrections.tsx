@@ -3,12 +3,12 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import {
-  getAuditLog,
-  exportCSV,
+  AttendanceService,
   STATUS_COLORS,
   type AuditEntry,
   type AttendanceStatus,
-} from "../../mock/attendanceData";
+} from "../../services/attendanceService";
+import { exportCSV } from "../../lib/csvExport";
 
 const STATUS_LABEL: Record<AttendanceStatus, string> = {
   present:      "Present",
@@ -36,7 +36,7 @@ export default function AttendanceAuditLog() {
   const [dateFrom,     setDateFrom]     = useState("");
   const [dateTo,       setDateTo]       = useState("");
 
-  useEffect(() => { setAuditLog(getAuditLog()); }, []);
+  useEffect(() => { AttendanceService.getAuditLog().then(setAuditLog); }, []);
 
   const filtered = useMemo(() => {
     let list = auditLog;

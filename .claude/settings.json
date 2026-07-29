@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(tee /tmp/build_after.log)",
+      "Bash(npx eslint *)",
+      "Bash(npx --no-install tsc --version)",
+      "Bash(tee /c/Users/ARBAZK~1/AppData/Local/Temp/claude/tsc_out.txt)"
+    ]
+  }
+}

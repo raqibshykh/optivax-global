@@ -3,10 +3,13 @@ import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { useAuth } from "../../context/AuthContext";
 import {
-  getConversations, saveConversations,
+  ConversationService,
   type Conversation, type ConvMessage, type ConvStatus,
-} from "../../mock/conversationsData";
+} from "../../services/conversationService";
 import { notifyClientPortalMessageSent } from "../../services/notificationHelpers";
+import LoadingState from "../../components/common/LoadingState";
+import ErrorState from "../../components/common/ErrorState";
+import Avatar from "../../components/common/Avatar";
 
 const STATUS_LABEL: Record<ConvStatus, string> = {
   open: "Open",
@@ -48,15 +51,30 @@ export default function ClientMessages() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     if (!user) return;
-    const all = getConversations();
-    const mine = all.filter(c => c.clientId === user.id);
-    setConversations(mine.sort((a, b) =>
-      new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
-    ));
-  }, [user]);
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError(null);
+    ConversationService.getAll().then((all) => {
+      if (cancelled) return;
+      const mine = all.filter(c => c.clientId === user.id);
+      setConversations(mine.sort((a, b) =>
+        new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+      ));
+    }).catch(() => {
+      if (cancelled) return;
+      setConversations([]);
+      setLoadError("Failed to load your messages. Please try again.");
+    }).finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [user, reloadToken]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -67,9 +85,9 @@ export default function ClientMessages() {
     [conversations]
   );
 
-  const openConversation = (conv: Conversation) => {
+  const openConversation = async (conv: Conversation) => {
     if (!user) return;
-    const all = getConversations();
+    const all = await ConversationService.getAll();
     const updated = all.map(c => {
       if (c.id !== conv.id) return c;
       return {
@@ -81,7 +99,7 @@ export default function ClientMessages() {
         })),
       };
     });
-    saveConversations(updated);
+    await ConversationService.save(updated);
     const mine = updated.filter(c => c.clientId === user.id).sort(
       (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
     );
@@ -90,7 +108,7 @@ export default function ClientMessages() {
     setReplyText("");
   };
 
-  const sendReply = () => {
+  const sendReply = async () => {
     if (!user || !selected || !replyText.trim()) return;
     const msg: ConvMessage = {
       id: `msg-${Date.now()}`,
@@ -102,7 +120,7 @@ export default function ClientMessages() {
       sentAt: new Date().toISOString(),
       readBy: [user.id],
     };
-    const all = getConversations();
+    const all = await ConversationService.getAll();
     const updated = all.map(c => {
       if (c.id !== selected.id) return c;
       return {
@@ -113,7 +131,7 @@ export default function ClientMessages() {
         unreadByTeam: c.unreadByTeam + 1,
       };
     });
-    saveConversations(updated);
+    await ConversationService.save(updated);
     // Notify assigned team member & super_admin/management
     notifyClientPortalMessageSent(user.id, user.name, selected.assignedUserId, selected.assignedDept, selected.subject, selected.id);
     const mine = updated.filter(c => c.clientId === user.id).sort(
@@ -144,7 +162,11 @@ export default function ClientMessages() {
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{conversations.length} total</p>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {conversations.length === 0 ? (
+            {isLoading ? (
+              <LoadingState label="Loading conversations..." />
+            ) : loadError ? (
+              <ErrorState message={loadError} onRetry={() => setReloadToken((n) => n + 1)} />
+            ) : conversations.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full px-4 py-8 text-center">
                 <p className="text-sm text-gray-400 dark:text-gray-500">
                   No messages yet. Your team will reach out soon.
@@ -211,7 +233,10 @@ export default function ClientMessages() {
                   {selected.subject}
                 </h3>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <span className="text-xs text-gray-500">Team: {selected.assignedUserName}</span>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <Avatar name={selected.assignedUserName} size="xs" />
+                    Team: {selected.assignedUserName}
+                  </div>
                   <span className={`text-xs px-2 py-0.5 rounded-full ${DEPT_COLOR[selected.assignedDept] ?? "bg-gray-100 text-gray-600"}`}>
                     {selected.assignedDept}
                   </span>
@@ -227,15 +252,7 @@ export default function ClientMessages() {
                   const isMine = msg.senderRole === "client";
                   return (
                     <div key={msg.id} className={`flex gap-3 ${isMine ? "flex-row-reverse" : ""}`}>
-                      <div
-                        className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${
-                          isMine
-                            ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
-                            : "bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
-                        }`}
-                      >
-                        {msg.senderName.charAt(0)}
-                      </div>
+                      <Avatar name={msg.senderName} size="sm" className="flex-shrink-0" />
                       <div className={`flex-1 max-w-[75%] flex flex-col ${isMine ? "items-end" : "items-start"}`}>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">

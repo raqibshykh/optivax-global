@@ -4,28 +4,33 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
+  useMemo,
   ReactNode,
 } from "react";
 
-// Updated imports for pure React
-import { fetchSession, api, MockUserSession, mockLogin, clearMockSession } from "../lib/client";
-import { User, UserRole } from "../types";
+import { api, setUnauthorizedHandler } from "../lib/client";
+import { User } from "../types";
+import type { SessionUserDto } from "../dto/auth.dto";
+import { AuthService } from "../services/authService";
 import { useSSE } from "../hooks/useSSE";
 import { getRoleHome } from "../lib/roles";
 import { hasPermission, canView as rbacCanView, canCreate as rbacCanCreate, canEdit as rbacCanEdit, canDelete as rbacCanDelete, canExport as rbacCanExport, canApprove as rbacCanApprove, canAssign as rbacCanAssign } from "../utils/rbac";
 import { notifyLoginActivity } from "../services/notificationHelpers";
 import { AuditLogService } from "../services/auditLogService";
 
-// Convert MockUserSession to User
-const sessionToUser = (session: MockUserSession): User => ({
-  id: session.id,
-  email: session.email,
+// Maps the real backend's session-user DTO to the app's canonical User shape.
+// The API never returns a password, so this is always blank client-side.
+const sessionToUser = (dto: SessionUserDto): User => ({
+  id: dto.id,
+  email: dto.email,
   password: "",
-  name: session.user_metadata.full_name,
-  role: session.user_metadata.role,
-  avatar: session.user_metadata.avatar_url ?? "",
-  company: session.user_metadata.company ?? "",
+  name: dto.full_name,
+  role: dto.role,
+  avatar: dto.avatar_url ?? "",
+  company: dto.company ?? "",
   joinDate: new Date().toISOString(),
+  mustChangePassword: dto.must_change_password ?? false,
 });
 
 export interface AuthContextType {
@@ -34,13 +39,10 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<string>;
   logout: () => Promise<void>;
-  register: (
-    email: string,
-    password: string,
-    name: string,
-    role?: UserRole
-  ) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
+  /** Local-only state merge (no network call) — for after a self-profile save (ProfileService) already persisted the change server-side, so the header/sidebar avatar and name reflect it immediately without a redundant write through updateProfile()/`/profiles/update`. */
+  syncUser: (data: Partial<User>) => void;
   checkPermission: (domain: import("../types").PermissionDomain, action: import("../types").PermissionAction) => boolean;
   canView: (domain: import("../types").PermissionDomain) => boolean;
   canCreate: (domain: import("../types").PermissionDomain) => boolean;
@@ -61,19 +63,6 @@ export const useAuth = () => {
   return context;
 };
 
-/*
-const sessionToUser = (session: WpUserSession): User => ({
-  id: session.id,
-  email: session.email,
-  password: "",
-  name: session.user_metadata?.full_name || session.email,
-  role: session.user_metadata?.role || "client",
-  avatar: session.user_metadata?.avatar_url || "",
-  company: session.user_metadata?.company || "",
-  joinDate: new Date().toISOString(),
-});
-*/
-
 interface AuthProviderProps {
   children: ReactNode;
 }
@@ -85,12 +74,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Start SSE when a user is authenticated
   useSSE(!!user);
 
+  // A 401 from any API call clears the session, anywhere in the app.
+  useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null));
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const session = await fetchSession();
+        const session = await AuthService.getSession();
         if (session) {
-          setUser(sessionToUser(session));
+          setUser(sessionToUser(session.user));
         }
       } catch {
         // No valid session — user stays null
@@ -100,95 +95,108 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     })();
   }, []);
 
-  const login = async (email: string, password: string): Promise<string> => {
-    const session = await mockLogin(email, password);
-    if (!session) throw new Error("Failed to retrieve user session");
-    const profile = sessionToUser(session);
+  const login = useCallback(async (email: string, password: string): Promise<string> => {
+    const { user: dto } = await AuthService.login(email, password);
+    const profile = sessionToUser(dto);
     setUser(profile);
     notifyLoginActivity(profile.id, profile.name, profile.role);
-    
-    // Start Activity tracking
-    try { await api.post("/saas/v1/activity/login", {}); } catch {}
-    
-    return getRoleHome(profile.role);
-  };
 
-  const logout = async (): Promise<void> => {
+    // Start Activity tracking
+    try { await api.post("/saas/v1/activity/login", {}); } catch { /* non-critical */ }
+
+    return getRoleHome(profile.role);
+  }, []);
+
+  const logout = useCallback(async (): Promise<void> => {
     try {
       await api.post("/saas/v1/activity/logout", {});
-      await api.post("/saas/v1/auth/logout", {});
+      await AuthService.logout();
     } catch {
       // ignore — still clear local state
     }
-    if (user) {
-      AuditLogService.add({
-        action: "USER_LOGOUT",
-        entityType: "security",
-        entityId: user.id,
-        entityName: user.name,
-        performedBy: user.id,
-        performedByName: user.name,
-        performedByRole: user.role,
-        description: `${user.name} logged out`,
-      });
-    }
-    clearMockSession();
-    setUser(null);
-  };
+    setUser((current) => {
+      if (current) {
+        AuditLogService.add({
+          action: "USER_LOGOUT",
+          entityType: "security",
+          entityId: current.id,
+          entityName: current.name,
+          performedBy: current.id,
+          performedByName: current.name,
+          performedByRole: current.role,
+          description: `${current.name} logged out`,
+        });
+      }
+      return null;
+    });
+  }, []);
 
-  const register = async (
-    email: string,
-    password: string,
-    name: string,
-    role: UserRole = "client"
+  const changePassword = useCallback(async (
+    currentPassword: string,
+    newPassword: string,
+    confirmPassword: string
   ): Promise<void> => {
-    await api.post("/saas/v1/auth/signup", {
-      email,
-      password,
-      options: {
-        data: { full_name: name, role },
-      },
-    });
+    const dto = await AuthService.changePassword(currentPassword, newPassword, confirmPassword);
+    setUser(sessionToUser(dto));
+  }, []);
 
-    await api.post("/saas/v1/auth/login", { email, password });
-
-    const session = await fetchSession();
-    if (!session) {
-      throw new Error("Registration succeeded but failed to fetch session");
-    }
-
-    setUser(sessionToUser(session));
-  };
-
-  const updateProfile = async (data: Partial<User>): Promise<void> => {
+  const updateProfile = useCallback(async (data: Partial<User>): Promise<void> => {
     if (!user) throw new Error("No user logged in");
-
-    await api.put("/saas/v1/profiles/update", {
-      id: user.id,
-      full_name: data.name ?? user.name,
-      company: data.company ?? user.company,
-      avatar_url: data.avatar ?? user.avatar,
-    });
+    await AuthService.updateProfile(user.id, data);
     setUser({ ...user, ...data });
-  };
+  }, [user]);
 
-  const value: AuthContextType = {
+  const syncUser = useCallback((data: Partial<User>): void => {
+    setUser((current) => (current ? { ...current, ...data } : current));
+  }, []);
+
+  const checkPermission = useCallback(
+    (domain: import("../types").PermissionDomain, action: import("../types").PermissionAction) =>
+      hasPermission(user, domain, action),
+    [user]
+  );
+  const canView = useCallback((domain: import("../types").PermissionDomain) => rbacCanView(user, domain), [user]);
+  const canCreate = useCallback((domain: import("../types").PermissionDomain) => rbacCanCreate(user, domain), [user]);
+  const canEdit = useCallback((domain: import("../types").PermissionDomain) => rbacCanEdit(user, domain), [user]);
+  const canDelete = useCallback((domain: import("../types").PermissionDomain) => rbacCanDelete(user, domain), [user]);
+  const canExport = useCallback((domain: import("../types").PermissionDomain) => rbacCanExport(user, domain), [user]);
+  const canApprove = useCallback((domain: import("../types").PermissionDomain) => rbacCanApprove(user, domain), [user]);
+  const canAssign = useCallback((domain: import("../types").PermissionDomain) => rbacCanAssign(user, domain), [user]);
+
+  const value: AuthContextType = useMemo(() => ({
     user,
     isLoading: isInitializing,
     isAuthenticated: !!user,
     login,
     logout,
-    register,
+    changePassword,
     updateProfile,
-    checkPermission: (domain, action) => hasPermission(user, domain, action),
-    canView: (domain) => rbacCanView(user, domain),
-    canCreate: (domain) => rbacCanCreate(user, domain),
-    canEdit: (domain) => rbacCanEdit(user, domain),
-    canDelete: (domain) => rbacCanDelete(user, domain),
-    canExport: (domain) => rbacCanExport(user, domain),
-    canApprove: (domain) => rbacCanApprove(user, domain),
-    canAssign: (domain) => rbacCanAssign(user, domain),
-  };
+    syncUser,
+    checkPermission,
+    canView,
+    canCreate,
+    canEdit,
+    canDelete,
+    canExport,
+    canApprove,
+    canAssign,
+  }), [
+    user,
+    isInitializing,
+    login,
+    logout,
+    changePassword,
+    updateProfile,
+    syncUser,
+    checkPermission,
+    canView,
+    canCreate,
+    canEdit,
+    canDelete,
+    canExport,
+    canApprove,
+    canAssign,
+  ]);
 
   return (
     <AuthContext.Provider value={value}>

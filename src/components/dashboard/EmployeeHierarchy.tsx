@@ -1,14 +1,6 @@
 import { useEffect, useState } from "react";
 import { UserService, UserProfile } from "../../services/userService";
 
-interface HierarchyNode {
-  roleLabel: string;
-  roleKey: string;
-  color: string;
-  users: UserProfile[];
-  children?: HierarchyNode[];
-}
-
 const ROLE_META: Record<string, { label: string; color: string; dot: string }> = {
   super_admin:       { label: "Super Admin",        color: "border-purple-500 bg-purple-50 dark:bg-purple-900/20", dot: "bg-purple-500" },
   management:        { label: "Management",          color: "border-blue-500 bg-blue-50 dark:bg-blue-900/20",       dot: "bg-blue-500" },

@@ -1,87 +1,147 @@
-// Authentication relies on HttpOnly cookie set by the server — no client-side token storage
-import { mockUsers } from "../mock/users";
-import { seedAllMockData } from "./devSeed";
-
-// Use mock server + seed data when VITE_USE_MOCK_SERVER=true (dev and production).
-// Set to false and provide VITE_API_URL when a real backend is available.
-const USE_MOCK = import.meta.env.VITE_USE_MOCK_SERVER === "true";
-
-if (typeof window !== "undefined" && USE_MOCK) {
-  seedAllMockData();
-}
+// Authentication relies on an HttpOnly cookie set by the server — no client-side token storage.
+import { ApiError, ApiErrorKind } from "./apiError";
+import { getApiBaseUrl } from "../config/environment";
 
 interface SaasApiResponse<T = unknown> {
   success: boolean;
   data: T;
   meta?: Record<string, unknown>;
   error?: string | null;
+  details?: unknown;
 }
 
-// When USE_MOCK is true, all requests use relative paths so the in-browser mock
-// server's window.fetch override can match "/saas/v1/..." by pathname.
-// When USE_MOCK is false, VITE_API_URL supplies the real API origin.
-const getBaseUrl = (): string => {
-  if (USE_MOCK) return "";
-  const env = import.meta.env as Record<string, string | undefined>;
-  const envUrl = env.VITE_API_URL ?? env.VITE_API_BASE;
-  return envUrl ? envUrl.replace(/\/$/, "") : "";
+const DEFAULT_TIMEOUT_MS = 15000;
+const RETRYABLE_METHODS = new Set(["GET"]);
+const RETRYABLE_KINDS = new Set<ApiErrorKind>(["network", "timeout", "server"]);
+const MAX_RETRIES = 2;
+
+let onUnauthorized: (() => void) | null = null;
+/** Registered by AuthContext so a 401 anywhere can clear the session. */
+export const setUnauthorizedHandler = (fn: (() => void) | null): void => {
+  onUnauthorized = fn;
 };
 
-// Build request headers, merging extra headers and injecting auth identity
-const buildHeaders = (extra: Record<string, string> = {}): Record<string, string> => {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...extra,
+const CSRF_COOKIE_NAME = "optivax_csrf";
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * The server issues a non-HttpOnly `optivax_csrf` cookie alongside the
+ * HttpOnly auth cookie specifically so this same-origin JS can read it and
+ * echo it back as a header (double-submit CSRF pattern — see
+ * CsrfMiddleware.php on the backend). A cross-site attacker's page cannot
+ * read this cookie (browser same-origin policy), so it cannot forge a
+ * matching header even though the auth cookie itself would ride along.
+ */
+const readCsrfCookie = (): string | null => {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
+const classifyStatus = (status: number): ApiErrorKind => {
+  if (status === 401) return "unauthorized";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not_found";
+  if (status === 400 || status === 422) return "validation";
+  if (status >= 500) return "server";
+  return "unknown";
+};
+
+interface RequestOptions {
+  /**
+   * Marks this call as a best-effort side effect (audit-trail writes,
+   * notification fan-out, ...) rather than a primary user-facing action.
+   * A 401 from a background call must not blow away a session that's
+   * otherwise perfectly valid — only a 401 from a real foreground request
+   * (the one the user is actually waiting on) is trustworthy evidence the
+   * session itself is dead. The request still throws ApiError either way;
+   * this only controls whether it's allowed to trigger the app-wide logout.
+   */
+  background?: boolean;
+}
+
+const requestOnce = async <T>(path: string, options: RequestInit, reqOptions?: RequestOptions): Promise<T> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+  const method = (options.method ?? "GET").toUpperCase();
+  const csrfToken = MUTATING_METHODS.has(method) ? readCsrfCookie() : null;
+  const url = `${getApiBaseUrl()}${path}`;
+  // FormData bodies (file uploads) must NOT get a manual Content-Type — the
+  // browser sets one itself (multipart/form-data; boundary=...) only when
+  // the header is left unset. Every other request keeps the JSON default.
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const requestHeaders: Record<string, string> = {
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+    ...((options.headers as Record<string, string>) || {}),
   };
+
+  let res: Response;
   try {
-    const raw = localStorage.getItem("mock_session");
-    if (raw) {
-      const s = JSON.parse(raw) as { id?: string; user_metadata?: { role?: string } };
-      if (s?.id) headers["X-Mock-UserId"] = s.id;
-      if (s?.user_metadata?.role) headers["X-Mock-UserRole"] = s.user_metadata.role;
-    }
-  } catch {}
-  return headers;
-};
+    res = await fetch(url, {
+      ...options,
+      credentials: "include",
+      signal: controller.signal,
+      headers: requestHeaders,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    const kind: ApiErrorKind = (e as Error)?.name === "AbortError" ? "timeout" : "network";
+    throw new ApiError((e as Error)?.message ?? "Network error", kind, undefined, undefined, undefined, url, method, requestHeaders);
+  }
+  clearTimeout(timer);
 
-// Parse error from API response
-const parseErrorMessage = (
-  body: SaasApiResponse | { message?: string; error?: string } | null,
-  status: number
-): string => {
-  if (!body) return `Request failed: ${status}`;
-  if ("error" in body && body.error) return body.error;
-  if ("message" in body && body.message) return body.message;
-  return `Request failed: ${status}`;
-};
-
-// Core request helper
-const request = async <T = unknown>(path: string, options: RequestInit = {}): Promise<T> => {
-  await _mockServerReady;
-  const url = `${getBaseUrl()}${path}`;
-  const res = await fetch(url, {
-    ...options,
-    credentials: "include",
-    headers: buildHeaders((options.headers as Record<string, string>) || {}),
-  });
+  const responseHeaders: Record<string, string> = {};
+  res.headers.forEach((value, key) => { responseHeaders[key] = value; });
 
   let body: SaasApiResponse<T> | null = null;
   try {
     body = await res.json();
   } catch {
-    // ignore non‑JSON response
+    // non-JSON response body — most commonly a fatal PHP error printing an
+    // HTML/plain-text page instead of the plugin's JSON envelope; `body`
+    // stays null and the generic `Request failed: ${status}` fallback below
+    // is what a caller sees, which is exactly why every connector endpoint
+    // (ApiResponse::exceptionError()) is wrapped to never let that happen.
   }
 
-  if (body?.success === false) {
-    throw new Error(parseErrorMessage(body, res.status));
+  if (!res.ok || body?.success === false) {
+    const kind = classifyStatus(res.status);
+    if (kind === "unauthorized" && !reqOptions?.background) onUnauthorized?.();
+    throw new ApiError(
+      body?.error ?? `Request failed: ${res.status}`,
+      kind,
+      res.status,
+      body?.details,
+      body,
+      url,
+      method,
+      requestHeaders,
+      responseHeaders
+    );
   }
-  if (!res.ok) {
-    throw new Error(parseErrorMessage(body, res.status));
-  }
+
   if (body && "data" in body) {
     return body.data as T;
   }
   return body as unknown as T;
+};
+
+const request = async <T = unknown>(path: string, options: RequestInit = {}, reqOptions?: RequestOptions): Promise<T> => {
+  const method = (options.method ?? "GET").toUpperCase();
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await requestOnce<T>(path, options, reqOptions);
+    } catch (e) {
+      const err = e as ApiError;
+      const canRetry =
+        RETRYABLE_METHODS.has(method) && RETRYABLE_KINDS.has(err.kind) && attempt < MAX_RETRIES;
+      if (!canRetry) throw err;
+      attempt += 1;
+      await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
+    }
+  }
 };
 
 export const api = {
@@ -100,120 +160,15 @@ export const api = {
     }
     return request<T>(finalPath, { method: "GET" });
   },
-  post: <T = unknown>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) }),
-  put: <T = unknown>(path: string, body: unknown) => request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
-  patch: <T = unknown>(path: string, body: unknown) => request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
-  delete: <T = unknown>(path: string, body?: unknown) => request<T>(path, { method: "DELETE", ...(body ? { body: JSON.stringify(body) } : {}) }),
+  post: <T = unknown>(path: string, body: unknown, reqOptions?: RequestOptions) =>
+    request<T>(path, { method: "POST", body: JSON.stringify(body) }, reqOptions),
+  /** For file uploads — pass a FormData body as-is (no JSON.stringify, no manual Content-Type; see requestOnce's isFormData handling). */
+  upload: <T = unknown>(path: string, formData: FormData) =>
+    request<T>(path, { method: "POST", body: formData }),
+  put: <T = unknown>(path: string, body: unknown) =>
+    request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
+  patch: <T = unknown>(path: string, body: unknown) =>
+    request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
+  delete: <T = unknown>(path: string, body?: unknown) =>
+    request<T>(path, { method: "DELETE", ...(body ? { body: JSON.stringify(body) } : {}) }),
 };
-
-// Mock session definition used for pure‑React development
-import { UserRole } from "../types";
-
-export interface MockUserSession {
-  id: string;
-  email: string;
-  user_metadata: {
-    role: UserRole;
-    full_name: string;
-    avatar_url?: string;
-    company?: string;
-  };
-}
-
-const MOCK_PROFILES_KEY = "mock_profiles";
-const MOCK_PASSWORDS_KEY = "mock_passwords";
-const MOCK_SESSION_KEY = "mock_session";
-
-export const clearMockSession = (): void => {
-  localStorage.removeItem(MOCK_SESSION_KEY);
-};
-
-/** Store a password for a dynamically-created mock user (keyed by email). */
-export const storeMockPassword = (email: string, password: string): void => {
-  try {
-    const raw = localStorage.getItem(MOCK_PASSWORDS_KEY);
-    const map: Record<string, string> = raw ? JSON.parse(raw) : {};
-    map[email] = password;
-    localStorage.setItem(MOCK_PASSWORDS_KEY, JSON.stringify(map));
-  } catch {}
-};
-
-// Mock login function
-export const mockLogin = async (email: string, password: string): Promise<MockUserSession | null> => {
-  // 1. Check hardcoded mock users first (any password accepted for built-in devs)
-  const staticUser = mockUsers.find((u) => u.email === email);
-  if (staticUser) {
-    const session: MockUserSession = {
-      id: staticUser.id,
-      email: staticUser.email,
-      user_metadata: {
-        role: staticUser.role as MockUserSession["user_metadata"]["role"],
-        full_name: staticUser.name,
-        avatar_url: staticUser.avatar,
-        company: undefined,
-      },
-    };
-    try { localStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(session)); } catch {}
-    return session;
-  }
-
-  // 2. Fall back to dynamically-created profiles in localStorage
-  try {
-    const profilesRaw = localStorage.getItem(MOCK_PROFILES_KEY);
-    const profiles: Array<{
-      id: string; email: string; full_name: string;
-      avatar_url?: string; company?: string; role: string;
-    }> = profilesRaw ? JSON.parse(profilesRaw) : [];
-
-    const profile = profiles.find((p) => p.email === email);
-    if (!profile) return null;
-
-    // Validate password against mock_passwords store
-    const pwRaw = localStorage.getItem(MOCK_PASSWORDS_KEY);
-    const passwords: Record<string, string> = pwRaw ? JSON.parse(pwRaw) : {};
-    const stored = passwords[email];
-    if (stored && stored !== password) return null;
-
-    const session: MockUserSession = {
-      id: profile.id,
-      email: profile.email,
-      user_metadata: {
-        role: profile.role as MockUserSession["user_metadata"]["role"],
-        full_name: profile.full_name,
-        avatar_url: profile.avatar_url,
-        company: profile.company,
-      },
-    };
-    try { localStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(session)); } catch {}
-    return session;
-  } catch {
-    return null;
-  }
-};
-
-// Fetch current mock session from localStorage
-export const fetchSession = async (): Promise<MockUserSession | null> => {
-  try {
-    const raw = localStorage.getItem(MOCK_SESSION_KEY);
-    if (!raw) return null;
-    const session = JSON.parse(raw) as MockUserSession;
-    if (!session?.id || !session?.email || !session?.user_metadata?.role) return null;
-    return session;
-  } catch {
-    return null;
-  }
-};
-
-// Start the in-browser mock server when USE_MOCK is true (dev and production).
-// We keep a promise so request() can await server readiness before the first call.
-let _mockServerReady: Promise<void> = Promise.resolve();
-
-try {
-  if (typeof window !== "undefined" && USE_MOCK) {
-    _mockServerReady = import("../mock/server")
-      .then((m) => { m.startMockServer(); })
-      .catch(() => {});
-  }
-} catch {}
-
-export { _mockServerReady };

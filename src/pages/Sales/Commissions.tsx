@@ -1,14 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import EmployeeIdentity from "../../components/common/EmployeeIdentity";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { useCommissions, Commission } from "../../hooks/useCommissions";
-import { mockUsers } from "../../mock/users";
-
-const SALES_USERS = mockUsers.filter((u) =>
-  u.role === "sales_admin" || u.role === "sales_member"
-);
+import { UserService, type UserProfile } from "../../services/userService";
 
 const STATUS_COLORS: Record<string, string> = {
   pending:  "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
@@ -17,8 +14,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const EMPTY_FORM = {
-  userId: SALES_USERS[0]?.id ?? "",
-  userName: SALES_USERS[0]?.name ?? "",
+  userId: "",
+  userName: "",
   type: "percentage" as Commission["type"],
   value: 5,
   projectName: "",
@@ -39,6 +36,13 @@ export default function Commissions() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [filterStatus, setFilterStatus] = useState("all");
   const [search, setSearch] = useState("");
+  const [salesUsers, setSalesUsers] = useState<UserProfile[]>([]);
+
+  useEffect(() => {
+    UserService.getAll()
+      .then((users) => setSalesUsers(users.filter((u) => u.role === "sales_admin" || u.role === "sales_member")))
+      .catch(() => {});
+  }, []);
 
   const myCommissions = isAdmin
     ? commissions
@@ -59,7 +63,7 @@ export default function Commissions() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ ...EMPTY_FORM });
+    setForm({ ...EMPTY_FORM, userId: salesUsers[0]?.id ?? "", userName: salesUsers[0]?.full_name ?? "" });
     setIsModalOpen(true);
   };
 
@@ -79,8 +83,8 @@ export default function Commissions() {
   };
 
   const handleUserChange = (id: string) => {
-    const u = SALES_USERS.find((x) => x.id === id);
-    setForm((f) => ({ ...f, userId: id, userName: u?.name ?? id }));
+    const u = salesUsers.find((x) => x.id === id);
+    setForm((f) => ({ ...f, userId: id, userName: u?.full_name ?? id }));
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -212,12 +216,11 @@ export default function Commissions() {
                   <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                     {isAdmin && (
                       <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="h-7 w-7 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-xs font-bold text-brand-600 dark:text-brand-400">
-                            {c.userName.split(" ").map((n) => n[0]).join("")}
-                          </div>
-                          <span className="text-sm text-gray-700 dark:text-gray-300">{c.userName}</span>
-                        </div>
+                        <EmployeeIdentity
+                          src={salesUsers.find((u) => u.id === c.userId)?.avatar_url}
+                          name={c.userName}
+                          size="sm"
+                        />
                       </td>
                     )}
                     <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300 max-w-40">
@@ -288,8 +291,8 @@ export default function Commissions() {
                   required
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 >
-                  {SALES_USERS.map((u) => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
+                  {salesUsers.map((u) => (
+                    <option key={u.id} value={u.id}>{u.full_name}</option>
                   ))}
                 </select>
               </div>

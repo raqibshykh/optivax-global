@@ -1,0 +1,14 @@
+{
+  "name": "optivax/erp-backend",
+  "description": "OptiVax Global ERP — WordPress REST API backend plugin",
+  "type": "wordpress-plugin",
+  "license": "proprietary",
+  "require": {
+    "php": ">=8.0",
+    "firebase/php-jwt": "^7.0"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}

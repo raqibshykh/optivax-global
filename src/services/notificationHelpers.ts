@@ -1,11 +1,14 @@
 /**
  * Role-based notification helpers.
  * Each function fires the right set of notifications for a specific ERP event.
- * All helpers read the user list from localStorage (mock_profiles) to find recipients.
+ * Recipients are resolved from an in-memory cache of the user list (populated from
+ * UserService.getAll() via the real API, stale-while-revalidate) rather than reading
+ * localStorage directly — this keeps all ~60 notify functions synchronous so call
+ * sites don't need to change, while the underlying data source is now the API.
  */
 import { NotificationService } from "./notificationService";
 import { AuditLogService } from "./auditLogService";
-import { safeParse } from "../lib/storage";
+import { UserService } from "./userService";
 import type { NotificationType, NotificationModule } from "../types";
 
 interface Profile {
@@ -16,8 +19,33 @@ interface Profile {
   departmentId?: string;
 }
 
-const getProfiles = (): Profile[] =>
-  safeParse<Profile[]>(localStorage.getItem("mock_profiles"), []);
+const CACHE_TTL_MS = 60_000;
+let profilesCache: Profile[] = [];
+let lastFetchedAt = 0;
+let inflight: Promise<void> | null = null;
+
+function refreshProfilesCache(): Promise<void> {
+  if (inflight) return inflight;
+  inflight = UserService.getAll()
+    .then((profiles) => {
+      profilesCache = profiles;
+      lastFetchedAt = Date.now();
+    })
+    .catch(() => {
+      // keep the previous cache on failure
+    })
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
+}
+
+const getProfiles = (): Profile[] => {
+  if (Date.now() - lastFetchedAt > CACHE_TTL_MS) {
+    void refreshProfilesCache();
+  }
+  return profilesCache;
+};
 
 const getUsersByRole = (...roles: string[]): Profile[] =>
   getProfiles().filter((p) => roles.includes(p.role));
@@ -31,17 +59,32 @@ const notify = (
   actionUrl?: string,
   actionLabel?: string
 ) => {
-  NotificationService.create({
-    userId,
-    title,
-    message,
-    type,
-    module,
-    read: false,
-    createdAt: new Date().toISOString(),
-    actionUrl,
-    actionLabel,
-  }).catch(() => {});
+  NotificationService.create(
+    {
+      userId,
+      title,
+      message,
+      type,
+      module,
+      read: false,
+      createdAt: new Date().toISOString(),
+      actionUrl,
+      actionLabel,
+    },
+    { background: true }
+  ).catch(() => {});
+};
+
+/**
+ * Fire-and-forget wrapper for AuditLogService.add(), matching notify()'s
+ * pattern above. Every call site below previously called AuditLogService.add()
+ * directly, unawaited and uncaught — a rejection (e.g. a transient 401) became
+ * an unhandled promise rejection in the console. AuditLogService.add() itself
+ * always marks the request `background` (see its own doc comment), so a
+ * failure here can never trigger the app-wide logout either.
+ */
+const logAudit = (entry: Parameters<typeof AuditLogService.add>[0]) => {
+  AuditLogService.add(entry).catch(() => {});
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -72,7 +115,7 @@ export function notifyUserCreated(
       `${creatorName} created ${newUserRole} account for ${newUserName}.`,
       "system", "employee");
   }
-  AuditLogService.add({ action: "USER_CREATED", entityType: "user", entityId: newUserId, entityName: newUserName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created ${newUserRole} account for ${newUserName} (${newUserEmail})`, newValue: { role: newUserRole, email: newUserEmail } });
+  logAudit({ action: "USER_CREATED", entityType: "user", entityId: newUserId, entityName: newUserName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created ${newUserRole} account for ${newUserName} (${newUserEmail})`, newValue: { role: newUserRole, email: newUserEmail } });
 }
 
 // ── Employee Updated ──────────────────────────────────────────────────────────
@@ -91,7 +134,7 @@ export function notifyUserUpdated(
       `${editorName} updated ${targetName}'s profile. Changes: ${changes}.`,
       "system", "employee");
   }
-  AuditLogService.add({ action: "USER_UPDATED", entityType: "user", entityId: targetId, entityName: targetName, performedBy: editorId, performedByName: editorName, performedByRole: editorRole, description: `${editorName} updated ${targetName}: ${changes}` });
+  logAudit({ action: "USER_UPDATED", entityType: "user", entityId: targetId, entityName: targetName, performedBy: editorId, performedByName: editorName, performedByRole: editorRole, description: `${editorName} updated ${targetName}: ${changes}` });
 }
 
 // ── Employee Deleted ──────────────────────────────────────────────────────────
@@ -109,7 +152,7 @@ export function notifyUserDeleted(
       `${adminName} removed the account for ${targetName}.`,
       "system", "employee");
   }
-  AuditLogService.add({ action: "USER_DELETED", entityType: "user", entityId: targetId, entityName: targetName, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} deleted account for ${targetName}` });
+  logAudit({ action: "USER_DELETED", entityType: "user", entityId: targetId, entityName: targetName, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} deleted account for ${targetName}` });
 }
 
 // ── Password Reset ────────────────────────────────────────────────────────────
@@ -130,7 +173,7 @@ export function notifyPasswordReset(
       `${adminName} reset the password for ${targetUserName}.`,
       "system", "security");
   }
-  AuditLogService.add({ action: "PASSWORD_RESET", entityType: "user", entityId: targetUserId, entityName: targetUserName, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} reset password for ${targetUserName}` });
+  logAudit({ action: "PASSWORD_RESET", entityType: "user", entityId: targetUserId, entityName: targetUserName, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} reset password for ${targetUserName}` });
 }
 
 // ── Attendance Marked ─────────────────────────────────────────────────────────
@@ -147,7 +190,7 @@ export function notifyAttendanceMarked(
     `Your attendance for ${date} has been marked as "${status}" by ${markerName}.`,
     "system", "attendance", "/salary-slips", "View Payroll");
 
-  AuditLogService.add({ action: "ATTENDANCE_MARKED", entityType: "attendance", entityId: employeeId, entityName: employeeName, performedBy: markerId, performedByName: markerName, performedByRole: "hr_admin", description: `${markerName} marked ${employeeName} as "${status}" on ${date}`, newValue: { date, status } });
+  logAudit({ action: "ATTENDANCE_MARKED", entityType: "attendance", entityId: employeeId, entityName: employeeName, performedBy: markerId, performedByName: markerName, performedByRole: "hr_admin", description: `${markerName} marked ${employeeName} as "${status}" on ${date}`, newValue: { date, status } });
 }
 
 // ── Attendance Edited ─────────────────────────────────────────────────────────
@@ -172,7 +215,7 @@ export function notifyAttendanceEdited(
       `${editorName} changed ${employeeName}'s attendance on ${date}: ${oldStatus} → ${newStatus}. Reason: ${reason}.`,
       "system", "attendance");
   }
-  AuditLogService.add({ action: "ATTENDANCE_EDITED", entityType: "attendance", entityId: employeeId, entityName: employeeName, performedBy: editorId, performedByName: editorName, performedByRole: "super_admin", description: `${editorName} corrected ${employeeName}'s attendance on ${date}: ${oldStatus} → ${newStatus}. Reason: ${reason}`, newValue: { date, oldStatus, newStatus, reason } });
+  logAudit({ action: "ATTENDANCE_EDITED", entityType: "attendance", entityId: employeeId, entityName: employeeName, performedBy: editorId, performedByName: editorName, performedByRole: "super_admin", description: `${editorName} corrected ${employeeName}'s attendance on ${date}: ${oldStatus} → ${newStatus}. Reason: ${reason}`, newValue: { date, oldStatus, newStatus, reason } });
 }
 
 export function logAttendanceModified(
@@ -189,7 +232,7 @@ export function logAttendanceModified(
       `${hrAdminName} marked ${employeeName} as "${status}" on ${date}.`,
       "system", "attendance");
   }
-  AuditLogService.add({ action: "ATTENDANCE_MODIFIED", entityType: "attendance", entityId: employeeId, entityName: employeeName, performedBy: hrAdminId, performedByName: hrAdminName, performedByRole: "hr_admin", description: `${hrAdminName} marked ${employeeName} as "${status}" on ${date}`, newValue: { date, status } });
+  logAudit({ action: "ATTENDANCE_MODIFIED", entityType: "attendance", entityId: employeeId, entityName: employeeName, performedBy: hrAdminId, performedByName: hrAdminName, performedByRole: "hr_admin", description: `${hrAdminName} marked ${employeeName} as "${status}" on ${date}`, newValue: { date, status } });
 }
 
 // ── Leave Request Submitted ───────────────────────────────────────────────────
@@ -207,7 +250,7 @@ export function notifyLeaveRequestSubmitted(
       `${employeeName} submitted a ${leaveType} leave request.`,
       "system", "leave", "/hr/leave-requests", "Review Requests");
   }
-  AuditLogService.add({ action: "LEAVE_SUBMITTED", entityType: "leave_request", entityId: leaveId, entityName: `${leaveType} Leave - ${employeeName}`, performedBy: employeeId, performedByName: employeeName, performedByRole: employeeRole, description: `${employeeName} submitted a ${leaveType} leave request` });
+  logAudit({ action: "LEAVE_SUBMITTED", entityType: "leave_request", entityId: leaveId, entityName: `${leaveType} Leave - ${employeeName}`, performedBy: employeeId, performedByName: employeeName, performedByRole: employeeRole, description: `${employeeName} submitted a ${leaveType} leave request` });
 }
 
 // ── Leave Approved / Rejected ─────────────────────────────────────────────────
@@ -227,7 +270,7 @@ export function notifyLeaveDecision(
     `Your ${leaveType} leave request has been ${approved ? "approved" : "rejected"} by ${hrAdminName}.${!approved ? " It has been removed from payroll deductions." : " This leave will be deducted from your salary."}`,
     "system", "leave"
   );
-  AuditLogService.add({ action: approved ? "LEAVE_APPROVED" : "LEAVE_REJECTED", entityType: "leave_request", entityId: leaveId, entityName: `${leaveType} Leave - ${employeeName}`, performedBy: hrAdminId, performedByName: hrAdminName, performedByRole: "hr_admin", description: `${hrAdminName} ${approved ? "approved" : "rejected"} ${employeeName}'s ${leaveType} leave request` });
+  logAudit({ action: approved ? "LEAVE_APPROVED" : "LEAVE_REJECTED", entityType: "leave_request", entityId: leaveId, entityName: `${leaveType} Leave - ${employeeName}`, performedBy: hrAdminId, performedByName: hrAdminName, performedByRole: "hr_admin", description: `${hrAdminName} ${approved ? "approved" : "rejected"} ${employeeName}'s ${leaveType} leave request` });
 }
 
 // ── Payroll / Salary Slip Generated ──────────────────────────────────────────
@@ -244,7 +287,7 @@ export function notifySalarySlipGenerated(
     `Your salary slip for ${month} has been generated by ${hrName}. View your payroll breakdown.`,
     "payment", "payroll", "/salary-slips", "View Salary Slip");
 
-  AuditLogService.add({ action: "SALARY_SLIP_GENERATED", entityType: "salary_slip", entityId: employeeId, entityName: employeeName, performedBy: hrId, performedByName: hrName, performedByRole: hrRole, description: `${hrName} generated salary slip for ${employeeName} — ${month}` });
+  logAudit({ action: "SALARY_SLIP_GENERATED", entityType: "salary_slip", entityId: employeeId, entityName: employeeName, performedBy: hrId, performedByName: hrName, performedByRole: hrRole, description: `${hrName} generated salary slip for ${employeeName} — ${month}` });
 }
 
 export function notifyPayrollUpdated(
@@ -256,7 +299,7 @@ export function notifyPayrollUpdated(
   notify(employeeId, "Payroll Updated",
     `Your payroll details have been updated by ${hrAdminName}.`,
     "payment", "payroll", "/salary-slips", "View Payroll");
-  AuditLogService.add({ action: "PAYROLL_UPDATED", entityType: "payroll", entityId: employeeId, entityName: employeeName, performedBy: hrAdminId, performedByName: hrAdminName, performedByRole: "hr_admin", description: `${hrAdminName} updated payroll for ${employeeName}` });
+  logAudit({ action: "PAYROLL_UPDATED", entityType: "payroll", entityId: employeeId, entityName: employeeName, performedBy: hrAdminId, performedByName: hrAdminName, performedByRole: "hr_admin", description: `${hrAdminName} updated payroll for ${employeeName}` });
 }
 
 // ── Advance Salary Requested ──────────────────────────────────────────────────
@@ -278,7 +321,7 @@ export function notifyAdvanceSalaryRequested(
       `${employeeName} (${department}) requested an advance salary of Rs. ${Math.round(amount).toLocaleString()}.`,
       "payment", "advance", "/hr/advance-salary", "Review Request");
   }
-  AuditLogService.add({ action: "ADVANCE_SALARY_REQUESTED", entityType: "advance_salary", entityId: requestId, entityName: `Advance Request — ${employeeName}`, performedBy: employeeId, performedByName: employeeName, performedByRole: employeeRole, description: `${employeeName} requested advance salary of Rs. ${Math.round(amount).toLocaleString()}` });
+  logAudit({ action: "ADVANCE_SALARY_REQUESTED", entityType: "advance_salary", entityId: requestId, entityName: `Advance Request — ${employeeName}`, performedBy: employeeId, performedByName: employeeName, performedByRole: employeeRole, description: `${employeeName} requested advance salary of Rs. ${Math.round(amount).toLocaleString()}` });
 }
 
 // ── Advance Salary Decision ───────────────────────────────────────────────────
@@ -306,7 +349,7 @@ export function notifyAdvanceSalaryDecision(
   };
   notify(employeeId, titles[action], messages[action], "payment", "advance");
 
-  AuditLogService.add({ action: `ADVANCE_SALARY_${action.toUpperCase()}` as string, entityType: "advance_salary", entityId: requestId, entityName: `Advance Request — ${employeeName}`, performedBy: deciderId, performedByName: deciderName, performedByRole: deciderRole, description: `${deciderName} ${action} advance salary of Rs. ${Math.round(amount).toLocaleString()} for ${employeeName}${reason ? ` (${reason})` : ""}` } as Parameters<typeof AuditLogService.add>[0]);
+  logAudit({ action: `ADVANCE_SALARY_${action.toUpperCase()}` as string, entityType: "advance_salary", entityId: requestId, entityName: `Advance Request — ${employeeName}`, performedBy: deciderId, performedByName: deciderName, performedByRole: deciderRole, description: `${deciderName} ${action} advance salary of Rs. ${Math.round(amount).toLocaleString()} for ${employeeName}${reason ? ` (${reason})` : ""}` } as Parameters<typeof AuditLogService.add>[0]);
 }
 
 // ── Budget Allocated to Dept Admin ────────────────────────────────────────────
@@ -332,7 +375,7 @@ export function notifyBudgetAllocatedToDept(
       `${saName} ${isUpdate ? "updated" : "set"} the ${department} budget to Rs. ${Math.round(amount).toLocaleString()}.`,
       "payment", "budget", "/budget", "View Budget");
   }
-  AuditLogService.add({ action: isUpdate ? "BUDGET_DEPT_UPDATED" : "BUDGET_DEPT_ALLOCATED", entityType: "budget", entityId: `dept-${department}`, entityName: `${department} Budget`, performedBy: saId, performedByName: saName, performedByRole: "super_admin", description: `${saName} ${isUpdate ? "updated" : "allocated"} ${department} budget to Rs. ${Math.round(amount).toLocaleString()}`, newValue: { amount, department } });
+  logAudit({ action: isUpdate ? "BUDGET_DEPT_UPDATED" : "BUDGET_DEPT_ALLOCATED", entityType: "budget", entityId: `dept-${department}`, entityName: `${department} Budget`, performedBy: saId, performedByName: saName, performedByRole: "super_admin", description: `${saName} ${isUpdate ? "updated" : "allocated"} ${department} budget to Rs. ${Math.round(amount).toLocaleString()}`, newValue: { amount, department } });
 }
 
 // ── Budget Allocated to Member ────────────────────────────────────────────────
@@ -352,7 +395,7 @@ export function notifyBudgetAllocatedToMember(
     `${adminName} ${isUpdate ? "updated" : "assigned"} your budget to Rs. ${Math.round(amount).toLocaleString()} for ${department} department.`,
     "payment", "budget", "/my-budget", "View My Budget");
 
-  AuditLogService.add({ action: isUpdate ? "BUDGET_MEMBER_UPDATED" : "BUDGET_MEMBER_ALLOCATED", entityType: "budget", entityId: employeeId, entityName: employeeName, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} ${isUpdate ? "updated" : "allocated"} Rs. ${Math.round(amount).toLocaleString()} budget to ${employeeName} (${department})`, newValue: { amount, department } });
+  logAudit({ action: isUpdate ? "BUDGET_MEMBER_UPDATED" : "BUDGET_MEMBER_ALLOCATED", entityType: "budget", entityId: employeeId, entityName: employeeName, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} ${isUpdate ? "updated" : "allocated"} Rs. ${Math.round(amount).toLocaleString()} budget to ${employeeName} (${department})`, newValue: { amount, department } });
 }
 
 // ── Company Budget Events (SA-level) ──────────────────────────────────────────
@@ -371,7 +414,7 @@ export function notifyCompanyBudgetAction(
       `${saName} ${action} the company budget.${action !== "reset" ? ` New total: Rs. ${Math.round(newAmount).toLocaleString()}.` : " All allocations have been reset."}`,
       "payment", "budget", "/budget", "View Budget");
   }
-  AuditLogService.add({ action: `COMPANY_BUDGET_${action.toUpperCase()}`, entityType: "budget", entityId: "company-master", entityName: "Company Budget", performedBy: saId, performedByName: saName, performedByRole: "super_admin", description: `${saName} ${action} company budget: Rs. ${Math.round(prevAmount).toLocaleString()} → Rs. ${Math.round(newAmount).toLocaleString()}` });
+  logAudit({ action: `COMPANY_BUDGET_${action.toUpperCase()}`, entityType: "budget", entityId: "company-master", entityName: "Company Budget", performedBy: saId, performedByName: saName, performedByRole: "super_admin", description: `${saName} ${action} company budget: Rs. ${Math.round(prevAmount).toLocaleString()} → Rs. ${Math.round(newAmount).toLocaleString()}` });
 }
 
 // ── Budget Return ─────────────────────────────────────────────────────────────
@@ -391,7 +434,7 @@ export function notifyBudgetReturned(
       `${adminName} returned Rs. ${Math.round(returnedAmount).toLocaleString()} from the ${department} department budget. New dept allocation: Rs. ${Math.round(newDeptAllocated).toLocaleString()}.`,
       "payment", "budget", "/budget", "View Budget");
   }
-  AuditLogService.add({ action: "BUDGET_RETURNED", entityType: "budget", entityId: `dept-${department}`, entityName: `${department} Budget`, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} returned Rs. ${Math.round(returnedAmount).toLocaleString()} from ${department} budget.` });
+  logAudit({ action: "BUDGET_RETURNED", entityType: "budget", entityId: `dept-${department}`, entityName: `${department} Budget`, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} returned Rs. ${Math.round(returnedAmount).toLocaleString()} from ${department} budget.` });
 }
 
 // ── Budget Request ────────────────────────────────────────────────────────────
@@ -412,7 +455,7 @@ export function notifyBudgetRequested(
       `${adminName} requested additional budget of Rs. ${Math.round(requestedAmount).toLocaleString()} for the ${department} department. Priority: ${priority}.`,
       "payment", "budget", "/budget", "Review Request");
   }
-  AuditLogService.add({ action: "BUDGET_REQUEST_SUBMITTED", entityType: "budget", entityId: requestId, entityName: `${department} Budget Request`, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} submitted a budget request of Rs. ${Math.round(requestedAmount).toLocaleString()} for ${department} (Priority: ${priority}).` });
+  logAudit({ action: "BUDGET_REQUEST_SUBMITTED", entityType: "budget", entityId: requestId, entityName: `${department} Budget Request`, performedBy: adminId, performedByName: adminName, performedByRole: adminRole, description: `${adminName} submitted a budget request of Rs. ${Math.round(requestedAmount).toLocaleString()} for ${department} (Priority: ${priority}).` });
 }
 
 export function notifyBudgetRequestActioned(
@@ -442,7 +485,7 @@ export function notifyBudgetRequestActioned(
       `${saName} ${actionLabel} a budget request of Rs. ${Math.round(requestedAmount).toLocaleString()} for ${department}.${amountNote}`,
       "payment", "budget", "/budget", "View Budget");
   }
-  AuditLogService.add({ action: `BUDGET_REQUEST_${status.toUpperCase().replace(" ", "_")}`, entityType: "budget", entityId: requestId, entityName: `${department} Budget Request`, performedBy: saId, performedByName: saName, performedByRole: "super_admin", description: `${saName} ${actionLabel} ${department} budget request: Rs. ${Math.round(requestedAmount).toLocaleString()} requested, Rs. ${Math.round(approvedAmount).toLocaleString()} approved.` });
+  logAudit({ action: `BUDGET_REQUEST_${status.toUpperCase().replace(" ", "_")}`, entityType: "budget", entityId: requestId, entityName: `${department} Budget Request`, performedBy: saId, performedByName: saName, performedByRole: "super_admin", description: `${saName} ${actionLabel} ${department} budget request: Rs. ${Math.round(requestedAmount).toLocaleString()} requested, Rs. ${Math.round(approvedAmount).toLocaleString()} approved.` });
 }
 
 // ── Project Events ────────────────────────────────────────────────────────────
@@ -460,7 +503,7 @@ export function notifyProjectCreated(
       `${creatorName} created a new project: "${projectName}".`,
       "project", "project");
   }
-  AuditLogService.add({ action: "PROJECT_CREATED", entityType: "project", entityId: projectId, entityName: projectName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created project "${projectName}"` });
+  logAudit({ action: "PROJECT_CREATED", entityType: "project", entityId: projectId, entityName: projectName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created project "${projectName}"` });
 }
 
 export function notifyProjectUpdated(
@@ -478,7 +521,7 @@ export function notifyProjectUpdated(
       `${updaterName} updated project "${projectName}": ${change}.`,
       "project", "project");
   }
-  AuditLogService.add({ action: "PROJECT_UPDATED", entityType: "project", entityId: projectId, entityName: projectName, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated project "${projectName}": ${change}` });
+  logAudit({ action: "PROJECT_UPDATED", entityType: "project", entityId: projectId, entityName: projectName, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated project "${projectName}": ${change}` });
 }
 
 // ── Task Events ───────────────────────────────────────────────────────────────
@@ -495,7 +538,7 @@ export function notifyTaskAssigned(
   notify(assigneeId, "Task Assigned to You",
     `${assignerName} assigned you task: "${taskTitle}".`,
     "project", "task", "/production/tasks", "View Task");
-  AuditLogService.add({ action: "TASK_ASSIGNED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: assignerId, performedByName: assignerName, performedByRole: assignerRole, description: `${assignerName} assigned task "${taskTitle}" to ${assigneeName}` });
+  logAudit({ action: "TASK_ASSIGNED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: assignerId, performedByName: assignerName, performedByRole: assignerRole, description: `${assignerName} assigned task "${taskTitle}" to ${assigneeName}` });
 }
 
 export function notifyTaskStatusChanged(
@@ -513,7 +556,7 @@ export function notifyTaskStatusChanged(
       `${changerName} moved "${taskTitle}" to ${newStatus}.`,
       "project", "task");
   }
-  AuditLogService.add({ action: "TASK_UPDATED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: changerId, performedByName: changerName, performedByRole: changerRole, description: `${changerName} changed task "${taskTitle}" status to ${newStatus}` });
+  logAudit({ action: "TASK_UPDATED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: changerId, performedByName: changerName, performedByRole: changerRole, description: `${changerName} changed task "${taskTitle}" status to ${newStatus}` });
 }
 
 export function notifyTaskCompleted(
@@ -530,7 +573,7 @@ export function notifyTaskCompleted(
       `${completerName} completed task: "${taskTitle}".`,
       "project", "task");
   }
-  AuditLogService.add({ action: "TASK_COMPLETED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: completerId, performedByName: completerName, performedByRole: completerRole, description: `${completerName} completed task "${taskTitle}"` });
+  logAudit({ action: "TASK_COMPLETED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: completerId, performedByName: completerName, performedByRole: completerRole, description: `${completerName} completed task "${taskTitle}"` });
 }
 
 // ── Campaign Created ──────────────────────────────────────────────────────────
@@ -548,7 +591,7 @@ export function notifyCampaignCreated(
       `${creatorName} created marketing campaign: "${campaignName}".`,
       "system", "campaign");
   }
-  AuditLogService.add({ action: "CAMPAIGN_CREATED", entityType: "campaign", entityId: campaignId, entityName: campaignName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created campaign "${campaignName}"` });
+  logAudit({ action: "CAMPAIGN_CREATED", entityType: "campaign", entityId: campaignId, entityName: campaignName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created campaign "${campaignName}"` });
 }
 
 // ── Deliverable Events ────────────────────────────────────────────────────────
@@ -564,7 +607,7 @@ export function notifyDeliverableApproved(
   notify(clientId, "Deliverable Ready",
     `Your deliverable "${deliverableTitle}" has been approved and is ready for review.`,
     "project", "production", "/client/dashboard", "View Dashboard");
-  AuditLogService.add({ action: "DELIVERABLE_APPROVED", entityType: "deliverable", entityId: deliverableId, entityName: deliverableTitle, performedBy: approverId, performedByName: approverName, performedByRole: "production_admin", description: `${approverName} approved deliverable "${deliverableTitle}" for client ${clientName}` });
+  logAudit({ action: "DELIVERABLE_APPROVED", entityType: "deliverable", entityId: deliverableId, entityName: deliverableTitle, performedBy: approverId, performedByName: approverName, performedByRole: "production_admin", description: `${approverName} approved deliverable "${deliverableTitle}" for client ${clientName}` });
 }
 
 export function notifyDeliverableUploaded(
@@ -581,7 +624,7 @@ export function notifyDeliverableUploaded(
       `${uploaderName} uploaded deliverable "${deliverableTitle}" for client ${clientName}.`,
       "project", "production", "/production/deliverables", "Review");
   }
-  AuditLogService.add({ action: "DELIVERABLE_UPLOADED", entityType: "deliverable", entityId: deliverableId, entityName: deliverableTitle, performedBy: uploaderId, performedByName: uploaderName, performedByRole: uploaderRole, description: `${uploaderName} uploaded deliverable "${deliverableTitle}" for client ${clientName}` });
+  logAudit({ action: "DELIVERABLE_UPLOADED", entityType: "deliverable", entityId: deliverableId, entityName: deliverableTitle, performedBy: uploaderId, performedByName: uploaderName, performedByRole: uploaderRole, description: `${uploaderName} uploaded deliverable "${deliverableTitle}" for client ${clientName}` });
 }
 
 // ── Client Events ─────────────────────────────────────────────────────────────
@@ -599,7 +642,7 @@ export function notifyClientCreated(
       `${creatorName} created a new client: ${clientName}.`,
       "system", "client");
   }
-  AuditLogService.add({ action: "CLIENT_CREATED", entityType: "client", entityId: clientId, entityName: clientName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created client "${clientName}"` });
+  logAudit({ action: "CLIENT_CREATED", entityType: "client", entityId: clientId, entityName: clientName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created client "${clientName}"` });
 }
 
 export function notifyClientAssigned(
@@ -613,7 +656,7 @@ export function notifyClientAssigned(
   notify(memberId, "Client Assigned to You",
     `${adminName} assigned client "${clientName}" to you.`,
     "system", "client");
-  AuditLogService.add({ action: "CLIENT_ASSIGNED", entityType: "client", entityId: clientId, entityName: clientName, performedBy: adminId, performedByName: adminName, performedByRole: "production_admin", description: `${adminName} assigned client "${clientName}" to ${memberName}` });
+  logAudit({ action: "CLIENT_ASSIGNED", entityType: "client", entityId: clientId, entityName: clientName, performedBy: adminId, performedByName: adminName, performedByRole: "production_admin", description: `${adminName} assigned client "${clientName}" to ${memberName}` });
 }
 
 // ── Login / Security Events ───────────────────────────────────────────────────
@@ -631,7 +674,7 @@ export function notifyLoginActivity(
       `${userName} (${role}) logged in${ip ? ` from ${ip}` : ""}.`,
       "system", "login");
   }
-  AuditLogService.add({ action: "USER_LOGIN", entityType: "security", entityId: userId, entityName: userName, performedBy: userId, performedByName: userName, performedByRole: role, description: `${userName} logged in${ip ? ` from ${ip}` : ""}` });
+  logAudit({ action: "USER_LOGIN", entityType: "security", entityId: userId, entityName: userName, performedBy: userId, performedByName: userName, performedByRole: role, description: `${userName} logged in${ip ? ` from ${ip}` : ""}` });
 }
 
 export function notifyBreakWarning(
@@ -653,7 +696,21 @@ export function notifyBreakWarning(
       "system", "attendance", "/activity/reports", "View Activity");
   }
 
-  AuditLogService.add({ action: "BREAK_WARNING", entityType: "activity", entityId: userId, entityName: userName, performedBy: userId, performedByName: userName, performedByRole: role, description: `${userName} exceeded ${breakLabel} by ${exceededMinutes} minute(s)` });
+  logAudit({ action: "BREAK_WARNING", entityType: "activity", entityId: userId, entityName: userName, performedBy: userId, performedByName: userName, performedByRole: role, description: `${userName} exceeded ${breakLabel} by ${exceededMinutes} minute(s)` });
+}
+
+/**
+ * Fired client-side (ActivityContext) once it detects the 8-hour cron cutoff
+ * auto-closed the current session, right before actually logging the user
+ * out. This is a UI notification only — the backend itself now writes the
+ * authoritative AUTO_LOGOUT/SESSION_TIMEOUT audit trail entries
+ * (ActivityRepository::closeStaleOpenSessions()/acknowledgeSessionTimeout()),
+ * so this helper no longer writes its own audit log entry.
+ */
+export function notifyAutoLogout(userId: string, sessionMinutes: number) {
+  notify(userId, "Automatically Logged Out",
+    `You were automatically logged out after your session reached 8 hours (${Math.round(sessionMinutes / 60 * 10) / 10}h). Your biometric attendance is unaffected.`,
+    "system", "login", "/activity/reports", "View Activity");
 }
 
 export function notifySecurityEvent(
@@ -669,7 +726,7 @@ export function notifySecurityEvent(
       description,
       "system", "security");
   }
-  AuditLogService.add({ action: "SECURITY_EVENT", entityType: "security", entityId: performedBy, entityName: performedByName, performedBy, performedByName, performedByRole, description });
+  logAudit({ action: "SECURITY_EVENT", entityType: "security", entityId: performedBy, entityName: performedByName, performedBy, performedByName, performedByRole, description });
 }
 
 // ── Budget Changed (legacy, kept for compatibility) ───────────────────────────
@@ -688,7 +745,7 @@ export function notifyBudgetChanged(
       `${changerName} updated budget for "${entityName}" to Rs. ${newBudget.toLocaleString()}.`,
       "payment", "budget");
   }
-  AuditLogService.add({ action: "BUDGET_CHANGED", entityType: "task", entityId: entityId, entityName: entityName, performedBy: changerId, performedByName: changerName, performedByRole: changerRole, description: `${changerName} changed budget for "${entityName}" to Rs. ${newBudget.toLocaleString()}`, newValue: { budget: newBudget } });
+  logAudit({ action: "BUDGET_CHANGED", entityType: "task", entityId: entityId, entityName: entityName, performedBy: changerId, performedByName: changerName, performedByRole: changerRole, description: `${changerName} changed budget for "${entityName}" to Rs. ${newBudget.toLocaleString()}`, newValue: { budget: newBudget } });
 }
 
 
@@ -699,7 +756,7 @@ export function notifyProjectDeleted(deleterId: string, deleterName: string, del
   for (const r of recipients) {
     notify(r.id, "Project Deleted", `${deleterName} deleted project "${projectName}".`, "project", "project");
   }
-  AuditLogService.add({ action: "PROJECT_DELETED", entityType: "project", entityId: projectId, entityName: projectName, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted project "${projectName}"` });
+  logAudit({ action: "PROJECT_DELETED", entityType: "project", entityId: projectId, entityName: projectName, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted project "${projectName}"` });
 }
 
 export function notifyProjectStatusChanged(changerId: string, changerName: string, changerRole: string, projectName: string, projectId: string, newStatus: string) {
@@ -708,7 +765,7 @@ export function notifyProjectStatusChanged(changerId: string, changerName: strin
   for (const r of recipients) {
     notify(r.id, "Project Status Changed", `${changerName} changed project "${projectName}" status to ${newStatus}.`, "project", "project");
   }
-  AuditLogService.add({ action: "PROJECT_STATUS_CHANGED", entityType: "project", entityId: projectId, entityName: projectName, performedBy: changerId, performedByName: changerName, performedByRole: changerRole, description: `${changerName} changed project "${projectName}" status to ${newStatus}` });
+  logAudit({ action: "PROJECT_STATUS_CHANGED", entityType: "project", entityId: projectId, entityName: projectName, performedBy: changerId, performedByName: changerName, performedByRole: changerRole, description: `${changerName} changed project "${projectName}" status to ${newStatus}` });
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -721,21 +778,21 @@ export function notifyTaskCreated(creatorId: string, creatorName: string, creato
   for (const r of recipients) {
     notify(r.id, "New Task Created", `${creatorName} created task "${taskTitle}".`, "project", "task");
   }
-  AuditLogService.add({ action: "TASK_CREATED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created task "${taskTitle}"` });
+  logAudit({ action: "TASK_CREATED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created task "${taskTitle}"` });
 }
 
 export function notifyTaskUpdated(updaterId: string, updaterName: string, updaterRole: string, taskTitle: string, taskId: string, assigneeId?: string) {
   const recipients = getUsersByRole("super_admin", "management").filter(p => p.id !== updaterId);
   if (assigneeId && assigneeId !== updaterId) notify(assigneeId, "Task Updated", `${updaterName} updated your task "${taskTitle}".`, "project", "task");
   for (const r of recipients) notify(r.id, "Task Updated", `${updaterName} updated task "${taskTitle}".`, "project", "task");
-  AuditLogService.add({ action: "TASK_UPDATED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated task "${taskTitle}"` });
+  logAudit({ action: "TASK_UPDATED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated task "${taskTitle}"` });
 }
 
 export function notifyTaskDeleted(deleterId: string, deleterName: string, deleterRole: string, taskTitle: string, taskId: string, assigneeId?: string) {
   const recipients = getUsersByRole("super_admin", "management").filter(p => p.id !== deleterId);
   if (assigneeId && assigneeId !== deleterId) notify(assigneeId, "Task Deleted", `${deleterName} deleted task "${taskTitle}".`, "project", "task");
   for (const r of recipients) notify(r.id, "Task Deleted", `${deleterName} deleted task "${taskTitle}".`, "project", "task");
-  AuditLogService.add({ action: "TASK_DELETED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted task "${taskTitle}"` });
+  logAudit({ action: "TASK_DELETED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted task "${taskTitle}"` });
 }
 
 export function notifyTaskReassigned(assignerId: string, assignerName: string, assignerRole: string, taskTitle: string, taskId: string, oldAssigneeId: string, newAssigneeId: string) {
@@ -743,7 +800,7 @@ export function notifyTaskReassigned(assignerId: string, assignerName: string, a
   notify(oldAssigneeId, "Task Unassigned", `${assignerName} removed you from task "${taskTitle}".`, "project", "task");
   notify(newAssigneeId, "Task Assigned", `${assignerName} assigned you task "${taskTitle}".`, "project", "task");
   for (const r of recipients) notify(r.id, "Task Reassigned", `${assignerName} reassigned task "${taskTitle}".`, "project", "task");
-  AuditLogService.add({ action: "TASK_REASSIGNED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: assignerId, performedByName: assignerName, performedByRole: assignerRole, description: `${assignerName} reassigned task "${taskTitle}"` });
+  logAudit({ action: "TASK_REASSIGNED", entityType: "task", entityId: taskId, entityName: taskTitle, performedBy: assignerId, performedByName: assignerName, performedByRole: assignerRole, description: `${assignerName} reassigned task "${taskTitle}"` });
 }
 
 // ── Clients ───────────────────────────────────────────────────────────────────
@@ -751,13 +808,13 @@ export function notifyTaskReassigned(assignerId: string, assignerName: string, a
 export function notifyClientUpdated(updaterId: string, updaterName: string, updaterRole: string, clientName: string, clientId: string) {
   const recipients = getUsersByRole("super_admin", "management", "production_admin").filter(p => p.id !== updaterId);
   for (const r of recipients) notify(r.id, "Client Updated", `${updaterName} updated client ${clientName}.`, "system", "client");
-  AuditLogService.add({ action: "CLIENT_UPDATED", entityType: "client", entityId: clientId, entityName: clientName, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated client "${clientName}"` });
+  logAudit({ action: "CLIENT_UPDATED", entityType: "client", entityId: clientId, entityName: clientName, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated client "${clientName}"` });
 }
 
 export function notifyClientDeleted(deleterId: string, deleterName: string, deleterRole: string, clientName: string, clientId: string) {
   const recipients = getUsersByRole("super_admin", "management", "production_admin").filter(p => p.id !== deleterId);
   for (const r of recipients) notify(r.id, "Client Deleted", `${deleterName} deleted client ${clientName}.`, "system", "client");
-  AuditLogService.add({ action: "CLIENT_DELETED", entityType: "client", entityId: clientId, entityName: clientName, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted client "${clientName}"` });
+  logAudit({ action: "CLIENT_DELETED", entityType: "client", entityId: clientId, entityName: clientName, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted client "${clientName}"` });
 }
 
 export function notifyClientConversationStarted(creatorId: string, creatorName: string, creatorRole: string, clientId: string, clientName: string, subject: string) {
@@ -794,21 +851,21 @@ export function notifyInvoiceCreated(creatorId: string, creatorName: string, cre
   const recipients = getUsersByRole("super_admin", "management").filter(p => p.id !== creatorId);
   notify(clientId, "New Invoice", `A new invoice (${invoiceNumber}) for $${amount} has been generated.`, "payment", "payroll");
   for (const r of recipients) notify(r.id, "Invoice Created", `${creatorName} created invoice ${invoiceNumber} for ${clientName}.`, "payment", "payroll");
-  AuditLogService.add({ action: "INVOICE_CREATED", entityType: "invoice", entityId: invoiceNumber, entityName: `Invoice ${invoiceNumber}`, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created invoice ${invoiceNumber} for ${clientName}` });
+  logAudit({ action: "INVOICE_CREATED", entityType: "invoice", entityId: invoiceNumber, entityName: `Invoice ${invoiceNumber}`, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created invoice ${invoiceNumber} for ${clientName}` });
 }
 
 export function notifyInvoiceUpdated(updaterId: string, updaterName: string, updaterRole: string, clientId: string, clientName: string, invoiceNumber: string) {
   const recipients = getUsersByRole("super_admin", "management").filter(p => p.id !== updaterId);
   notify(clientId, "Invoice Updated", `Invoice ${invoiceNumber} has been updated.`, "payment", "payroll");
   for (const r of recipients) notify(r.id, "Invoice Updated", `${updaterName} updated invoice ${invoiceNumber} for ${clientName}.`, "payment", "payroll");
-  AuditLogService.add({ action: "INVOICE_UPDATED", entityType: "invoice", entityId: invoiceNumber, entityName: `Invoice ${invoiceNumber}`, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated invoice ${invoiceNumber} for ${clientName}` });
+  logAudit({ action: "INVOICE_UPDATED", entityType: "invoice", entityId: invoiceNumber, entityName: `Invoice ${invoiceNumber}`, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated invoice ${invoiceNumber} for ${clientName}` });
 }
 
 export function notifyInvoiceDeleted(deleterId: string, deleterName: string, deleterRole: string, clientId: string, clientName: string, invoiceNumber: string) {
   const recipients = getUsersByRole("super_admin", "management").filter(p => p.id !== deleterId);
   notify(clientId, "Invoice Deleted", `Invoice ${invoiceNumber} has been cancelled.`, "payment", "payroll");
   for (const r of recipients) notify(r.id, "Invoice Deleted", `${deleterName} deleted invoice ${invoiceNumber} for ${clientName}.`, "payment", "payroll");
-  AuditLogService.add({ action: "INVOICE_DELETED", entityType: "invoice", entityId: invoiceNumber, entityName: `Invoice ${invoiceNumber}`, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted invoice ${invoiceNumber} for ${clientName}` });
+  logAudit({ action: "INVOICE_DELETED", entityType: "invoice", entityId: invoiceNumber, entityName: `Invoice ${invoiceNumber}`, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted invoice ${invoiceNumber} for ${clientName}` });
 }
 
 // ── HR Additional ─────────────────────────────────────────────────────────────
@@ -816,12 +873,12 @@ export function notifyInvoiceDeleted(deleterId: string, deleterName: string, del
 export function notifyBulkSalarySlipsGenerated(hrId: string, hrName: string, hrRole: string, count: number, month: string) {
   const recipients = getUsersByRole("super_admin", "management").filter(p => p.id !== hrId);
   for (const r of recipients) notify(r.id, "Bulk Payroll Generated", `${hrName} generated ${count} salary slips for ${month}.`, "payment", "payroll");
-  AuditLogService.add({ action: "BULK_SALARY_SLIPS", entityType: "payroll", entityId: month, entityName: `Payroll ${month}`, performedBy: hrId, performedByName: hrName, performedByRole: hrRole, description: `${hrName} generated ${count} salary slips for ${month}` });
+  logAudit({ action: "BULK_SALARY_SLIPS", entityType: "payroll", entityId: month, entityName: `Payroll ${month}`, performedBy: hrId, performedByName: hrName, performedByRole: hrRole, description: `${hrName} generated ${count} salary slips for ${month}` });
 }
 export function notifySalarySlipDeleted(hrId: string, hrName: string, hrRole: string, employeeId: string, employeeName: string, month: string) {
   const recipients = getUsersByRole("super_admin", "management").filter(p => p.id !== hrId);
   for (const r of recipients) notify(r.id, "Salary Slip Deleted", `${hrName} deleted the salary slip for ${employeeName} (${month}).`, "payment", "payroll");
-  AuditLogService.add({ action: "SALARY_SLIP_DELETED", entityType: "payroll", entityId: employeeId, entityName: `Payroll ${employeeName}`, performedBy: hrId, performedByName: hrName, performedByRole: hrRole, description: `${hrName} deleted salary slip for ${employeeName} (${month})` });
+  logAudit({ action: "SALARY_SLIP_DELETED", entityType: "payroll", entityId: employeeId, entityName: `Payroll ${employeeName}`, performedBy: hrId, performedByName: hrName, performedByRole: hrRole, description: `${hrName} deleted salary slip for ${employeeName} (${month})` });
 }
 
 // ── Generic ───────────────────────────────────────────────────────────────────
@@ -829,7 +886,7 @@ export function notifySalarySlipDeleted(hrId: string, hrName: string, hrRole: st
 export function notifyGenericAction(userId: string, userName: string, userRole: string, actionType: string, description: string, moduleName: NotificationModule) {
   const recipients = getUsersByRole("super_admin", "management").filter(p => p.id !== userId);
   for (const r of recipients) notify(r.id, actionType, `${userName}: ${description}`, "system", moduleName);
-  AuditLogService.add({ action: actionType.toUpperCase().replace(/\s/g, '_'), entityType: "system", entityId: "sys", entityName: actionType, performedBy: userId, performedByName: userName, performedByRole: userRole, description: `${userName}: ${description}` });
+  logAudit({ action: actionType.toUpperCase().replace(/\s/g, '_'), entityType: "system", entityId: "sys", entityName: actionType, performedBy: userId, performedByName: userName, performedByRole: userRole, description: `${userName}: ${description}` });
 }
 
 // ── Sales Campaign Budget ──────────────────────────────────────────────────────
@@ -837,24 +894,24 @@ export function notifyGenericAction(userId: string, userName: string, userRole: 
 export function notifySalesBudgetCreated(creatorId: string, creatorName: string, creatorRole: string, campaignName: string, campaignId: string) {
   const recipients = getUsersByRole("super_admin", "management", "sales_admin").filter(p => p.id !== creatorId);
   for (const r of recipients) notify(r.id, "Campaign Budget Created", `${creatorName} created a new campaign budget: "${campaignName}".`, "system", "sales");
-  AuditLogService.add({ action: "CAMPAIGN_BUDGET_CREATED", entityType: "campaign", entityId: campaignId, entityName: campaignName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created campaign budget "${campaignName}"` });
+  logAudit({ action: "CAMPAIGN_BUDGET_CREATED", entityType: "campaign", entityId: campaignId, entityName: campaignName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created campaign budget "${campaignName}"` });
 }
 
 export function notifySalesBudgetUpdated(updaterId: string, updaterName: string, updaterRole: string, campaignName: string, campaignId: string) {
   const recipients = getUsersByRole("super_admin", "management", "sales_admin").filter(p => p.id !== updaterId);
   for (const r of recipients) notify(r.id, "Campaign Budget Updated", `${updaterName} updated campaign budget: "${campaignName}".`, "system", "sales");
-  AuditLogService.add({ action: "CAMPAIGN_BUDGET_UPDATED", entityType: "campaign", entityId: campaignId, entityName: campaignName, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated campaign budget "${campaignName}"` });
+  logAudit({ action: "CAMPAIGN_BUDGET_UPDATED", entityType: "campaign", entityId: campaignId, entityName: campaignName, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated campaign budget "${campaignName}"` });
 }
 
 export function notifySalesBudgetDeleted(deleterId: string, deleterName: string, deleterRole: string, campaignName: string, campaignId: string) {
   const recipients = getUsersByRole("super_admin", "management", "sales_admin").filter(p => p.id !== deleterId);
   for (const r of recipients) notify(r.id, "Campaign Budget Deleted", `${deleterName} deleted campaign budget: "${campaignName}".`, "system", "sales");
-  AuditLogService.add({ action: "CAMPAIGN_BUDGET_DELETED", entityType: "campaign", entityId: campaignId, entityName: campaignName, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted campaign budget "${campaignName}"` });
+  logAudit({ action: "CAMPAIGN_BUDGET_DELETED", entityType: "campaign", entityId: campaignId, entityName: campaignName, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted campaign budget "${campaignName}"` });
 }
 
 // ── Client Portal Message (from Client side) ──────────────────────────────────
 
-export function notifyClientPortalMessageSent(clientId: string, clientName: string, assignedUserId: string, assignedDept: string, subject: string, convId: string) {
+export function notifyClientPortalMessageSent(clientId: string, clientName: string, assignedUserId: string, assignedDept: string, subject: string, _convId: string) {
   const deptAdminRole = `${assignedDept.toLowerCase()}_admin`;
   const recipients = getUsersByRole("super_admin", "management", deptAdminRole);
   notify(assignedUserId, "New Message from Client", `${clientName} sent a message in "${subject}".`, "system", "message", `/admin/conversations`);
@@ -870,7 +927,7 @@ export function notifyTicketCreated(creatorId: string, creatorName: string, crea
   for (const r of recipients.filter(p => p.id !== creatorId)) {
     notify(r.id, "New IT Ticket", `${creatorName} submitted a ${priority} priority ticket: "${ticketTitle}".`, "system", "ticket", `/it-tickets`);
   }
-  AuditLogService.add({ action: "TICKET_CREATED", entityType: "ticket", entityId: ticketId, entityName: ticketTitle, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} submitted IT ticket "${ticketTitle}"` });
+  logAudit({ action: "TICKET_CREATED", entityType: "ticket", entityId: ticketId, entityName: ticketTitle, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} submitted IT ticket "${ticketTitle}"` });
 }
 
 export function notifyTicketAssigned(assignerId: string, assignerName: string, assignerRole: string, assigneeId: string, assigneeName: string, ticketId: string, ticketTitle: string) {
@@ -884,7 +941,7 @@ export function notifyTicketStatusChanged(actorId: string, actorName: string, ac
   notify(requesterId, "Ticket Status Update", `Your ticket "${ticketTitle}" is now ${newStatus}.`, "system", "ticket", `/it-tickets`);
   const recipients = getUsersByRole("super_admin", "management", "it_admin").filter(p => p.id !== actorId && p.id !== requesterId);
   for (const r of recipients) notify(r.id, "Ticket Updated", `${actorName} set "${ticketTitle}" to ${newStatus}.`, "system", "ticket");
-  AuditLogService.add({ action: `TICKET_${newStatus.toUpperCase().replace('-','_')}`, entityType: "ticket", entityId: ticketId, entityName: ticketTitle, performedBy: actorId, performedByName: actorName, performedByRole: actorRole, description: `${actorName} changed ticket "${ticketTitle}" status to ${newStatus}` });
+  logAudit({ action: `TICKET_${newStatus.toUpperCase().replace('-','_')}`, entityType: "ticket", entityId: ticketId, entityName: ticketTitle, performedBy: actorId, performedByName: actorName, performedByRole: actorRole, description: `${actorName} changed ticket "${ticketTitle}" status to ${newStatus}` });
 }
 
 // ── Sales Leads ────────────────────────────────────────────────────────────────
@@ -892,23 +949,23 @@ export function notifyTicketStatusChanged(actorId: string, actorName: string, ac
 export function notifyLeadCreated(creatorId: string, creatorName: string, creatorRole: string, leadName: string, leadId: string) {
   const recipients = getUsersByRole("super_admin", "management", "sales_admin").filter(p => p.id !== creatorId);
   for (const r of recipients) notify(r.id, "New Lead Created", `${creatorName} added a new lead: "${leadName}".`, "system", "sales");
-  AuditLogService.add({ action: "LEAD_CREATED", entityType: "lead", entityId: leadId, entityName: leadName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created lead "${leadName}"` });
+  logAudit({ action: "LEAD_CREATED", entityType: "lead", entityId: leadId, entityName: leadName, performedBy: creatorId, performedByName: creatorName, performedByRole: creatorRole, description: `${creatorName} created lead "${leadName}"` });
 }
 
 export function notifyLeadUpdated(updaterId: string, updaterName: string, updaterRole: string, leadName: string, leadId: string) {
   const recipients = getUsersByRole("super_admin", "management", "sales_admin").filter(p => p.id !== updaterId);
   for (const r of recipients) notify(r.id, "Lead Updated", `${updaterName} updated lead: "${leadName}".`, "system", "sales");
-  AuditLogService.add({ action: "LEAD_UPDATED", entityType: "lead", entityId: leadId, entityName: leadName, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated lead "${leadName}"` });
+  logAudit({ action: "LEAD_UPDATED", entityType: "lead", entityId: leadId, entityName: leadName, performedBy: updaterId, performedByName: updaterName, performedByRole: updaterRole, description: `${updaterName} updated lead "${leadName}"` });
 }
 
 export function notifyLeadDeleted(deleterId: string, deleterName: string, deleterRole: string, leadName: string, leadId: string) {
   const recipients = getUsersByRole("super_admin", "management", "sales_admin").filter(p => p.id !== deleterId);
   for (const r of recipients) notify(r.id, "Lead Deleted", `${deleterName} deleted lead: "${leadName}".`, "system", "sales");
-  AuditLogService.add({ action: "LEAD_DELETED", entityType: "lead", entityId: leadId, entityName: leadName, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted lead "${leadName}"` });
+  logAudit({ action: "LEAD_DELETED", entityType: "lead", entityId: leadId, entityName: leadName, performedBy: deleterId, performedByName: deleterName, performedByRole: deleterRole, description: `${deleterName} deleted lead "${leadName}"` });
 }
 
 export function notifyLeadConverted(converterId: string, converterName: string, converterRole: string, leadName: string, leadId: string) {
   const recipients = getUsersByRole("super_admin", "management", "sales_admin", "production_admin").filter(p => p.id !== converterId);
   for (const r of recipients) notify(r.id, "Lead Converted to Client", `${converterName} converted lead "${leadName}" to a client.`, "system", "client");
-  AuditLogService.add({ action: "LEAD_CONVERTED", entityType: "lead", entityId: leadId, entityName: leadName, performedBy: converterId, performedByName: converterName, performedByRole: converterRole, description: `${converterName} converted lead "${leadName}" to a client` });
+  logAudit({ action: "LEAD_CONVERTED", entityType: "lead", entityId: leadId, entityName: leadName, performedBy: converterId, performedByName: converterName, performedByRole: converterRole, description: `${converterName} converted lead "${leadName}" to a client` });
 }

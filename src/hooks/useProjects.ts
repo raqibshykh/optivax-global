@@ -1,14 +1,19 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Project } from "../types";
 import { ProjectService } from "../services/projectService";
+import { ClientService } from "../services/clientService";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../lib/client";
 
 export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const fetchProjects = useCallback(async () => {
     setIsLoading(true);
@@ -16,19 +21,8 @@ export function useProjects() {
     try {
       let data: Project[] = [];
       if (user?.role === "client") {
-        if (user.email) {
-          const clients = await api.get<{ id: string }[]>(
-            `/saas/v1/clients/list?email=${encodeURIComponent(user.email)}`
-          );
-          const clientId = clients?.[0]?.id;
-          if (clientId) {
-            data = await ProjectService.getByClientId(clientId);
-          } else {
-            data = await ProjectService.getByClientId(user.id);
-          }
-        } else {
-          data = await ProjectService.getByClientId(user.id);
-        }
+        const client = user.email ? await ClientService.getByEmail(user.email) : null;
+        data = await ProjectService.getByClientId(client?.id ?? user.id);
       } else {
         if (user?.role.endsWith("_member")) {
           data = await ProjectService.getAll(user.id);
@@ -36,11 +30,11 @@ export function useProjects() {
           data = await ProjectService.getAll();
         }
       }
-      setProjects(data);
+      if (mountedRef.current) setProjects(data);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to fetch projects");
+      if (mountedRef.current) setError(err instanceof Error ? err.message : "Failed to fetch projects");
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, [user]);
 

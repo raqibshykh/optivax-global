@@ -1,12 +1,11 @@
 import PageMeta from "../../components/common/PageMeta";
 import { useClients } from "../../hooks/useClients";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import ClientModal from "./ClientModal";
 import { Client } from "../../types";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import { UserService } from "../../services/userService";
-import { storeMockPassword } from "../../lib/client";
 import { notifyClientCreated, notifyClientUpdated, notifyClientDeleted } from "../../services/notificationHelpers";
 
 export default function Clients() {
@@ -66,8 +65,8 @@ export default function Clients() {
           company: clientData.company,
           role: "client",
           created_at: new Date().toISOString(),
+          password: password || "",
         });
-        if (password) storeMockPassword(clientData.email, password);
         await addClient({
           ...clientData,
           createdBy: user?.id ?? "",
@@ -85,16 +84,19 @@ export default function Clients() {
   };
 
   // Filter & Pagination logic
-  const filteredClients = clients.filter((c) =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.company.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredClients = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return clients.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) ||
+      c.company.toLowerCase().includes(q)
+    );
+  }, [clients, searchQuery]);
 
   const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
-  const currentClients = filteredClients.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+  const currentClients = useMemo(
+    () => filteredClients.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage),
+    [filteredClients, currentPage]
   );
 
   // Reset to page 1 on search

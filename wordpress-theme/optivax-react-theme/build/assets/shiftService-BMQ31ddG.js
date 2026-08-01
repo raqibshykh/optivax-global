@@ -1,1 +1,0 @@
-import{i as a}from"./index-7RhE6BBj.js";const e="/saas/v1/shifts";class r{static async getAll(){return await a.get(`${e}/list`)||[]}static async create(t){return a.post(`${e}/create`,t)}static async update(t,s){return a.put(`${e}/update`,{id:t,...s})}static async delete(t){await a.delete(`${e}/delete`,{id:t})}}export{r as S};

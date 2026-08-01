@@ -1,0 +1,1 @@
+import{i as t}from"./index-BF5lcj23.js";const s="/saas/v1/marketing-campaigns";class i{static async getAll(){return await t.get(s)||[]}static async create(a){return t.post(s,a)}static async update(a,e){return t.put(`${s}/${a}`,e)}}export{i as M};

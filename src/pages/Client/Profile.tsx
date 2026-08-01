@@ -16,6 +16,7 @@ import {
   ClientEditableProfile,
 } from "../../services/profileService";
 import { RBAC_MATRIX } from "../../utils/rbac";
+import { ROLE_LABELS } from "../../types";
 import type { UserRole } from "../../types";
 
 // Re-exported so existing consumers (HRPanel.tsx) keep working unchanged;
@@ -454,7 +455,7 @@ export default function Profile() {
                   <ReadOnlyField label="Email" value={profile.readOnly.email} />
                   <ReadOnlyField label="Role" value={profile.readOnly.role} />
                   <ReadOnlyField label="Department" value={getDepartmentName(profile.readOnly.departmentId)} />
-                  <ReadOnlyField label="Designation" value={profile.readOnly.designation} />
+                  <ReadOnlyField label="Designation" value={ROLE_LABELS[user.role] ?? profile.readOnly.designation} />
                   <ReadOnlyField label="Salary" value={profile.readOnly.salary != null ? `Rs. ${Math.round(profile.readOnly.salary).toLocaleString()}` : "—"} />
                   <ReadOnlyField label="Joining Date" value={fmtDate(profile.readOnly.joiningDate)} />
                   <ReadOnlyField label="Reporting Manager" value={profile.readOnly.reportingManager ?? "Not assigned"} />

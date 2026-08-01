@@ -17,17 +17,46 @@ import {
 
 type Tab = "import" | "history" | "mapping";
 
-const STATUS_BADGE: Record<AttendanceImportPreviewRow["status"], string> = {
-  ready: "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400",
+/**
+ * Six mutually-exclusive display statuses, derived from the row's raw
+ * `status` (the coarse ready/duplicate/unmapped/failed bucket the backend's
+ * import decision actually runs on — never changed here) plus the
+ * display-only metadata flags layered on top of it. "Mapping Created" is
+ * deliberately NOT one of these six — per spec it's shown as an additional
+ * badge alongside the main one (see the mappingCreated pill below), not a
+ * replacement for it.
+ */
+type DisplayStatus = "mapped" | "mappedByName" | "alreadyImported" | "duplicate" | "unmapped" | "invalid";
+
+const resolveDisplayStatus = (row: AttendanceImportPreviewRow): DisplayStatus => {
+  switch (row.status) {
+    case "unmapped":
+      return "unmapped";
+    case "failed":
+      return "invalid";
+    case "duplicate":
+      return row.alreadyImported ? "alreadyImported" : "duplicate";
+    case "ready":
+    default:
+      return row.matchedByName ? "mappedByName" : "mapped";
+  }
+};
+
+const STATUS_BADGE: Record<DisplayStatus, string> = {
+  mapped: "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400",
+  mappedByName: "bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400",
+  alreadyImported: "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400",
   duplicate: "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
   unmapped: "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400",
-  failed: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
+  invalid: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
 };
-const STATUS_LABEL: Record<AttendanceImportPreviewRow["status"], string> = {
-  ready: "Will Import",
+const STATUS_LABEL: Record<DisplayStatus, string> = {
+  mapped: "Mapped",
+  mappedByName: "Mapped by Name",
+  alreadyImported: "Already Imported",
   duplicate: "Duplicate",
-  unmapped: "Unmapped ID",
-  failed: "Failed",
+  unmapped: "Unmapped",
+  invalid: "Invalid",
 };
 
 const errorMessage = (e: unknown, fallback: string): string =>
@@ -204,11 +233,15 @@ function ImportTab({
       {preview && !confirmResult && (
         <>
           <SummaryCards
-            total={preview.summary.total}
-            imported={preview.summary.imported}
-            duplicates={preview.summary.duplicates}
-            failed={preview.summary.failed}
-            importedLabel="Will Import"
+            total={preview.summary.total ?? 0}
+            imported={preview.summary.imported ?? 0}
+            duplicates={preview.summary.duplicates ?? 0}
+            failed={preview.summary.failed ?? 0}
+            existingMappingsUsed={preview.summary.existingMappingsUsed ?? 0}
+            mappedByName={preview.summary.mappedByName ?? 0}
+            newMappingsCreated={preview.summary.newMappingsCreated ?? 0}
+            unmappedEmployees={preview.summary.unmappedEmployees ?? 0}
+            importedLabel="Successfully Imported"
           />
 
           <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
@@ -240,6 +273,10 @@ function ImportTab({
             imported={confirmResult.importedRecords}
             duplicates={confirmResult.duplicateRecords}
             failed={confirmResult.failedRecords}
+            existingMappingsUsed={0}
+            mappedByName={0}
+            newMappingsCreated={0}
+            unmappedEmployees={0}
             importedLabel="Imported"
           />
           {confirmResult.aggregationErrors > 0 && (
@@ -254,16 +291,38 @@ function ImportTab({
 }
 
 function SummaryCards({
-  total, imported, duplicates, failed, importedLabel,
-}: { total: number; imported: number; duplicates: number; failed: number; importedLabel: string }) {
+  total,
+  imported,
+  duplicates,
+  failed,
+  importedLabel,
+  existingMappingsUsed = 0,
+  mappedByName = 0,
+  newMappingsCreated = 0,
+  unmappedEmployees = 0,
+}: {
+  total: number;
+  imported: number;
+  duplicates: number;
+  failed: number;
+  importedLabel: string;
+  existingMappingsUsed?: number;
+  mappedByName?: number;
+  newMappingsCreated?: number;
+  unmappedEmployees?: number;
+}) {
   const cards = [
-    { label: "Total Records", value: total, color: "text-gray-700 dark:text-gray-300" },
+    { label: "Total Rows", value: total, color: "text-gray-700 dark:text-gray-300" },
     { label: importedLabel, value: imported, color: "text-green-600 dark:text-green-400" },
     { label: "Duplicates", value: duplicates, color: "text-amber-600 dark:text-amber-400" },
-    { label: "Failed", value: failed, color: "text-red-600 dark:text-red-400" },
+    { label: "Existing Mappings Used", value: existingMappingsUsed, color: "text-blue-600 dark:text-blue-400" },
+    { label: "Mapped by Name", value: mappedByName, color: "text-violet-600 dark:text-violet-400" },
+    { label: "New Mappings Created", value: newMappingsCreated, color: "text-emerald-600 dark:text-emerald-400" },
+    { label: "Unmapped Employees", value: unmappedEmployees, color: "text-orange-600 dark:text-orange-400" },
+    { label: "Failed Rows", value: failed, color: "text-red-600 dark:text-red-400" },
   ];
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
       {cards.map((c) => (
         <div key={c.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <p className="text-xs text-gray-500 dark:text-gray-400">{c.label}</p>
@@ -280,30 +339,39 @@ function PreviewTable({ rows }: { rows: AttendanceImportPreviewRow[] }) {
       <table className="min-w-full text-sm">
         <thead>
           <tr className="bg-gray-50 dark:bg-gray-800/50">
-            {["Row", "Employee", "Biometric ID", "Date", "Time", "Type", "Status", "Note"].map((h) => (
+            {["Employee Name", "Biometric User ID", "Matched ERP Employee", "Punch Timestamp", "Status", "Reason"].map((h) => (
               <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
           {rows.length === 0 ? (
-            <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-400">No rows found in this file.</td></tr>
-          ) : rows.map((row) => (
-            <tr key={row.rowNumber} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-              <td className="px-3 py-2.5 text-xs text-gray-400">{row.rowNumber}</td>
-              <td className="px-3 py-2.5 text-xs font-medium text-gray-900 dark:text-white whitespace-nowrap">{row.employeeName ?? "—"}</td>
-              <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{row.biometricUserId ?? "—"}</td>
-              <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{row.date ?? "—"}</td>
-              <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{row.time ?? "—"}</td>
-              <td className="px-3 py-2.5 text-xs text-gray-500 capitalize whitespace-nowrap">{row.punchType ?? "—"}</td>
-              <td className="px-3 py-2.5 whitespace-nowrap">
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${STATUS_BADGE[row.status]}`}>
-                  {STATUS_LABEL[row.status]}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 text-xs text-gray-400 max-w-[240px] truncate" title={row.errorMessage ?? ""}>{row.errorMessage ?? "—"}</td>
-            </tr>
-          ))}
+            <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-400">No rows found in this file.</td></tr>
+          ) : rows.map((row) => {
+            const displayStatus = resolveDisplayStatus(row);
+            const punchTimestamp = [row.date, row.time].filter(Boolean).join(" ");
+            return (
+              <tr key={row.rowNumber} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                <td className="px-3 py-2.5 text-xs font-medium text-gray-900 dark:text-white whitespace-nowrap">{row.employeeName ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{row.biometricUserId ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{row.matchedEmployeeName ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{punchTimestamp || "—"}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${STATUS_BADGE[displayStatus]}`}>
+                      {STATUS_LABEL[displayStatus]}
+                    </span>
+                    {row.mappingCreated && (
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+                        Mapping Created
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-xs text-gray-400 max-w-[240px] truncate" title={row.errorMessage ?? ""}>{row.errorMessage ?? "—"}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

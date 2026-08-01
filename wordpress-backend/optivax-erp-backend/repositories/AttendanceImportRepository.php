@@ -44,44 +44,72 @@ final class AttendanceImportRepository
         )) ?: [];
     }
 
-    /** @param array $rows each: id?,importId,rowNumber,biometricUserId,employeeId,recordDate,recordTime,punchType,rawStatus,recordHash,status,errorMessage */
+    /**
+     * @param array $rows each: id?,importId,rowNumber,biometricUserId,employeeId,recordDate,recordTime,punchType,rawStatus,recordHash,status,errorMessage
+     * @throws \RuntimeException if a row's insert fails for any reason other than a duplicate
+     * record_hash — a repeat hash is expected here (buildPreviewRows()'s own duplicate-detection
+     * already marked that row 'duplicate' upstream; this ledger still records it, same as the
+     * INSERT IGNORE this replaced tolerated), so it's skipped rather than treated as a failure.
+     * Any other failure is unexpected and must not be swallowed.
+     *
+     * Per-row $wpdb->insert() instead of one hand-built multi-row VALUES statement: wpdb's own
+     * insert helper always wraps every column name (and the table name) in backticks
+     * internally, so a column that happens to collide with a MariaDB/MySQL reserved word (e.g.
+     * `row_number`, reserved since MariaDB 10.2 / MySQL 8.0 for the ROW_NUMBER() window
+     * function) can never again produce malformed SQL the way the old bare, unquoted column
+     * list did.
+     */
     public function bulkInsertRows(array $rows): void
     {
         if (empty($rows)) {
             return;
         }
-        global $wpdb;
-        $columns = ['id', 'import_id', 'row_number', 'biometric_user_id', 'employee_id', 'record_date', 'record_time', 'punch_type', 'raw_status', 'record_hash', 'status', 'error_message', 'created_at'];
-        $now = current_time('mysql', true);
 
-        $flatValues = [];
+        global $wpdb;
+        $now = current_time('mysql', true);
+        $insertedCount = 0;
+        $skippedDuplicates = 0;
+
         foreach ($rows as $row) {
-            $mapped = [
-                $row['id'] ?? Uuid::v4(),
-                $row['importId'],
-                (int) $row['rowNumber'],
-                $row['biometricUserId'] ?? null,
-                $row['employeeId'] ?? null,
-                $row['recordDate'] ?? null,
-                $row['recordTime'] ?? null,
-                $row['punchType'] ?? null,
-                $row['rawStatus'] ?? null,
-                $row['recordHash'] ?? null,
-                $row['status'],
-                $row['errorMessage'] ?? null,
-                $now,
+            $data = [
+                'id' => $row['id'] ?? Uuid::v4(),
+                'import_id' => $row['importId'],
+                'row_number' => (int) $row['rowNumber'],
+                'biometric_user_id' => $row['biometricUserId'] ?? null,
+                'employee_id' => $row['employeeId'] ?? null,
+                'record_date' => $row['recordDate'] ?? null,
+                'record_time' => $row['recordTime'] ?? null,
+                'punch_type' => $row['punchType'] ?? null,
+                'raw_status' => $row['rawStatus'] ?? null,
+                'record_hash' => $row['recordHash'] ?? null,
+                'status' => $row['status'],
+                'error_message' => $row['errorMessage'] ?? null,
+                'created_at' => $now,
             ];
-            foreach ($mapped as $value) {
-                $flatValues[] = $value;
+
+            $result = $wpdb->insert($this->rowsTable(), $data);
+
+            if ($result === false) {
+                if ($wpdb->last_error !== '' && str_contains($wpdb->last_error, 'Duplicate entry')) {
+                    $skippedDuplicates++;
+                    continue;
+                }
+
+                error_log(sprintf(
+                    '[ATTENDANCE-IMPORT] bulkInsertRows() row insert failed — employeeId=%s importId=%s rowNumber=%s recordHash=%s last_error=%s',
+                    (string) ($row['employeeId'] ?? 'NULL'),
+                    (string) ($row['importId'] ?? 'NULL'),
+                    (string) ($row['rowNumber'] ?? 'NULL'),
+                    (string) ($row['recordHash'] ?? 'NULL'),
+                    $wpdb->last_error
+                ));
+                throw new \RuntimeException($wpdb->last_error);
             }
+
+            $insertedCount++;
         }
 
-        $placeholderRow = '(' . implode(', ', array_fill(0, count($columns), '%s')) . ')';
-        $placeholders = implode(', ', array_fill(0, count($rows), $placeholderRow));
-        $columnList = implode(', ', $columns);
-
-        $sql = "INSERT IGNORE INTO {$this->rowsTable()} ({$columnList}) VALUES {$placeholders}";
-        $wpdb->query($wpdb->prepare($sql, $flatValues));
+        error_log("[ATTENDANCE-IMPORT] bulkInsertRows() complete — inserted={$insertedCount} skippedDuplicates={$skippedDuplicates} totalRows=" . count($rows));
     }
 
     /** @return array<int, array{recordTime:string, punchType:string}> successfully-imported rows for one employee+day, ordered by time — used by AttendanceImportService::aggregateDay(). */

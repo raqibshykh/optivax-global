@@ -34,9 +34,11 @@ final class DepartmentAutoAssignService
 
     /**
      * Use when no departmentId was supplied at all — an empty employee-creation form field, or
-     * a role change with no accompanying department change. Returns null only for roles that
-     * aren't department-scoped at all (super_admin, client) — callers must leave department_id
-     * untouched in that case, never clear it.
+     * a role change with no accompanying department change. Returns null only if the role isn't
+     * recognized at all (neither domainForRole() nor departmentNameForRole() match it) —
+     * callers must leave department_id untouched in that case, never clear it. Every real role
+     * (including super_admin/client, resolved by name via departmentNameForRole()) now resolves
+     * to something.
      */
     public static function resolveOrCreateDepartmentId(string $role): ?string
     {

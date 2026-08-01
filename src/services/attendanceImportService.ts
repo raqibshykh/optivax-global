@@ -4,12 +4,31 @@ const BASE = "/saas/v1/attendance";
 
 export type ImportRowStatus = "ready" | "duplicate" | "unmapped" | "failed";
 
-/** One parsed sheet row, resolved against the biometric mapping table and checked for duplicates — but not yet written anywhere. */
+/**
+ * One parsed sheet row, resolved against the biometric mapping table and
+ * checked for duplicates — but not yet written anywhere. `status` is the
+ * coarse ready/duplicate/unmapped/failed bucket the backend's import
+ * decision is actually based on (see AttendanceImportService.php); the
+ * boolean flags below are display-only metadata layered on top of it so the
+ * UI can distinguish "Mapped" vs "Mapped by Name" vs "Already Imported"
+ * without changing that underlying decision.
+ */
 export interface AttendanceImportPreviewRow {
   rowNumber: number;
   biometricUserId: string | null;
   employeeId: string | null;
+  /** Raw employee-name cell from the uploaded sheet, verbatim. */
   employeeName: string | null;
+  /** The matched ERP employee's actual display name — null when nothing matched. */
+  matchedEmployeeName?: string | null;
+  /** True when employeeId came from an existing biometric mapping (looked up, not created). */
+  matchedByExistingMapping?: boolean;
+  /** True when employeeId was resolved via the employee-name fallback (implies mappingCreated). */
+  matchedByName?: boolean;
+  /** True when this row's resolution just created a new biometric mapping. */
+  mappingCreated?: boolean;
+  /** Only meaningful when status === "duplicate": true = matches a previously-imported punch; false/absent = duplicate of another row in this same file. */
+  alreadyImported?: boolean;
   date: string | null;
   time: string | null;
   punchType: "in" | "out" | null;
@@ -24,6 +43,10 @@ export interface AttendanceImportSummary {
   imported: number;
   duplicates: number;
   failed: number;
+  existingMappingsUsed?: number;
+  mappedByName?: number;
+  newMappingsCreated?: number;
+  unmappedEmployees?: number;
 }
 
 export interface AttendanceImportPreviewResult {

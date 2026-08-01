@@ -397,28 +397,33 @@ final class Migrator
             }
         }
 
-        // "management" is deliberately absent from $roleDomain above — it has no RBAC domain
-        // of its own (see DepartmentMapper::domainForRole()'s doc comment), so it was silently
-        // excluded from every iteration of the domain-keyed backfill loop above. That was the
-        // actual root cause of "management users never get linked to the Management
-        // department": every other role's backfill ran once per domain; this role's never ran
-        // at all. Fixed via the same name-based resolution DepartmentAutoAssignService uses at
-        // write time (create/update), applied here for any user row that predates this fix —
-        // idempotent and safe to re-run on every version bump, same as the loop above.
-        $managementDeptId = \OptivaxERP\Services\DepartmentAutoAssignService::resolveOrCreateDepartmentId('management');
-        if ($managementDeptId) {
-            $fixedCount = $wpdb->query($wpdb->prepare(
-                "UPDATE {$usersTable} SET department_id = %s
-                 WHERE role = 'management'
-                   AND (department_id IS NULL OR department_id = '' OR department_id NOT IN (SELECT id FROM {$deptTable}))",
-                $managementDeptId
-            ));
-            \OptivaxERP\Helpers\Logger::info('migrator', 'Backfilled department_id for management-role users', [
-                'departmentId' => $managementDeptId,
-                'usersFixed' => $fixedCount,
-            ]);
-        } else {
-            \OptivaxERP\Helpers\Logger::error('migrator', 'Could not resolve or create the Management department during backfill — management-role users remain unassigned', []);
+        // "management", "super_admin", and "client" are deliberately absent from $roleDomain
+        // above — none has an RBAC domain of its own (see DepartmentMapper::domainForRole()'s
+        // doc comment), so all three were silently excluded from every iteration of the
+        // domain-keyed backfill loop above. That was the actual root cause of "<role> users
+        // never get linked to a department" (first found for management, same gap for
+        // super_admin/client): every other role's backfill ran once per domain; these roles'
+        // never ran at all. Fixed via the same name-based resolution
+        // DepartmentAutoAssignService uses at write time (create/update), applied here for any
+        // user row that predates this fix — idempotent and safe to re-run on every version
+        // bump, same as the loop above. Mirrors DepartmentMapper::ROLE_TO_DEPARTMENT_NAME.
+        foreach (['management', 'super_admin', 'client'] as $namedRole) {
+            $deptId = \OptivaxERP\Services\DepartmentAutoAssignService::resolveOrCreateDepartmentId($namedRole);
+            if ($deptId) {
+                $fixedCount = $wpdb->query($wpdb->prepare(
+                    "UPDATE {$usersTable} SET department_id = %s
+                     WHERE role = %s
+                       AND (department_id IS NULL OR department_id = '' OR department_id NOT IN (SELECT id FROM {$deptTable}))",
+                    $deptId,
+                    $namedRole
+                ));
+                \OptivaxERP\Helpers\Logger::info('migrator', "Backfilled department_id for {$namedRole}-role users", [
+                    'departmentId' => $deptId,
+                    'usersFixed' => $fixedCount,
+                ]);
+            } else {
+                \OptivaxERP\Helpers\Logger::error('migrator', "Could not resolve or create the department for {$namedRole} during backfill — {$namedRole}-role users remain unassigned", []);
+            }
         }
     }
 }

@@ -29,7 +29,15 @@ final class UserHierarchy
             'marketing_admin'  => ['marketing_member'],
             'hr_admin'         => ['hr_member'],
             'it_admin'         => ['it_member'],
-            'management'       => ['client'],
+            // Member-tier (individual contributor) roles across every
+            // department, plus the existing client-onboarding grant — this
+            // is what "Management can create new employees" (RBAC spec)
+            // actually requires. Deliberately NOT any *_admin role,
+            // super_admin, or management itself: creating admin-tier/peer
+            // accounts is an org-structure decision, which stays
+            // super_admin-only (matches the spec's "no user role/permission
+            // management" restriction for this role).
+            'management'       => ['client', 'sales_member', 'production_member', 'marketing_member', 'hr_member', 'it_member'],
         ];
     }
 

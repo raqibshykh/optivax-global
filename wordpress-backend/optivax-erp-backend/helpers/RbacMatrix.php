@@ -31,6 +31,9 @@ final class RbacMatrix
         'clients', 'system', 'billing', 'reports',
         'files', 'notifications', 'revisions', 'conversations', 'budget',
         'payroll', 'salary_slips', 'advance_salary',
+        // Split out of 'hr' — see src/types/index.ts's PermissionDomain doc
+        // comment and the 'management' matrix entry below for why.
+        'employees', 'employee_salary', 'employee_leave', 'employee_status',
     ];
 
     private static function matrix(): array
@@ -39,11 +42,65 @@ final class RbacMatrix
         return [
             'super_admin' => array_fill_keys(self::DOMAINS, $all),
             'management' => [
+                // NOTE: 'management' does not fall through array_fill_keys — every
+                // domain it holds is listed explicitly below.
                 'sales' => ['VIEW', 'EXPORT'],
-                'production' => ['VIEW', 'EXPORT'],
+                // CREATE+EDIT added so Management can create/update projects
+                // (ProjectRoutes.php gates /projects/create and
+                // /projects/update on 'production' CREATE/EDIT via
+                // BaseCrudController — there is no separate 'projects'
+                // domain). No DELETE — project deletion stays
+                // super_admin-only unless explicitly granted (same route
+                // file gates DELETE on 'production' too). Known coupling:
+                // TaskRoutes.php and DeliverableRoutes.php also construct
+                // their BaseCrudController on this same 'production' domain,
+                // so this grant necessarily also lets Management create/edit
+                // tasks and deliverables, not just projects — mirrors
+                // src/utils/rbac.ts.
+                'production' => ['VIEW', 'CREATE', 'EDIT', 'EXPORT'],
                 'marketing' => ['VIEW', 'EXPORT'],
-                'hr' => ['VIEW', 'EXPORT'],
-                'clients' => ['VIEW', 'EXPORT'],
+                // Split off 'hr' — mirrors src/utils/rbac.ts. Management can
+                // onboard/update employee PROFILES (ProfileController::create()
+                // via UserHierarchy, ProfileController::update() non-self
+                // branch) via 'employees', but deliberately holds no 'hr'
+                // grant at all anymore: EmployeeExtraController (salary/
+                // deductions/salary status/work mode), the leave-approval
+                // endpoints in LeaveRequestController, and the account-status
+                // field in ProfileController now gate on the domains below
+                // instead, so this role can no longer edit payroll data via
+                // any path — UI or direct API call — just by holding
+                // employee-profile access. No DELETE — removing an employee
+                // account stays super_admin-only (ProfileController::delete()'s
+                // 'system' DELETE gate, unchanged).
+                'employees' => ['VIEW', 'CREATE', 'EDIT'],
+                // VIEW only — read access preserved for payroll oversight (the
+                // salary columns in Employees.tsx, ManagementPanel's payroll
+                // widgets, AttendancePayroll.tsx), but EDIT is deliberately
+                // withheld: this is the fix for the reported issue where
+                // 'hr':EDIT let Management write salary, deductions, and
+                // salary status through EmployeeExtraController.
+                'employee_salary' => ['VIEW'],
+                // VIEW only — company-wide leave stats stay visible
+                // (ManagementPanel dashboard), but APPROVE is withheld:
+                // Management has no leave-approval UI today
+                // (LeaveRequests.tsx/HRPanel.tsx are hr_admin/hr_member-only
+                // routes), so this only closes a latent direct-API gap, not a
+                // used feature.
+                'employee_leave' => ['VIEW'],
+                // Not granted — activating/deactivating an employee account is
+                // deliberately narrower than general profile EDIT; only
+                // hr_admin and super_admin (via its 'system' EDIT bypass) may
+                // flip that flag.
+
+                // No 'system' grant: GET /departments/list (DepartmentRoutes.php)
+                // is auth-only, not RBAC-domain-gated — mirrors src/utils/rbac.ts.
+
+                // CREATE+EDIT added so Management can create/update client
+                // records (ClientRoutes.php gates CREATE directly; EDIT via
+                // BaseCrudController::updateByBodyIdHandler()). No DELETE —
+                // client deletion stays super_admin-only unless explicitly
+                // granted — mirrors src/utils/rbac.ts.
+                'clients' => ['VIEW', 'CREATE', 'EDIT', 'EXPORT'],
                 'billing' => ['VIEW', 'CREATE', 'EDIT', 'EXPORT', 'APPROVE', 'ASSIGN'],
                 'reports' => ['VIEW', 'EXPORT'],
                 'files' => ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
@@ -59,8 +116,26 @@ final class RbacMatrix
                 'it_support' => ['VIEW', 'CREATE'],
                 'conversations' => $all,
                 'budget' => $all,
-                'payroll' => $all,
-                'salary_slips' => $all,
+                // Not checked by any controller today (PayrollController
+                // gates its routes on salary_slips/advance_salary instead —
+                // see PayrollController's own doc comment) — VIEW+EXPORT kept
+                // here only so the matrix doesn't overstate access if a
+                // future endpoint starts checking it — mirrors src/utils/rbac.ts.
+                'payroll' => ['VIEW', 'EXPORT'],
+                // Reduced from $all: CREATE/EDIT gate
+                // bulkSaveSalarySlips()/createSalarySlip() in
+                // PayrollController — direct payroll-slip generation/editing,
+                // exactly the "payroll settings" Management must not touch
+                // unless explicitly granted. VIEW+EXPORT preserves
+                // read/export access for oversight/reporting — mirrors
+                // src/utils/rbac.ts.
+                'salary_slips' => ['VIEW', 'EXPORT'],
+                // Deliberately NOT reduced: AdvanceSalary.tsx hardcodes
+                // ["super_admin","management","hr_admin"] as its approver
+                // list (isApprover) independent of this matrix — Management
+                // approving advance-salary requests is an existing,
+                // intentional workflow, not a "payroll settings" change —
+                // mirrors src/utils/rbac.ts.
                 'advance_salary' => $all,
             ],
             'sales_admin' => [
@@ -95,13 +170,13 @@ final class RbacMatrix
                 // creating/deleting calendar entries stays marketing-only.
                 // Mirrors src/utils/rbac.ts.
                 'marketing' => ['VIEW', 'EDIT'],
-                // Department dropdowns/filters are app-wide (DepartmentContext
-                // fetches GET /departments/list for every authenticated user),
-                // gated on the 'system' domain (DepartmentRoutes.php) — VIEW
-                // only, so production_admin can read the list but still can't
-                // create/edit/delete departments (super_admin/it_admin only).
-                // Mirrors src/utils/rbac.ts.
-                'system' => ['VIEW'],
+                // No 'system' grant needed: GET /departments/list
+                // (DepartmentRoutes.php) is auth-only, not RBAC-domain-gated
+                // — every authenticated user reads department names that way
+                // (DepartmentContext fetches it app-wide for exactly that
+                // reason). 'system' stays reserved for actual admin actions
+                // (department/company-settings/automation CRUD), which
+                // production_admin still can't touch. Mirrors src/utils/rbac.ts.
                 'files' => $all,
                 'reports' => ['VIEW', 'EXPORT'],
                 'notifications' => ['VIEW', 'CREATE'],
@@ -146,6 +221,13 @@ final class RbacMatrix
             ],
             'hr_admin' => [
                 'hr' => $all,
+                // Full access to every employee-related domain split off
+                // 'hr' — HR keeps complete profile, payroll, leave-approval,
+                // and account-status control.
+                'employees' => $all,
+                'employee_salary' => $all,
+                'employee_leave' => $all,
+                'employee_status' => $all,
                 'files' => $all,
                 'reports' => ['VIEW', 'EXPORT'],
                 'notifications' => ['VIEW', 'CREATE'],
@@ -157,6 +239,10 @@ final class RbacMatrix
             ],
             'hr_member' => [
                 'hr' => ['VIEW'],
+                // Mirrors the old 'hr' => ['VIEW'] grant — read access only.
+                'employees' => ['VIEW'],
+                'employee_salary' => ['VIEW'],
+                'employee_leave' => ['VIEW'],
                 'files' => ['VIEW', 'CREATE'],
                 'notifications' => ['VIEW'],
                 'it_support' => ['VIEW', 'CREATE'],
@@ -205,6 +291,10 @@ final class RbacMatrix
         return [
             'files' => true, 'notifications' => true, 'reports' => true, 'revisions' => true,
             'conversations' => true, 'budget' => true, 'salary_slips' => true, 'advance_salary' => true,
+            // hr_admin/hr_member's primary domain is 'hr', not these — without
+            // this exemption the scope rule would block their own
+            // CREATE/EDIT/APPROVE grants on the split-off employee domains.
+            'employees' => true, 'employee_salary' => true, 'employee_leave' => true, 'employee_status' => true,
         ];
     }
 

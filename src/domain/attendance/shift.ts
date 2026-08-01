@@ -90,8 +90,17 @@ function toDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Every shift's lateness grace period is a fixed 15 minutes by policy — mirrors
+ * ShiftResolver::isLate() in the PHP backend; deliberately NOT config.graceMinutes
+ * (department_shifts.grace_minutes is a separate, unrelated column). The grace window
+ * is closed at both ends (e.g. a 19:00 start means 19:00-19:14 is on time, 19:15 itself
+ * is already Late), hence >= rather than >.
+ */
+const LATE_GRACE_MINUTES = 15;
+
 export function isLate(checkIn: string, config: ShiftConfig): boolean {
-  return timeToMinutes(checkIn) > timeToMinutes(config.start) + config.graceMinutes;
+  return timeToMinutes(checkIn) >= timeToMinutes(config.start) + LATE_GRACE_MINUTES;
 }
 
 export function isEarlyLeave(checkOut: string, config: ShiftConfig): boolean {

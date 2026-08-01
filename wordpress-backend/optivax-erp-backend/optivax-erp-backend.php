@@ -13,8 +13,8 @@ if (!defined('ABSPATH')) {
     exit; // Disallow direct access.
 }
 
-define('OPTIVAX_ERP_VERSION', '2.9.1-management-dept-fix');
-define('OPTIVAX_ERP_DB_VERSION', '1.10.1');
+define('OPTIVAX_ERP_VERSION', '2.9.2-department-role-designation-fix');
+define('OPTIVAX_ERP_DB_VERSION', '1.10.3');
 define('OPTIVAX_ERP_DIR', plugin_dir_path(__FILE__));
 define('OPTIVAX_ERP_URL', plugin_dir_url(__FILE__));
 define('OPTIVAX_ERP_TABLE_PREFIX', 'optivax_');
@@ -88,6 +88,10 @@ final class OptivaxErpBackend
         OptivaxERP\Middleware\CsrfMiddleware::register();
         OptivaxERP\Middleware\ErrorBoundaryMiddleware::register();
         add_action('phpmailer_init', [OptivaxERP\Mail\MailService::class, 'configureSmtp']);
+        // WP core's own default (unfiltered) is 24 hours, which is longer
+        // than an ERP password-reset link should stay valid. Made explicit
+        // here rather than left as an implicit core default.
+        add_filter('password_reset_expiration', static fn () => HOUR_IN_SECONDS);
         OptivaxERP\Helpers\SecurityHeaders::register();
 
         OptivaxERP\Cron\EmailQueueWorker::registerSchedule();

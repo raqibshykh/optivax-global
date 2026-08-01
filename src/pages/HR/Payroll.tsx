@@ -217,13 +217,13 @@ export default function Payroll() {
               <option value="Paid">Paid</option>
               <option value="Unpaid">Unpaid</option>
             </select>
-            {canEdit("hr") && (
+            {canEdit("employee_salary") && (
               <button onClick={handleMarkAllPaid}
                 className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 whitespace-nowrap">
                 Mark All Paid
               </button>
             )}
-            {canExport("hr") && (
+            {canExport("employee_salary") && (
               <button onClick={() => showToast("CSV export coming soon", "info")}
                 className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-300 whitespace-nowrap">
                 Export CSV
@@ -247,7 +247,7 @@ export default function Payroll() {
                     "Employee", "Leave Days Taken", "Base Salary",
                     "Leave Deduction", "Other Deduction", "Net Salary",
                     "Mode", "Status",
-                    ...(canEdit("hr") ? ["Action"] : []),
+                    ...(canEdit("employee_salary") ? ["Action"] : []),
                   ].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
@@ -368,7 +368,7 @@ export default function Payroll() {
                       </td>
 
                       {/* Action (canEdit only) */}
-                      {canEdit("hr") && (
+                      {canEdit("employee_salary") && (
                         <td className="px-4 py-3 whitespace-nowrap">
                           {isEditing ? (
                             <div className="flex items-center gap-2">

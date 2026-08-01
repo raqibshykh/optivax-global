@@ -14,12 +14,17 @@ if (!defined('ABSPATH')) {
  * Backs /saas/v1/hr/employee-extra. GET returns the raw
  * Record<userId, EmployeeExtraData> map (not an array of rows) because that's
  * exactly what src/services/employeeExtraService.ts expects as its unwrapped
- * `data` payload. Gated on the 'hr' RBAC domain throughout.
+ * `data` payload. Gated on the 'employee_salary' RBAC domain throughout —
+ * this is the per-employee salary/deduction/salary-status/work-mode data,
+ * deliberately split off the general 'hr' domain so a role that can manage
+ * employee profiles (e.g. management) doesn't automatically get to edit
+ * payroll figures. See RBAC_MATRIX's "management" entry in
+ * src/utils/rbac.ts.
  */
 final class EmployeeExtraController
 {
     private EmployeeExtraRepository $repo;
-    private string $domain = 'hr';
+    private string $domain = 'employee_salary';
 
     public function __construct()
     {

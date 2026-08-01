@@ -423,8 +423,17 @@ function GenerateSlipModal({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SalarySlips() {
-  const { user } = useAuth();
+  const { user, canCreate, canEdit } = useAuth();
   const { showToast } = useToast();
+  // isAdminView (below) only decides VIEW scope (see everyone's slips vs.
+  // just your own) — it must not also gate the mutating actions, since
+  // salary_slips CREATE/EDIT can differ per role (e.g. Management holds
+  // VIEW but not CREATE/EDIT — see rbac.ts). Gating Generate/Delete on
+  // these instead keeps the buttons in sync with what the backend
+  // (PayrollController::createSalarySlip/bulkSaveSalarySlips) will actually
+  // accept, rather than showing a button that 403s.
+  const canGenerateSlip = canCreate("salary_slips");
+  const canDeleteSlip = canEdit("salary_slips");
 
   const [slips, setSlips] = useState<SalarySlip[]>([]);
   const [employees, setEmployees] = useState<UserProfile[]>([]);
@@ -547,7 +556,7 @@ export default function SalarySlips() {
             {departments.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
         )}
-        {isAdminView && (
+        {isAdminView && canGenerateSlip && (
           <button onClick={() => setGenerating(true)}
             className="ml-auto px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-xl transition-colors whitespace-nowrap">
             + Generate Slip
@@ -613,7 +622,7 @@ export default function SalarySlips() {
                           className="text-xs px-2 py-1 rounded bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
                           Print
                         </button>
-                        {isAdminView && (
+                        {isAdminView && canDeleteSlip && (
                           <button onClick={() => handleDelete(slip.id)}
                             className="text-xs px-2 py-1 rounded bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
                             Delete

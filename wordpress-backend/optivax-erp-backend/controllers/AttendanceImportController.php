@@ -83,7 +83,12 @@ final class AttendanceImportController
             return ApiResponse::error('File exceeds the maximum allowed size (' . self::MAX_FILE_BYTES . ' bytes).', 413);
         }
 
+        
+        if (!function_exists('wp_tempnam')) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+        }
         $tmpPath = wp_tempnam('attendance-import');
+
         if ($tmpPath === false || file_put_contents($tmpPath, $decoded) === false) {
             return ApiResponse::serverError('Could not stage the uploaded file for processing.');
         }
@@ -228,14 +233,44 @@ final class AttendanceImportController
         return ApiResponse::ok(null);
     }
 
+    /**
+     * total/imported/duplicates/failed are the original four counters —
+     * kept, computed exactly as before, for backward compatibility with any
+     * existing caller. The rest are additive: derived from the metadata
+     * AttendanceImportService::buildRow()/buildPreviewRows() now attaches to
+     * each row (matchedByExistingMapping/matchedByName/mappingCreated), so
+     * no row is inspected any differently than it already was — 'unmapped'
+     * rows now land in their own counter instead of being folded into
+     * 'failed'.
+     */
     private static function summarize(array $rows): array
     {
-        $counts = ['total' => count($rows), 'imported' => 0, 'duplicates' => 0, 'failed' => 0];
+        $counts = [
+            'total' => count($rows),
+            'imported' => 0,
+            'duplicates' => 0,
+            'existingMappingsUsed' => 0,
+            'mappedByName' => 0,
+            'newMappingsCreated' => 0,
+            'unmappedEmployees' => 0,
+            'failed' => 0,
+        ];
         foreach ($rows as $row) {
             if ($row['status'] === 'ready') {
                 $counts['imported']++;
+                if (!empty($row['matchedByExistingMapping'])) {
+                    $counts['existingMappingsUsed']++;
+                }
+                if (!empty($row['matchedByName'])) {
+                    $counts['mappedByName']++;
+                }
+                if (!empty($row['mappingCreated'])) {
+                    $counts['newMappingsCreated']++;
+                }
             } elseif ($row['status'] === 'duplicate') {
                 $counts['duplicates']++;
+            } elseif ($row['status'] === 'unmapped') {
+                $counts['unmappedEmployees']++;
             } else {
                 $counts['failed']++;
             }

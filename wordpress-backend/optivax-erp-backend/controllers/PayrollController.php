@@ -43,10 +43,13 @@ final class PayrollController
     /**
      * GET /payroll/salary-slips. 'salary_slips' VIEW is deliberately granted
      * broadly (every role needs to see their own payslip) — so it cannot be
-     * the signal for "sees the whole company's payroll." Holding 'hr' VIEW
-     * (hr_admin, hr_member, management, super_admin) is what actually means
-     * "administers payroll"; every other role, including roles with
-     * 'salary_slips' VIEW, is restricted to their own slips.
+     * the signal for "sees the whole company's payroll." Holding
+     * 'employee_salary' VIEW (hr_admin, hr_member, management, super_admin —
+     * the same four roles that used to hold 'hr' VIEW before the 'hr' domain
+     * was split; see RBAC_MATRIX's "management" entry in src/utils/rbac.ts)
+     * is what actually means "administers/oversees payroll"; every other
+     * role, including roles with 'salary_slips' VIEW, is restricted to their
+     * own slips.
      */
     public function listSalarySlips(\WP_REST_Request $request): \WP_REST_Response
     {
@@ -55,7 +58,7 @@ final class PayrollController
             return $guard;
         }
 
-        if (RbacMiddleware::authorize('hr', 'VIEW') === null) {
+        if (RbacMiddleware::authorize('employee_salary', 'VIEW') === null) {
             return ApiResponse::ok($this->slipRepo->list());
         }
         return ApiResponse::ok($this->slipRepo->list((string) AuthMiddleware::currentUserId()));
@@ -124,7 +127,7 @@ final class PayrollController
 
     // ── Advance Salary Requests ──────────────────────────────────────────────
 
-    /** GET /payroll/advance-requests — same "'hr' VIEW = sees everyone" rule as listSalarySlips(). */
+    /** GET /payroll/advance-requests — same "'employee_salary' VIEW = sees everyone" rule as listSalarySlips(). */
     public function listAdvanceRequests(\WP_REST_Request $request): \WP_REST_Response
     {
         $guard = RbacMiddleware::authorize('advance_salary', 'VIEW');
@@ -132,7 +135,7 @@ final class PayrollController
             return $guard;
         }
 
-        if (RbacMiddleware::authorize('hr', 'VIEW') === null) {
+        if (RbacMiddleware::authorize('employee_salary', 'VIEW') === null) {
             return ApiResponse::ok($this->advanceRepo->list());
         }
         return ApiResponse::ok($this->advanceRepo->list((string) AuthMiddleware::currentUserId()));
@@ -162,7 +165,7 @@ final class PayrollController
 
     // ── Advance Salary Audit Log ─────────────────────────────────────────────
 
-    /** GET /payroll/advance-audit — same "'hr' VIEW = sees everyone" rule as listSalarySlips(). */
+    /** GET /payroll/advance-audit — same "'employee_salary' VIEW = sees everyone" rule as listSalarySlips(). */
     public function listAdvanceAudit(\WP_REST_Request $request): \WP_REST_Response
     {
         $guard = RbacMiddleware::authorize('advance_salary', 'VIEW');
@@ -170,7 +173,7 @@ final class PayrollController
             return $guard;
         }
 
-        if (RbacMiddleware::authorize('hr', 'VIEW') === null) {
+        if (RbacMiddleware::authorize('employee_salary', 'VIEW') === null) {
             return ApiResponse::ok($this->auditRepo->list([], 'timestamp DESC'));
         }
         $ownId = (string) AuthMiddleware::currentUserId();

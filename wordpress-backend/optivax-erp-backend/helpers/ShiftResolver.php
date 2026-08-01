@@ -17,15 +17,19 @@ if (!defined('ABSPATH')) {
  * BiometricAttendanceService.php).
  *
  * configForUser() resolution order: the employee's own assigned shift
- * (users_mapping.shift_id) -> their department's default_shift_id -> a global day-shift
- * default (09:00-17:00, 30 min grace — today's exact standing behavior). Any employee with
- * nothing configured anywhere produces byte-identical output to before this class existed.
+ * (users_mapping.shift_id) -> their department's default_shift_id -> the Default (Production)
+ * shift policy, 22:00-06:00 with a 15-minute grace period. Per policy there are only three
+ * shift types (HR 19:00-01:00, Sales 21:00-05:00, and this Default shift for every other role
+ * or department, including any not yet explicitly configured) — this fallback is that Default
+ * shift, not an unrelated day-shift default, so any employee/role whose department has no shift
+ * of its own (e.g. IT Support, or a role with no department-scoping like super_admin) correctly
+ * lands on Default rather than a legacy 09:00-17:00 assumption.
  */
 final class ShiftResolver
 {
-    public const DEFAULT_START = '09:00';
-    public const DEFAULT_END = '17:00';
-    public const DEFAULT_GRACE_MINUTES = 30;
+    public const DEFAULT_START = '22:00';
+    public const DEFAULT_END = '06:00';
+    public const DEFAULT_GRACE_MINUTES = 15;
 
     /** @return array{shiftId: ?string, start: string, end: string, graceMinutes: int, crossesMidnight: bool} */
     public static function configForUser(string $userId): array
@@ -123,10 +127,20 @@ final class ShiftResolver
         return $date;
     }
 
+    /**
+     * Every shift's lateness grace period is a fixed 15 minutes by policy — deliberately NOT
+     * $config['graceMinutes'] (sourced from department_shifts.grace_minutes, currently seeded
+     * at 30 for HR/Sales/Production/Marketing/Management; that column is left as-is, only the
+     * late-decision here uses the policy value). The grace window is closed at both ends
+     * (e.g. a 19:00 start means 19:00-19:14 is on time, 19:15 itself is already Late), hence
+     * >= rather than the > this used before.
+     */
+    private const LATE_GRACE_MINUTES = 15;
+
     public static function isLate(string $checkInHHMM, array $config): bool
     {
-        $threshold = self::timeToMinutes($config['start']) + $config['graceMinutes'];
-        return self::timeToMinutes($checkInHHMM) > $threshold;
+        $threshold = self::timeToMinutes($config['start']) + self::LATE_GRACE_MINUTES;
+        return self::timeToMinutes($checkInHHMM) >= $threshold;
     }
 
     public static function isEarlyLeave(string $checkOutHHMM, array $config): bool

@@ -1,16 +1,52 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import AuthLayout from "./AuthPageLayout";
 import { ChevronLeftIcon } from "../../icons";
 import { AuthService } from "../../services/authService";
+import { ApiError } from "../../lib/apiError";
 
 type Step = "request" | "reset" | "done";
 
+// ApiResponse::exceptionError() (backend) puts the raw \Throwable message
+// into the `error` field for any unhandled server-side exception — useful in
+// server logs, never safe to show an anonymous caller on a public route like
+// this one. Neither requestReset() nor confirmReset() calls
+// ApiResponse::serverError() directly, so within this flow a 500 can only
+// come from that raw-message path; every other status (400/403/422/429)
+// comes from ApiResponse::error()/validationError(), whose messages are
+// always deliberately authored for display.
+const safeErrorMessage = (err: ApiError): string =>
+  err.status === 500 ? "Something went wrong on our end. Please try again later." : err.message;
+
+/** "90" -> "2 minutes", "3700" -> "1 hour 2 minutes". Used to turn the 429's retryAfterSeconds into copy a user can act on instead of a generic failure message. */
+const formatRetryAfter = (totalSeconds: number): string => {
+  const seconds = Math.max(1, Math.ceil(totalSeconds));
+  if (seconds < 60) {
+    return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  }
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  const hoursPart = `${hours} hour${hours === 1 ? "" : "s"}`;
+  return remainingMinutes === 0
+    ? hoursPart
+    : `${hoursPart} ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
+};
+
 export default function ResetPassword() {
-  const [step, setStep] = useState<Step>("request");
+  // The emailed reset link lands here with ?token=... already set — jump
+  // straight to the "set new password" step instead of showing the "enter
+  // your email" form again (which would require the user to notice a
+  // separate token field and copy-paste from the email manually).
+  const [searchParams] = useSearchParams();
+  const tokenFromLink = searchParams.get("token") ?? "";
+  const [step, setStep] = useState<Step>(tokenFromLink ? "reset" : "request");
   const [email, setEmail] = useState("");
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(tokenFromLink);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
@@ -23,8 +59,27 @@ export default function ResetPassword() {
     try {
       await AuthService.requestPasswordReset(email);
       setStep("reset");
-    } catch {
-      setError("Failed to send reset link. Please try again.");
+    } catch (err) {
+      // ApiError.message already carries the server's real {error} string
+      // (e.g. "CSRF validation failed", "Password change required before
+      // continuing", "A valid email address is required") — showing a
+      // hardcoded string here instead of that message is exactly why the UI
+      // used to look "always broken" for every failure reason alike, with no
+      // way to tell a rate limit apart from a validation error apart from a
+      // genuine outage. Only a non-ApiError (network/timeout/parse failure,
+      // where there's no server message to show) falls back to generic copy.
+      if (err instanceof ApiError && err.status === 429) {
+        const retryAfterSeconds = (err.details as { retryAfterSeconds?: number } | undefined)?.retryAfterSeconds;
+        setError(
+          typeof retryAfterSeconds === "number"
+            ? `Too many reset requests. Please try again in ${formatRetryAfter(retryAfterSeconds)}.`
+            : safeErrorMessage(err)
+        );
+      } else if (err instanceof ApiError) {
+        setError(safeErrorMessage(err));
+      } else {
+        setError("Failed to send reset link. Please check your connection and try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -47,8 +102,11 @@ export default function ResetPassword() {
     try {
       await AuthService.confirmPasswordReset(token, newPassword);
       setStep("done");
-    } catch {
-      setError("Invalid or expired reset token.");
+    } catch (err) {
+      // Same reasoning as handleRequestReset: show the server's actual
+      // reason (e.g. a password-policy validation message) instead of
+      // always blaming the token.
+      setError(err instanceof ApiError ? safeErrorMessage(err) : "Invalid or expired reset token.");
     } finally {
       setIsLoading(false);
     }

@@ -1,10 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import { UserService, UserProfile } from "../../services/userService";
 import EmployeeHierarchy from "../../components/dashboard/EmployeeHierarchy";
 import ActivityFeed from "../../components/dashboard/ActivityFeed";
-import { safeParse } from "../../lib/storage";
 import { Client, Deliverable, Project } from "../../types";
 import { BudgetService, getBudgetStats } from "../../services/budgetService";
 import { PayrollService } from "../../services/payrollService";
@@ -18,13 +17,7 @@ import { MarketingCampaignService } from "../../services/marketingCampaignServic
 import { ProjectService } from "../../services/projectService";
 import { PaymentService } from "../../services/paymentService";
 import { ITTicketService, DeviceService } from "../../services/itSupportService";
-
-// "mock_attendance" here is a distinct, still-orphaned per-day admin
-// attendance-marking widget (Present/Absent/Late per employee per date) with
-// no backend route yet — separate from HR/Attendance.tsx's self-check-in log
-// (already migrated) and the yearly AttendanceService report data. Left
-// reading localStorage directly; tracked as remaining work.
-const ATTEND_KEY = "mock_attendance";
+import { AttendanceService, type AttendanceRecord } from "../../services/attendanceService";
 
 interface ExtraData   { userId: string; leavesTaken: number; salary: number; salaryStatus: string; workMode: string; }
 interface MockTask    { id: string; status: string; assigneeId?: string; budget?: number; budgetUsed?: number; }
@@ -81,9 +74,11 @@ export default function ManagementPanel() {
   const [advancePending, setAdvancePending] = useState({ count: 0, total: 0 });
   const [itTickets, setItTickets] = useState<{ status: string }[]>([]);
   const [itDevices, setItDevices] = useState<{ status: string }[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
 
   useEffect(() => {
     UserService.getAll().then(setAllUsers).catch(() => {});
+    AttendanceService.getSelfRecords().then(setAttendanceRecords).catch(() => setAttendanceRecords([]));
     BudgetService.getBudgets().then((b) => setBudgetStats(getBudgetStats(b))).catch(() => {});
     PayrollService.getAdvanceRequests().then((all) => {
       const advReqs = all.filter(r => r.status === "pending");
@@ -126,11 +121,26 @@ export default function ManagementPanel() {
   // Deliverable metrics
   const delivByStatus = (s: string) => deliverables.filter((d) => d.status === s).length;
 
-  // Attendance (today)
+  // Attendance (today) — read from the centralized attendance_records table
+  // (same data HR/Attendance.tsx, AttendanceMonthly/Yearly, and Reports
+  // already derive their own present/absent/late figures from), previously
+  // an independent localStorage key nothing in the app ever wrote to.
   const todayStr = new Date().toISOString().split("T")[0];
-  const todayAttend = safeParse<{ userId: string; date: string; status: string }[]>(localStorage.getItem(ATTEND_KEY), []).filter((r) => r.date === todayStr);
-  const presentToday = todayAttend.filter((r) => r.status === "present" || r.status === "remote").length;
-  const absentToday  = todayAttend.filter((r) => r.status === "absent").length;
+  const attendanceTodayByUser = useMemo(() => {
+    const map: Record<string, AttendanceRecord> = {};
+    for (const rec of attendanceRecords) {
+      if (rec.date === todayStr) map[rec.userId] = rec;
+    }
+    return map;
+  }, [attendanceRecords, todayStr]);
+  // No record for an employee today means they never checked in — a true
+  // absence, counted the same as an explicit "absent" status row so
+  // presentToday + absentToday always equals total employees.
+  const presentToday = employees.filter((e) => {
+    const status = attendanceTodayByUser[e.id]?.status;
+    return status === "present" || status === "late";
+  }).length;
+  const absentToday = employees.length - presentToday;
 
   // Payroll
   const totalPayroll = Object.values(extras).reduce((s, e) => s + (e.salary ?? 0), 0);

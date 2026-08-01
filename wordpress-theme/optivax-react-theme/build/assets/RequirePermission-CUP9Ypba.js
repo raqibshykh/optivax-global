@@ -1,1 +1,0 @@
-import{j as r}from"./vendor-react-D_CQBhJw.js";import{ae as i,l as m}from"./index-7RhE6BBj.js";const p=({domain:s,action:e,children:t,fallback:n=null})=>{const{user:o}=i();return m(o,s,e)?r.jsx(r.Fragment,{children:t}):r.jsx(r.Fragment,{children:n})};export{p as R};

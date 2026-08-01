@@ -1,92 +1,92 @@
 {
-  "_Badge-Cen76Poz.js": {
-    "file": "assets/Badge-Cen76Poz.js",
+  "_Badge-CunrO12L.js": {
+    "file": "assets/Badge-CunrO12L.js",
     "name": "Badge",
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
-      "_emailService-CA7Y9DyW.js",
+      "_vendor-react-B-IsZfrH.js",
+      "_emailService-dpAbdxds.js",
       "index.html"
     ]
   },
-  "_EmployeeIdentity-CnW3V_En.js": {
-    "file": "assets/EmployeeIdentity-CnW3V_En.js",
+  "_EmployeeIdentity-DXWFp9tU.js": {
+    "file": "assets/EmployeeIdentity-DXWFp9tU.js",
     "name": "EmployeeIdentity",
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html"
     ]
   },
-  "_ErrorState-BTnLT9UR.js": {
-    "file": "assets/ErrorState-BTnLT9UR.js",
+  "_ErrorState-Ir4XQvck.js": {
+    "file": "assets/ErrorState-Ir4XQvck.js",
     "name": "ErrorState",
     "imports": [
-      "_vendor-react-D_CQBhJw.js"
+      "_vendor-react-B-IsZfrH.js"
     ]
   },
-  "_MetricCard-nYWPwwQF.js": {
-    "file": "assets/MetricCard-nYWPwwQF.js",
+  "_MetricCard-CFJgu8Qm.js": {
+    "file": "assets/MetricCard-CFJgu8Qm.js",
     "name": "MetricCard",
     "imports": [
-      "_vendor-react-D_CQBhJw.js"
+      "_vendor-react-B-IsZfrH.js"
     ]
   },
-  "_PageBreadCrumb-BY2AxzZZ.js": {
-    "file": "assets/PageBreadCrumb-BY2AxzZZ.js",
+  "_PageBreadCrumb-Djq-mBgK.js": {
+    "file": "assets/PageBreadCrumb-Djq-mBgK.js",
     "name": "PageBreadCrumb",
     "imports": [
-      "_vendor-react-D_CQBhJw.js"
+      "_vendor-react-B-IsZfrH.js"
     ]
   },
-  "_RequirePermission-CUP9Ypba.js": {
-    "file": "assets/RequirePermission-CUP9Ypba.js",
+  "_RequirePermission-DlRQdgSJ.js": {
+    "file": "assets/RequirePermission-DlRQdgSJ.js",
     "name": "RequirePermission",
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html"
     ]
   },
-  "_attendanceService-CtKRhfJ9.js": {
-    "file": "assets/attendanceService-CtKRhfJ9.js",
+  "_attendanceService-BJnAMXJz.js": {
+    "file": "assets/attendanceService-BJnAMXJz.js",
     "name": "attendanceService",
     "imports": [
       "index.html",
-      "_calculations-Bl6GveqK.js"
+      "_calculations-_OHnW426.js"
     ]
   },
-  "_budgetService-CYLyu1fY.js": {
-    "file": "assets/budgetService-CYLyu1fY.js",
+  "_budgetService-CSuBlidL.js": {
+    "file": "assets/budgetService-CSuBlidL.js",
     "name": "budgetService",
     "imports": [
       "index.html"
     ]
   },
-  "_calculations-Bl6GveqK.js": {
-    "file": "assets/calculations-Bl6GveqK.js",
+  "_calculations-_OHnW426.js": {
+    "file": "assets/calculations-_OHnW426.js",
     "name": "calculations"
   },
-  "_clientOwnershipService-Dk4-xHTF.js": {
-    "file": "assets/clientOwnershipService-Dk4-xHTF.js",
+  "_clientOwnershipService-DvyknrUP.js": {
+    "file": "assets/clientOwnershipService-DvyknrUP.js",
     "name": "clientOwnershipService",
     "imports": [
       "index.html"
     ]
   },
-  "_companySettingsService-CMD6rQSy.js": {
-    "file": "assets/companySettingsService-CMD6rQSy.js",
+  "_companySettingsService-5S8rgaAY.js": {
+    "file": "assets/companySettingsService-5S8rgaAY.js",
     "name": "companySettingsService",
     "imports": [
       "index.html"
     ]
   },
-  "_contentCalendarService-DRLORCN-.js": {
-    "file": "assets/contentCalendarService-DRLORCN-.js",
+  "_contentCalendarService-B-bdTEh1.js": {
+    "file": "assets/contentCalendarService-B-bdTEh1.js",
     "name": "contentCalendarService",
     "imports": [
       "index.html"
     ]
   },
-  "_conversationService-ByEv61BO.js": {
-    "file": "assets/conversationService-ByEv61BO.js",
+  "_conversationService-BvkflD0Q.js": {
+    "file": "assets/conversationService-BvkflD0Q.js",
     "name": "conversationService",
     "imports": [
       "index.html"
@@ -96,177 +96,181 @@
     "file": "assets/csvExport-DtZdQr9B.js",
     "name": "csvExport"
   },
-  "_deliverableService-fLh2n7Bg.js": {
-    "file": "assets/deliverableService-fLh2n7Bg.js",
+  "_deliverableService-CkWoPaGJ.js": {
+    "file": "assets/deliverableService-CkWoPaGJ.js",
     "name": "deliverableService",
     "imports": [
       "index.html"
     ]
   },
-  "_emailService-CA7Y9DyW.js": {
-    "file": "assets/emailService-CA7Y9DyW.js",
+  "_emailService-dpAbdxds.js": {
+    "file": "assets/emailService-dpAbdxds.js",
     "name": "emailService",
     "imports": [
       "index.html"
     ]
   },
-  "_employeeExtraService-BPTWI9Dh.js": {
-    "file": "assets/employeeExtraService-BPTWI9Dh.js",
+  "_employeeExtraService-BSu1ECmY.js": {
+    "file": "assets/employeeExtraService-BSu1ECmY.js",
     "name": "employeeExtraService",
     "imports": [
       "index.html"
     ]
   },
-  "_index-DzWn982R.js": {
-    "file": "assets/index-DzWn982R.js",
+  "_index-DO23s4x6.js": {
+    "file": "assets/index-DO23s4x6.js",
+    "name": "index"
+  },
+  "_index-Y9kXb8_R.js": {
+    "file": "assets/index-Y9kXb8_R.js",
     "name": "index",
     "imports": [
-      "_vendor-react-D_CQBhJw.js"
+      "_vendor-react-B-IsZfrH.js"
     ]
   },
-  "_invoiceService-CW0jq5OO.js": {
-    "file": "assets/invoiceService-CW0jq5OO.js",
+  "_invoiceService-ir-I8Z3q.js": {
+    "file": "assets/invoiceService-ir-I8Z3q.js",
     "name": "invoiceService",
     "imports": [
       "index.html"
     ]
   },
-  "_itSupportService-C-U-KVIp.js": {
-    "file": "assets/itSupportService-C-U-KVIp.js",
+  "_itSupportService-BUNIbIuM.js": {
+    "file": "assets/itSupportService-BUNIbIuM.js",
     "name": "itSupportService",
     "imports": [
       "index.html"
     ]
   },
-  "_leaveRequestService-BdHkh97m.js": {
-    "file": "assets/leaveRequestService-BdHkh97m.js",
+  "_leaveRequestService-kQ2EQhXR.js": {
+    "file": "assets/leaveRequestService-kQ2EQhXR.js",
     "name": "leaveRequestService",
     "imports": [
       "index.html"
     ]
   },
-  "_marketingCampaignService-CSg4EvEr.js": {
-    "file": "assets/marketingCampaignService-CSg4EvEr.js",
+  "_marketingCampaignService-BZUIaUMB.js": {
+    "file": "assets/marketingCampaignService-BZUIaUMB.js",
     "name": "marketingCampaignService",
     "imports": [
       "index.html"
     ]
   },
-  "_paymentService-D1BdtIaz.js": {
-    "file": "assets/paymentService-D1BdtIaz.js",
+  "_paymentService-ByHNXoMa.js": {
+    "file": "assets/paymentService-ByHNXoMa.js",
     "name": "paymentService",
     "imports": [
       "index.html"
     ]
   },
-  "_payrollService-DLtCGlvL.js": {
-    "file": "assets/payrollService-DLtCGlvL.js",
+  "_payrollService-C6YPEA7M.js": {
+    "file": "assets/payrollService-C6YPEA7M.js",
     "name": "payrollService",
     "imports": [
       "index.html",
-      "_leaveRequestService-BdHkh97m.js",
-      "_calculations-Bl6GveqK.js"
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_calculations-_OHnW426.js"
     ]
   },
-  "_pencil-B_dWoCIY.js": {
-    "file": "assets/pencil-B_dWoCIY.js",
+  "_pencil-B9485WZF.js": {
+    "file": "assets/pencil-B9485WZF.js",
     "name": "pencil",
     "imports": [
-      "_vendor-react-D_CQBhJw.js"
+      "_vendor-react-B-IsZfrH.js"
     ]
   },
-  "_projectService-hhFoEyNj.js": {
-    "file": "assets/projectService-hhFoEyNj.js",
+  "_projectService-Qj1LpUhH.js": {
+    "file": "assets/projectService-Qj1LpUhH.js",
     "name": "projectService",
     "imports": [
       "index.html"
     ]
   },
-  "_revisionService-bEkwPb90.js": {
-    "file": "assets/revisionService-bEkwPb90.js",
+  "_revisionService-CH7W4WNF.js": {
+    "file": "assets/revisionService-CH7W4WNF.js",
     "name": "revisionService",
     "imports": [
       "index.html"
     ]
   },
-  "_salesOpsService-CgEP6t-Y.js": {
-    "file": "assets/salesOpsService-CgEP6t-Y.js",
+  "_salesOpsService-DVaeItjD.js": {
+    "file": "assets/salesOpsService-DVaeItjD.js",
     "name": "salesOpsService",
     "imports": [
       "index.html"
     ]
   },
-  "_securityAuditLogService-D1NsBstI.js": {
-    "file": "assets/securityAuditLogService-D1NsBstI.js",
+  "_securityAuditLogService-C8nw2hoO.js": {
+    "file": "assets/securityAuditLogService-C8nw2hoO.js",
     "name": "securityAuditLogService",
     "imports": [
       "index.html"
     ]
   },
-  "_shiftService-BMQ31ddG.js": {
-    "file": "assets/shiftService-BMQ31ddG.js",
+  "_shiftService-C9fStdOd.js": {
+    "file": "assets/shiftService-C9fStdOd.js",
     "name": "shiftService",
     "imports": [
       "index.html"
     ]
   },
-  "_taskService-B4_Q2OjQ.js": {
-    "file": "assets/taskService-B4_Q2OjQ.js",
+  "_taskService-Ct1_HIa6.js": {
+    "file": "assets/taskService-Ct1_HIa6.js",
     "name": "taskService",
     "imports": [
       "index.html"
     ]
   },
-  "_trash-DEPRjsyA.js": {
-    "file": "assets/trash-DEPRjsyA.js",
+  "_trash-BVguNLSP.js": {
+    "file": "assets/trash-BVguNLSP.js",
     "name": "trash",
     "imports": [
-      "_vendor-react-D_CQBhJw.js"
+      "_vendor-react-B-IsZfrH.js"
     ]
   },
-  "_useClients-nmrmmdQ9.js": {
-    "file": "assets/useClients-nmrmmdQ9.js",
+  "_useClients-DUdmBHrp.js": {
+    "file": "assets/useClients-DUdmBHrp.js",
     "name": "useClients",
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html"
     ]
   },
-  "_useFiles-CqfxVUUq.js": {
-    "file": "assets/useFiles-CqfxVUUq.js",
+  "_useFiles-CNZ29cFq.js": {
+    "file": "assets/useFiles-CNZ29cFq.js",
     "name": "useFiles",
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html"
     ]
   },
-  "_useInvoices-hhaFjSPn.js": {
-    "file": "assets/useInvoices-hhaFjSPn.js",
+  "_useInvoices-B3YMLdiQ.js": {
+    "file": "assets/useInvoices-B3YMLdiQ.js",
     "name": "useInvoices",
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
-      "_invoiceService-CW0jq5OO.js",
+      "_vendor-react-B-IsZfrH.js",
+      "_invoiceService-ir-I8Z3q.js",
       "index.html"
     ]
   },
-  "_useProjects-XXiuuO8N.js": {
-    "file": "assets/useProjects-XXiuuO8N.js",
+  "_useProjects-BGrZFzB0.js": {
+    "file": "assets/useProjects-BGrZFzB0.js",
     "name": "useProjects",
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
-      "_projectService-hhFoEyNj.js",
+      "_vendor-react-B-IsZfrH.js",
+      "_projectService-Qj1LpUhH.js",
       "index.html"
     ]
   },
-  "_vendor-charts-Cmws0M90.js": {
-    "file": "assets/vendor-charts-Cmws0M90.js",
+  "_vendor-charts-D3fG7BA_.js": {
+    "file": "assets/vendor-charts-D3fG7BA_.js",
     "name": "vendor-charts",
     "imports": [
-      "_vendor-react-D_CQBhJw.js"
+      "_vendor-react-B-IsZfrH.js"
     ]
   },
-  "_vendor-react-D_CQBhJw.js": {
-    "file": "assets/vendor-react-D_CQBhJw.js",
+  "_vendor-react-B-IsZfrH.js": {
+    "file": "assets/vendor-react-B-IsZfrH.js",
     "name": "vendor-react"
   },
   "_visibility-Bv0pV_QA.js": {
@@ -274,12 +278,12 @@
     "name": "visibility"
   },
   "index.html": {
-    "file": "assets/index-7RhE6BBj.js",
+    "file": "assets/index-BF5lcj23.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js"
+      "_vendor-react-B-IsZfrH.js"
     ],
     "dynamicImports": [
       "src/pages/Dashboard/AdminPanel.tsx",
@@ -359,1032 +363,1038 @@
       "src/pages/Client/Profile.tsx"
     ],
     "css": [
-      "assets/index-J3f1XIn8.css"
+      "assets/index-DqSe0Yti.css"
     ]
   },
   "src/pages/Admin/AuditLogs.tsx": {
-    "file": "assets/AuditLogs-CLPDTpAl.js",
+    "file": "assets/AuditLogs-Dg5hJFHC.js",
     "name": "AuditLogs",
     "src": "src/pages/Admin/AuditLogs.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html"
     ]
   },
   "src/pages/Admin/Billing.tsx": {
-    "file": "assets/Billing-ypUl29lW.js",
+    "file": "assets/Billing-CYgwGAPr.js",
     "name": "Billing",
     "src": "src/pages/Admin/Billing.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_useInvoices-hhaFjSPn.js",
-      "_useClients-nmrmmdQ9.js",
-      "_index-DzWn982R.js",
-      "_invoiceService-CW0jq5OO.js"
+      "_useInvoices-B3YMLdiQ.js",
+      "_useClients-DUdmBHrp.js",
+      "_index-Y9kXb8_R.js",
+      "_invoiceService-ir-I8Z3q.js"
     ]
   },
   "src/pages/Admin/Clients.tsx": {
-    "file": "assets/Clients-dB6KC1_5.js",
+    "file": "assets/Clients-FtLODR0B.js",
     "name": "Clients",
     "src": "src/pages/Admin/Clients.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_useClients-nmrmmdQ9.js",
-      "_index-DzWn982R.js"
+      "_useClients-DUdmBHrp.js",
+      "_index-Y9kXb8_R.js"
     ]
   },
   "src/pages/Admin/Departments.tsx": {
-    "file": "assets/Departments-DhIpUbMc.js",
+    "file": "assets/Departments-DdSmkl_f.js",
     "name": "Departments",
     "src": "src/pages/Admin/Departments.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_shiftService-BMQ31ddG.js",
-      "_budgetService-CYLyu1fY.js",
-      "_projectService-hhFoEyNj.js",
-      "_attendanceService-CtKRhfJ9.js",
-      "_securityAuditLogService-D1NsBstI.js",
-      "_pencil-B_dWoCIY.js",
-      "_trash-DEPRjsyA.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_shiftService-C9fStdOd.js",
+      "_budgetService-CSuBlidL.js",
+      "_projectService-Qj1LpUhH.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_securityAuditLogService-C8nw2hoO.js",
+      "_pencil-B9485WZF.js",
+      "_trash-BVguNLSP.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/Admin/Email/Analytics.tsx": {
-    "file": "assets/Analytics-BhjuyFZz.js",
+    "file": "assets/Analytics-CtHmCiJv.js",
     "name": "Analytics",
     "src": "src/pages/Admin/Email/Analytics.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_vendor-charts-Cmws0M90.js",
-      "_Badge-Cen76Poz.js",
-      "_emailService-CA7Y9DyW.js"
+      "_vendor-charts-D3fG7BA_.js",
+      "_Badge-CunrO12L.js",
+      "_emailService-dpAbdxds.js"
     ]
   },
   "src/pages/Admin/Email/Audience.tsx": {
-    "file": "assets/Audience-xzaPFJpa.js",
+    "file": "assets/Audience-C-4mpQYX.js",
     "name": "Audience",
     "src": "src/pages/Admin/Email/Audience.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_useClients-nmrmmdQ9.js"
+      "_useClients-DUdmBHrp.js"
     ]
   },
   "src/pages/Admin/Email/Automation.tsx": {
-    "file": "assets/Automation-BZpAcPmj.js",
+    "file": "assets/Automation-wNzsw36b.js",
     "name": "Automation",
     "src": "src/pages/Admin/Email/Automation.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_Badge-Cen76Poz.js",
-      "_emailService-CA7Y9DyW.js"
+      "_Badge-CunrO12L.js",
+      "_emailService-dpAbdxds.js"
     ]
   },
   "src/pages/Admin/Email/Campaigns.tsx": {
-    "file": "assets/Campaigns-Djj4DGrY.js",
+    "file": "assets/Campaigns-OSxGQf8B.js",
     "name": "Campaigns",
     "src": "src/pages/Admin/Email/Campaigns.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_Badge-Cen76Poz.js",
-      "_trash-DEPRjsyA.js",
-      "_emailService-CA7Y9DyW.js"
+      "_Badge-CunrO12L.js",
+      "_trash-BVguNLSP.js",
+      "_emailService-dpAbdxds.js"
     ]
   },
   "src/pages/Admin/Email/Templates.tsx": {
-    "file": "assets/Templates-tsKUA5LD.js",
+    "file": "assets/Templates-CdeR0ZTr.js",
     "name": "Templates",
     "src": "src/pages/Admin/Email/Templates.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_Badge-Cen76Poz.js",
-      "_pencil-B_dWoCIY.js",
-      "_trash-DEPRjsyA.js",
-      "_emailService-CA7Y9DyW.js"
+      "_Badge-CunrO12L.js",
+      "_pencil-B9485WZF.js",
+      "_trash-BVguNLSP.js",
+      "_emailService-dpAbdxds.js"
     ]
   },
   "src/pages/Admin/Files.tsx": {
-    "file": "assets/Files-DG2TYLs9.js",
+    "file": "assets/Files-3CpWxAN3.js",
     "name": "Files",
     "src": "src/pages/Admin/Files.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_useFiles-CqfxVUUq.js",
-      "_projectService-hhFoEyNj.js"
+      "_useFiles-CNZ29cFq.js",
+      "_projectService-Qj1LpUhH.js"
     ]
   },
   "src/pages/Admin/Notifications.tsx": {
-    "file": "assets/Notifications-vcoATldQ.js",
+    "file": "assets/Notifications-SXd36C9O.js",
     "name": "Notifications",
     "src": "src/pages/Admin/Notifications.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_useClients-nmrmmdQ9.js",
-      "_index-DzWn982R.js"
+      "_useClients-DUdmBHrp.js",
+      "_index-Y9kXb8_R.js"
     ]
   },
   "src/pages/Admin/Projects.tsx": {
-    "file": "assets/Projects-y8tgXILM.js",
+    "file": "assets/Projects-Bq1hVxH3.js",
     "name": "Projects",
     "src": "src/pages/Admin/Projects.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_useProjects-XXiuuO8N.js",
-      "_useClients-nmrmmdQ9.js",
-      "_index-DzWn982R.js",
-      "_revisionService-bEkwPb90.js",
-      "_projectService-hhFoEyNj.js",
-      "_taskService-B4_Q2OjQ.js"
+      "_useProjects-BGrZFzB0.js",
+      "_useClients-DUdmBHrp.js",
+      "_index-Y9kXb8_R.js",
+      "_revisionService-CH7W4WNF.js",
+      "_projectService-Qj1LpUhH.js",
+      "_taskService-Ct1_HIa6.js"
     ]
   },
   "src/pages/Admin/Revisions.tsx": {
-    "file": "assets/Revisions-CqNkVz4B.js",
+    "file": "assets/Revisions-CTLO6gIa.js",
     "name": "Revisions",
     "src": "src/pages/Admin/Revisions.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_revisionService-bEkwPb90.js",
-      "_projectService-hhFoEyNj.js",
-      "_useClients-nmrmmdQ9.js"
+      "_revisionService-CH7W4WNF.js",
+      "_projectService-Qj1LpUhH.js",
+      "_useClients-DUdmBHrp.js"
     ]
   },
   "src/pages/Admin/SecurityAuditLogs.tsx": {
-    "file": "assets/SecurityAuditLogs-LjFLtoBJ.js",
+    "file": "assets/SecurityAuditLogs-CKKjv6kF.js",
     "name": "SecurityAuditLogs",
     "src": "src/pages/Admin/SecurityAuditLogs.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_securityAuditLogService-D1NsBstI.js"
+      "_securityAuditLogService-C8nw2hoO.js"
     ]
   },
   "src/pages/Admin/Settings.tsx": {
-    "file": "assets/Settings-D2-1ovg-.js",
+    "file": "assets/Settings-Dv_t23_X.js",
     "name": "Settings",
     "src": "src/pages/Admin/Settings.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_companySettingsService-CMD6rQSy.js"
+      "_companySettingsService-5S8rgaAY.js"
     ]
   },
   "src/pages/Budget/BudgetManagement.tsx": {
-    "file": "assets/BudgetManagement-hCZ6lQFo.js",
+    "file": "assets/BudgetManagement-DIiV0fKT.js",
     "name": "BudgetManagement",
     "src": "src/pages/Budget/BudgetManagement.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_ErrorState-BTnLT9UR.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_budgetService-CYLyu1fY.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_ErrorState-Ir4XQvck.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_budgetService-CSuBlidL.js"
     ]
   },
   "src/pages/Client/Billing.tsx": {
-    "file": "assets/Billing-7URZHxvE.js",
+    "file": "assets/Billing-DpwUv_2E.js",
     "name": "Billing",
     "src": "src/pages/Client/Billing.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_index-DzWn982R.js",
-      "_useInvoices-hhaFjSPn.js",
-      "_invoiceService-CW0jq5OO.js",
-      "_vendor-charts-Cmws0M90.js"
+      "_index-Y9kXb8_R.js",
+      "_useInvoices-B3YMLdiQ.js",
+      "_invoiceService-ir-I8Z3q.js",
+      "_vendor-charts-D3fG7BA_.js"
     ]
   },
   "src/pages/Client/Files.tsx": {
-    "file": "assets/Files-CLWWU6vq.js",
+    "file": "assets/Files-CRlhjXsG.js",
     "name": "Files",
     "src": "src/pages/Client/Files.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_useFiles-CqfxVUUq.js"
+      "_useFiles-CNZ29cFq.js"
     ]
   },
   "src/pages/Client/Messages.tsx": {
-    "file": "assets/Messages-DkKq7L5l.js",
+    "file": "assets/Messages-CZYDCMDH.js",
     "name": "Messages",
     "src": "src/pages/Client/Messages.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_conversationService-ByEv61BO.js",
-      "_ErrorState-BTnLT9UR.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_conversationService-BvkflD0Q.js",
+      "_ErrorState-Ir4XQvck.js"
     ]
   },
   "src/pages/Client/MyProjects.tsx": {
-    "file": "assets/MyProjects-Ce81rOeZ.js",
+    "file": "assets/MyProjects-Bxw3vwGF.js",
     "name": "MyProjects",
     "src": "src/pages/Client/MyProjects.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_index-DzWn982R.js",
-      "_useProjects-XXiuuO8N.js",
-      "_projectService-hhFoEyNj.js"
+      "_index-Y9kXb8_R.js",
+      "_useProjects-BGrZFzB0.js",
+      "_projectService-Qj1LpUhH.js"
     ]
   },
   "src/pages/Client/MyRevisions.tsx": {
-    "file": "assets/MyRevisions-IifxcIgL.js",
+    "file": "assets/MyRevisions-DWEsYIZT.js",
     "name": "MyRevisions",
     "src": "src/pages/Client/MyRevisions.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_useProjects-XXiuuO8N.js",
-      "_projectService-hhFoEyNj.js"
+      "_useProjects-BGrZFzB0.js",
+      "_projectService-Qj1LpUhH.js"
     ]
   },
   "src/pages/Client/Notifications.tsx": {
-    "file": "assets/Notifications-CvjGjwLl.js",
+    "file": "assets/Notifications-X4b-2Y1i.js",
     "name": "Notifications",
     "src": "src/pages/Client/Notifications.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_conversationService-ByEv61BO.js"
+      "_conversationService-BvkflD0Q.js"
     ]
   },
   "src/pages/Client/Profile.tsx": {
-    "file": "assets/Profile-DSkPMFuM.js",
+    "file": "assets/Profile-CbjRQnwf.js",
     "name": "Profile",
     "src": "src/pages/Client/Profile.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_conversationService-ByEv61BO.js",
-      "_leaveRequestService-BdHkh97m.js",
-      "_clientOwnershipService-Dk4-xHTF.js"
+      "_conversationService-BvkflD0Q.js",
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_clientOwnershipService-DvyknrUP.js",
+      "_index-DO23s4x6.js"
     ]
   },
   "src/pages/Common/ActivityReports.tsx": {
-    "file": "assets/ActivityReports--cbjiTey.js",
+    "file": "assets/ActivityReports-siBf9Jm1.js",
     "name": "ActivityReports",
     "src": "src/pages/Common/ActivityReports.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
+      "_PageBreadCrumb-Djq-mBgK.js",
       "_csvExport-DtZdQr9B.js"
     ]
   },
   "src/pages/Common/LiveActivityDashboard.tsx": {
-    "file": "assets/LiveActivityDashboard-DzDHBHVS.js",
+    "file": "assets/LiveActivityDashboard-B2em6sgf.js",
     "name": "LiveActivityDashboard",
     "src": "src/pages/Common/LiveActivityDashboard.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js"
+      "_PageBreadCrumb-Djq-mBgK.js"
     ]
   },
   "src/pages/Common/Reports.tsx": {
-    "file": "assets/Reports-dKD62gDF.js",
+    "file": "assets/Reports-S9E56L07.js",
     "name": "Reports",
     "src": "src/pages/Common/Reports.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_ErrorState-BTnLT9UR.js",
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_ErrorState-Ir4XQvck.js",
       "_csvExport-DtZdQr9B.js",
-      "_projectService-hhFoEyNj.js",
-      "_taskService-B4_Q2OjQ.js",
-      "_invoiceService-CW0jq5OO.js",
-      "_budgetService-CYLyu1fY.js",
-      "_payrollService-DLtCGlvL.js",
-      "_attendanceService-CtKRhfJ9.js",
-      "_leaveRequestService-BdHkh97m.js",
-      "_calculations-Bl6GveqK.js"
+      "_projectService-Qj1LpUhH.js",
+      "_taskService-Ct1_HIa6.js",
+      "_invoiceService-ir-I8Z3q.js",
+      "_budgetService-CSuBlidL.js",
+      "_payrollService-C6YPEA7M.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/Common/Tasks.tsx": {
-    "file": "assets/Tasks-CIrLL4t8.js",
+    "file": "assets/Tasks-6O6wkngy.js",
     "name": "Tasks",
     "src": "src/pages/Common/Tasks.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_taskService-B4_Q2OjQ.js",
-      "_projectService-hhFoEyNj.js",
-      "_revisionService-bEkwPb90.js",
-      "_ErrorState-BTnLT9UR.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_taskService-Ct1_HIa6.js",
+      "_projectService-Qj1LpUhH.js",
+      "_revisionService-CH7W4WNF.js",
+      "_ErrorState-Ir4XQvck.js"
     ]
   },
   "src/pages/Conversations/ClientConversations.tsx": {
-    "file": "assets/ClientConversations-D-tAmp5A.js",
+    "file": "assets/ClientConversations-DZ2rrif_.js",
     "name": "ClientConversations",
     "src": "src/pages/Conversations/ClientConversations.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_conversationService-ByEv61BO.js",
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_conversationService-BvkflD0Q.js",
       "_visibility-Bv0pV_QA.js"
     ]
   },
   "src/pages/Dashboard/AdminPanel.tsx": {
-    "file": "assets/AdminPanel-DZftd5B4.js",
+    "file": "assets/AdminPanel-BzEr8uxr.js",
     "name": "AdminPanel",
     "src": "src/pages/Dashboard/AdminPanel.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_MetricCard-nYWPwwQF.js",
-      "_useClients-nmrmmdQ9.js",
-      "_useProjects-XXiuuO8N.js",
-      "_useInvoices-hhaFjSPn.js",
-      "_projectService-hhFoEyNj.js",
-      "_invoiceService-CW0jq5OO.js"
+      "_MetricCard-CFJgu8Qm.js",
+      "_useClients-DUdmBHrp.js",
+      "_useProjects-BGrZFzB0.js",
+      "_useInvoices-B3YMLdiQ.js",
+      "_projectService-Qj1LpUhH.js",
+      "_invoiceService-ir-I8Z3q.js"
     ]
   },
   "src/pages/Dashboard/ClientPanel.tsx": {
-    "file": "assets/ClientPanel-C_1l4vWA.js",
+    "file": "assets/ClientPanel-BzJ7xBkZ.js",
     "name": "ClientPanel",
     "src": "src/pages/Dashboard/ClientPanel.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_MetricCard-nYWPwwQF.js",
-      "_useProjects-XXiuuO8N.js",
-      "_useInvoices-hhaFjSPn.js",
-      "_projectService-hhFoEyNj.js",
-      "_invoiceService-CW0jq5OO.js"
+      "_MetricCard-CFJgu8Qm.js",
+      "_useProjects-BGrZFzB0.js",
+      "_useInvoices-B3YMLdiQ.js",
+      "_projectService-Qj1LpUhH.js",
+      "_invoiceService-ir-I8Z3q.js"
     ]
   },
   "src/pages/Dashboard/HRPanel.tsx": {
-    "file": "assets/HRPanel-_pPW8Dkg.js",
+    "file": "assets/HRPanel-wwesOWpD.js",
     "name": "HRPanel",
     "src": "src/pages/Dashboard/HRPanel.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_RequirePermission-CUP9Ypba.js",
-      "_leaveRequestService-BdHkh97m.js",
-      "_employeeExtraService-BPTWI9Dh.js",
-      "_payrollService-DLtCGlvL.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_RequirePermission-DlRQdgSJ.js",
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_employeeExtraService-BSu1ECmY.js",
+      "_payrollService-C6YPEA7M.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/Dashboard/ITSupportPanel.tsx": {
-    "file": "assets/ITSupportPanel-_xPRNRLa.js",
+    "file": "assets/ITSupportPanel-CLZumvZw.js",
     "name": "ITSupportPanel",
     "src": "src/pages/Dashboard/ITSupportPanel.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_itSupportService-C-U-KVIp.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_itSupportService-BUNIbIuM.js"
     ]
   },
   "src/pages/Dashboard/ManagementPanel.tsx": {
-    "file": "assets/ManagementPanel-Glnc7HL_.js",
+    "file": "assets/ManagementPanel-er4ESsz-.js",
     "name": "ManagementPanel",
     "src": "src/pages/Dashboard/ManagementPanel.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_budgetService-CYLyu1fY.js",
-      "_payrollService-DLtCGlvL.js",
-      "_leaveRequestService-BdHkh97m.js",
-      "_employeeExtraService-BPTWI9Dh.js",
-      "_deliverableService-fLh2n7Bg.js",
-      "_taskService-B4_Q2OjQ.js",
-      "_salesOpsService-CgEP6t-Y.js",
-      "_marketingCampaignService-CSg4EvEr.js",
-      "_projectService-hhFoEyNj.js",
-      "_paymentService-D1BdtIaz.js",
-      "_itSupportService-C-U-KVIp.js",
-      "_calculations-Bl6GveqK.js"
+      "_budgetService-CSuBlidL.js",
+      "_payrollService-C6YPEA7M.js",
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_employeeExtraService-BSu1ECmY.js",
+      "_deliverableService-CkWoPaGJ.js",
+      "_taskService-Ct1_HIa6.js",
+      "_salesOpsService-DVaeItjD.js",
+      "_marketingCampaignService-BZUIaUMB.js",
+      "_projectService-Qj1LpUhH.js",
+      "_paymentService-ByHNXoMa.js",
+      "_itSupportService-BUNIbIuM.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/Dashboard/MarketingPanel.tsx": {
-    "file": "assets/MarketingPanel-BLLrhTtm.js",
+    "file": "assets/MarketingPanel-_tR9pvEJ.js",
     "name": "MarketingPanel",
     "src": "src/pages/Dashboard/MarketingPanel.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_taskService-B4_Q2OjQ.js",
-      "_marketingCampaignService-CSg4EvEr.js",
-      "_contentCalendarService-DRLORCN-.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_taskService-Ct1_HIa6.js",
+      "_marketingCampaignService-BZUIaUMB.js",
+      "_contentCalendarService-B-bdTEh1.js"
     ]
   },
   "src/pages/Dashboard/ProductionPanel.tsx": {
-    "file": "assets/ProductionPanel-o_z1C4Lj.js",
+    "file": "assets/ProductionPanel-D7vOvka1.js",
     "name": "ProductionPanel",
     "src": "src/pages/Dashboard/ProductionPanel.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_RequirePermission-CUP9Ypba.js",
-      "_projectService-hhFoEyNj.js",
-      "_taskService-B4_Q2OjQ.js",
-      "_conversationService-ByEv61BO.js",
-      "_contentCalendarService-DRLORCN-.js",
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_RequirePermission-DlRQdgSJ.js",
+      "_projectService-Qj1LpUhH.js",
+      "_taskService-Ct1_HIa6.js",
+      "_conversationService-BvkflD0Q.js",
+      "_contentCalendarService-B-bdTEh1.js",
       "_visibility-Bv0pV_QA.js"
     ]
   },
   "src/pages/Dashboard/SalesPanel.tsx": {
-    "file": "assets/SalesPanel-Dxxi1OkX.js",
+    "file": "assets/SalesPanel-BDgdraTG.js",
     "name": "SalesPanel",
     "src": "src/pages/Dashboard/SalesPanel.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_RequirePermission-CUP9Ypba.js",
-      "_salesOpsService-CgEP6t-Y.js",
-      "_budgetService-CYLyu1fY.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_RequirePermission-DlRQdgSJ.js",
+      "_salesOpsService-DVaeItjD.js",
+      "_budgetService-CSuBlidL.js"
     ]
   },
   "src/pages/Dashboard/SuperAdminPanel.tsx": {
-    "file": "assets/SuperAdminPanel-BJABChXu.js",
+    "file": "assets/SuperAdminPanel-C_Utct_k.js",
     "name": "SuperAdminPanel",
     "src": "src/pages/Dashboard/SuperAdminPanel.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_vendor-charts-Cmws0M90.js",
-      "_projectService-hhFoEyNj.js",
-      "_paymentService-D1BdtIaz.js",
-      "_invoiceService-CW0jq5OO.js",
-      "_emailService-CA7Y9DyW.js",
-      "_leaveRequestService-BdHkh97m.js",
-      "_employeeExtraService-BPTWI9Dh.js",
-      "_taskService-B4_Q2OjQ.js",
-      "_deliverableService-fLh2n7Bg.js",
-      "_marketingCampaignService-CSg4EvEr.js",
-      "_salesOpsService-CgEP6t-Y.js",
-      "_contentCalendarService-DRLORCN-.js"
+      "_vendor-charts-D3fG7BA_.js",
+      "_projectService-Qj1LpUhH.js",
+      "_paymentService-ByHNXoMa.js",
+      "_invoiceService-ir-I8Z3q.js",
+      "_emailService-dpAbdxds.js",
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_employeeExtraService-BSu1ECmY.js",
+      "_taskService-Ct1_HIa6.js",
+      "_deliverableService-CkWoPaGJ.js",
+      "_marketingCampaignService-BZUIaUMB.js",
+      "_salesOpsService-DVaeItjD.js",
+      "_contentCalendarService-B-bdTEh1.js"
     ]
   },
   "src/pages/Employee/AdvanceSalaryRequest.tsx": {
-    "file": "assets/AdvanceSalaryRequest-BF4aqQu2.js",
+    "file": "assets/AdvanceSalaryRequest-B-Cx01V0.js",
     "name": "AdvanceSalaryRequest",
     "src": "src/pages/Employee/AdvanceSalaryRequest.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_payrollService-DLtCGlvL.js",
-      "_leaveRequestService-BdHkh97m.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_payrollService-C6YPEA7M.js",
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/Employee/MyBudget.tsx": {
-    "file": "assets/MyBudget-9_wujFX1.js",
+    "file": "assets/MyBudget-B0l92jy5.js",
     "name": "MyBudget",
     "src": "src/pages/Employee/MyBudget.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_budgetService-CYLyu1fY.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_budgetService-CSuBlidL.js"
     ]
   },
   "src/pages/Employee/MySalarySlips.tsx": {
-    "file": "assets/MySalarySlips-DGbwI1iC.js",
+    "file": "assets/MySalarySlips-BGk55S-d.js",
     "name": "MySalarySlips",
     "src": "src/pages/Employee/MySalarySlips.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_payrollService-DLtCGlvL.js",
-      "_companySettingsService-CMD6rQSy.js",
-      "_leaveRequestService-BdHkh97m.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_payrollService-C6YPEA7M.js",
+      "_companySettingsService-5S8rgaAY.js",
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/AdvanceSalary.tsx": {
-    "file": "assets/AdvanceSalary-bUq6B1LE.js",
+    "file": "assets/AdvanceSalary-Th7e74UW.js",
     "name": "AdvanceSalary",
     "src": "src/pages/HR/AdvanceSalary.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_payrollService-DLtCGlvL.js",
-      "_leaveRequestService-BdHkh97m.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_payrollService-C6YPEA7M.js",
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/AdvanceSalaryAuditLog.tsx": {
-    "file": "assets/AdvanceSalaryAuditLog-Bjmztx0V.js",
+    "file": "assets/AdvanceSalaryAuditLog-Digd7Z-j.js",
     "name": "AdvanceSalaryAuditLog",
     "src": "src/pages/HR/AdvanceSalaryAuditLog.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_payrollService-DLtCGlvL.js",
-      "_leaveRequestService-BdHkh97m.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_payrollService-C6YPEA7M.js",
+      "_leaveRequestService-kQ2EQhXR.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/Attendance.tsx": {
-    "file": "assets/Attendance-3Mp4s2wC.js",
+    "file": "assets/Attendance-B3xfo-u6.js",
     "name": "Attendance",
     "src": "src/pages/HR/Attendance.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_attendanceService-CtKRhfJ9.js",
-      "_shiftService-BMQ31ddG.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_shiftService-C9fStdOd.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/AttendanceAnalytics.tsx": {
-    "file": "assets/AttendanceAnalytics-DmiI47_l.js",
+    "file": "assets/AttendanceAnalytics-BRaubQ8P.js",
     "name": "AttendanceAnalytics",
     "src": "src/pages/HR/AttendanceAnalytics.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
-      "_vendor-charts-Cmws0M90.js",
+      "_vendor-react-B-IsZfrH.js",
+      "_vendor-charts-D3fG7BA_.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_attendanceService-CtKRhfJ9.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/AttendanceCalendar.tsx": {
-    "file": "assets/AttendanceCalendar-BvNlTX8J.js",
+    "file": "assets/AttendanceCalendar-DzSY3cod.js",
     "name": "AttendanceCalendar",
     "src": "src/pages/HR/AttendanceCalendar.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_attendanceService-CtKRhfJ9.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/AttendanceCorrections.tsx": {
-    "file": "assets/AttendanceCorrections-gnRf6g5y.js",
+    "file": "assets/AttendanceCorrections-Dfphx3_E.js",
     "name": "AttendanceCorrections",
     "src": "src/pages/HR/AttendanceCorrections.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_attendanceService-CtKRhfJ9.js",
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_attendanceService-BJnAMXJz.js",
       "_csvExport-DtZdQr9B.js",
-      "_calculations-Bl6GveqK.js"
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/AttendanceImport.tsx": {
-    "file": "assets/AttendanceImport-Dx4eceGL.js",
+    "file": "assets/AttendanceImport-BwsMir84.js",
     "name": "AttendanceImport",
     "src": "src/pages/HR/AttendanceImport.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_attendanceService-CtKRhfJ9.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/AttendanceMonthly.tsx": {
-    "file": "assets/AttendanceMonthly-qPIsQzUK.js",
+    "file": "assets/AttendanceMonthly-C9BGOW3G.js",
     "name": "AttendanceMonthly",
     "src": "src/pages/HR/AttendanceMonthly.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_attendanceService-CtKRhfJ9.js",
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_attendanceService-BJnAMXJz.js",
       "_csvExport-DtZdQr9B.js",
-      "_calculations-Bl6GveqK.js"
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/AttendancePayroll.tsx": {
-    "file": "assets/AttendancePayroll-D5QEywiC.js",
+    "file": "assets/AttendancePayroll-CgnfKayM.js",
     "name": "AttendancePayroll",
     "src": "src/pages/HR/AttendancePayroll.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_attendanceService-CtKRhfJ9.js",
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_attendanceService-BJnAMXJz.js",
       "_csvExport-DtZdQr9B.js",
-      "_employeeExtraService-BPTWI9Dh.js",
-      "_calculations-Bl6GveqK.js"
+      "_employeeExtraService-BSu1ECmY.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/AttendanceYearly.tsx": {
-    "file": "assets/AttendanceYearly-ImuEbtLD.js",
+    "file": "assets/AttendanceYearly-C4ZFWFEv.js",
     "name": "AttendanceYearly",
     "src": "src/pages/HR/AttendanceYearly.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_attendanceService-CtKRhfJ9.js",
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_attendanceService-BJnAMXJz.js",
       "_csvExport-DtZdQr9B.js",
-      "_calculations-Bl6GveqK.js"
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/HR/BulkSalarySlips.tsx": {
-    "file": "assets/BulkSalarySlips-BcGXqrNA.js",
+    "file": "assets/BulkSalarySlips-BTagw2Ni.js",
     "name": "BulkSalarySlips",
     "src": "src/pages/HR/BulkSalarySlips.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_payrollService-DLtCGlvL.js",
-      "_companySettingsService-CMD6rQSy.js",
-      "_employeeExtraService-BPTWI9Dh.js",
-      "_attendanceService-CtKRhfJ9.js",
-      "_calculations-Bl6GveqK.js",
-      "_leaveRequestService-BdHkh97m.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_payrollService-C6YPEA7M.js",
+      "_companySettingsService-5S8rgaAY.js",
+      "_employeeExtraService-BSu1ECmY.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_calculations-_OHnW426.js",
+      "_leaveRequestService-kQ2EQhXR.js"
     ]
   },
   "src/pages/HR/Employees.tsx": {
-    "file": "assets/Employees-Dqw-kykI.js",
+    "file": "assets/Employees-B_oINWE5.js",
     "name": "Employees",
     "src": "src/pages/HR/Employees.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_employeeExtraService-BPTWI9Dh.js"
+      "_index-DO23s4x6.js",
+      "_employeeExtraService-BSu1ECmY.js"
     ]
   },
   "src/pages/HR/LeaveRequests.tsx": {
-    "file": "assets/LeaveRequests-B6HwkG_Y.js",
+    "file": "assets/LeaveRequests-BDSpxV1g.js",
     "name": "LeaveRequests",
     "src": "src/pages/HR/LeaveRequests.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_calculations-Bl6GveqK.js",
-      "_leaveRequestService-BdHkh97m.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_calculations-_OHnW426.js",
+      "_leaveRequestService-kQ2EQhXR.js"
     ]
   },
   "src/pages/HR/Payroll.tsx": {
-    "file": "assets/Payroll-DuwULIys.js",
+    "file": "assets/Payroll-B7oA80U9.js",
     "name": "Payroll",
     "src": "src/pages/HR/Payroll.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_employeeExtraService-BPTWI9Dh.js",
-      "_leaveRequestService-BdHkh97m.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_employeeExtraService-BSu1ECmY.js",
+      "_leaveRequestService-kQ2EQhXR.js"
     ]
   },
   "src/pages/HR/SalarySlips.tsx": {
-    "file": "assets/SalarySlips-CfwxMqUk.js",
+    "file": "assets/SalarySlips-2zl05MJL.js",
     "name": "SalarySlips",
     "src": "src/pages/HR/SalarySlips.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_payrollService-DLtCGlvL.js",
-      "_companySettingsService-CMD6rQSy.js",
-      "_employeeExtraService-BPTWI9Dh.js",
-      "_attendanceService-CtKRhfJ9.js",
-      "_calculations-Bl6GveqK.js",
-      "_leaveRequestService-BdHkh97m.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_payrollService-C6YPEA7M.js",
+      "_companySettingsService-5S8rgaAY.js",
+      "_employeeExtraService-BSu1ECmY.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_calculations-_OHnW426.js",
+      "_leaveRequestService-kQ2EQhXR.js"
     ]
   },
   "src/pages/ITSupport/AttendanceDashboard.tsx": {
-    "file": "assets/AttendanceDashboard-DmmNZkg9.js",
+    "file": "assets/AttendanceDashboard-C9S7Iaww.js",
     "name": "AttendanceDashboard",
     "src": "src/pages/ITSupport/AttendanceDashboard.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_ErrorState-BTnLT9UR.js",
-      "_itSupportService-C-U-KVIp.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_ErrorState-Ir4XQvck.js",
+      "_itSupportService-BUNIbIuM.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/ITSupport/AttendanceExceptions.tsx": {
-    "file": "assets/AttendanceExceptions-DVvZC72r.js",
+    "file": "assets/AttendanceExceptions-DdoY7-Ge.js",
     "name": "AttendanceExceptions",
     "src": "src/pages/ITSupport/AttendanceExceptions.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_itSupportService-C-U-KVIp.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_itSupportService-BUNIbIuM.js"
     ]
   },
   "src/pages/ITSupport/AttendanceReports.tsx": {
-    "file": "assets/AttendanceReports-CP85mXou.js",
+    "file": "assets/AttendanceReports-AwrLya93.js",
     "name": "AttendanceReports",
     "src": "src/pages/ITSupport/AttendanceReports.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_ErrorState-BTnLT9UR.js",
-      "_itSupportService-C-U-KVIp.js",
-      "_attendanceService-CtKRhfJ9.js",
-      "_calculations-Bl6GveqK.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_ErrorState-Ir4XQvck.js",
+      "_itSupportService-BUNIbIuM.js",
+      "_attendanceService-BJnAMXJz.js",
+      "_calculations-_OHnW426.js"
     ]
   },
   "src/pages/ITSupport/BiometricMapping.tsx": {
-    "file": "assets/BiometricMapping-44QwGPwU.js",
+    "file": "assets/BiometricMapping-DN9iyhGR.js",
     "name": "BiometricMapping",
     "src": "src/pages/ITSupport/BiometricMapping.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_ErrorState-BTnLT9UR.js",
-      "_itSupportService-C-U-KVIp.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_ErrorState-Ir4XQvck.js",
+      "_itSupportService-BUNIbIuM.js"
     ]
   },
   "src/pages/ITSupport/DeviceLogs.tsx": {
-    "file": "assets/DeviceLogs-CVjoEaeg.js",
+    "file": "assets/DeviceLogs-C9bXIcRY.js",
     "name": "DeviceLogs",
     "src": "src/pages/ITSupport/DeviceLogs.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_itSupportService-C-U-KVIp.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_itSupportService-BUNIbIuM.js"
     ]
   },
   "src/pages/ITSupport/Devices.tsx": {
-    "file": "assets/Devices-CZuoKzh6.js",
+    "file": "assets/Devices-GPJD60lK.js",
     "name": "Devices",
     "src": "src/pages/ITSupport/Devices.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_ErrorState-BTnLT9UR.js",
-      "_itSupportService-C-U-KVIp.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_ErrorState-Ir4XQvck.js",
+      "_itSupportService-BUNIbIuM.js"
     ]
   },
   "src/pages/ITSupport/Punches.tsx": {
-    "file": "assets/Punches-B6zsOOo_.js",
+    "file": "assets/Punches-CKhxyuDS.js",
     "name": "Punches",
     "src": "src/pages/ITSupport/Punches.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_itSupportService-C-U-KVIp.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_itSupportService-BUNIbIuM.js"
     ]
   },
   "src/pages/ITSupport/Tickets.tsx": {
-    "file": "assets/Tickets-CUQnGJS7.js",
+    "file": "assets/Tickets-Cc4Mtk27.js",
     "name": "Tickets",
     "src": "src/pages/ITSupport/Tickets.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_itSupportService-C-U-KVIp.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_itSupportService-BUNIbIuM.js"
     ]
   },
   "src/pages/Marketing/ContentCalendar.tsx": {
-    "file": "assets/ContentCalendar-C8s7v74a.js",
+    "file": "assets/ContentCalendar-DJt54AOM.js",
     "name": "ContentCalendar",
     "src": "src/pages/Marketing/ContentCalendar.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_contentCalendarService-DRLORCN-.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_contentCalendarService-B-bdTEh1.js"
     ]
   },
   "src/pages/Marketing/Leads.tsx": {
-    "file": "assets/Leads-ObtZii42.js",
+    "file": "assets/Leads-nTHd8HaU.js",
     "name": "Leads",
     "src": "src/pages/Marketing/Leads.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js"
+      "_PageBreadCrumb-Djq-mBgK.js"
     ]
   },
   "src/pages/Marketing/SocialTracking.tsx": {
-    "file": "assets/SocialTracking-VjYFOzyP.js",
+    "file": "assets/SocialTracking-CjnWGAGe.js",
     "name": "SocialTracking",
     "src": "src/pages/Marketing/SocialTracking.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js"
+      "_PageBreadCrumb-Djq-mBgK.js"
     ]
   },
   "src/pages/Production/ClientOwnership.tsx": {
-    "file": "assets/ClientOwnership-B6zJCi1U.js",
+    "file": "assets/ClientOwnership-Bq2DS0GD.js",
     "name": "ClientOwnership",
     "src": "src/pages/Production/ClientOwnership.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_clientOwnershipService-Dk4-xHTF.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_clientOwnershipService-DvyknrUP.js"
     ]
   },
   "src/pages/Production/Deliverables.tsx": {
-    "file": "assets/Deliverables-BaSnk8tc.js",
+    "file": "assets/Deliverables-CyqDaXTk.js",
     "name": "Deliverables",
     "src": "src/pages/Production/Deliverables.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_ErrorState-BTnLT9UR.js",
-      "_deliverableService-fLh2n7Bg.js",
-      "_projectService-hhFoEyNj.js"
+      "_ErrorState-Ir4XQvck.js",
+      "_deliverableService-CkWoPaGJ.js",
+      "_projectService-Qj1LpUhH.js"
     ]
   },
   "src/pages/Production/MyClients.tsx": {
-    "file": "assets/MyClients-Ct_4sXhF.js",
+    "file": "assets/MyClients-BJKYqfq7.js",
     "name": "MyClients",
     "src": "src/pages/Production/MyClients.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_ErrorState-BTnLT9UR.js",
-      "_projectService-hhFoEyNj.js",
-      "_clientOwnershipService-Dk4-xHTF.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_ErrorState-Ir4XQvck.js",
+      "_projectService-Qj1LpUhH.js",
+      "_clientOwnershipService-DvyknrUP.js"
     ]
   },
   "src/pages/Sales/CampaignBudgets.tsx": {
-    "file": "assets/CampaignBudgets-DJlG1Pr2.js",
+    "file": "assets/CampaignBudgets-CystWoqs.js",
     "name": "CampaignBudgets",
     "src": "src/pages/Sales/CampaignBudgets.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_salesOpsService-CgEP6t-Y.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_salesOpsService-DVaeItjD.js"
     ]
   },
   "src/pages/Sales/Commissions.tsx": {
-    "file": "assets/Commissions-Io_2DFTv.js",
+    "file": "assets/Commissions-fMEqnNZI.js",
     "name": "Commissions",
     "src": "src/pages/Sales/Commissions.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js"
     ]
   },
   "src/pages/Sales/Leads.tsx": {
-    "file": "assets/Leads-CfcKS-yZ.js",
+    "file": "assets/Leads-_dpnf9Og.js",
     "name": "Leads",
     "src": "src/pages/Sales/Leads.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_pencil-B_dWoCIY.js",
-      "_trash-DEPRjsyA.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_pencil-B9485WZF.js",
+      "_trash-BVguNLSP.js"
     ]
   },
   "src/pages/Sales/SalesTargets.tsx": {
-    "file": "assets/SalesTargets-Bevej66y.js",
+    "file": "assets/SalesTargets-BUy-frSS.js",
     "name": "SalesTargets",
     "src": "src/pages/Sales/SalesTargets.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_ErrorState-BTnLT9UR.js",
-      "_salesOpsService-CgEP6t-Y.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_ErrorState-Ir4XQvck.js",
+      "_salesOpsService-DVaeItjD.js"
     ]
   },
   "src/pages/Sales/SalesTasks.tsx": {
-    "file": "assets/SalesTasks-C2EggS0D.js",
+    "file": "assets/SalesTasks-jCx4LayG.js",
     "name": "SalesTasks",
     "src": "src/pages/Sales/SalesTasks.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_salesOpsService-CgEP6t-Y.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_salesOpsService-DVaeItjD.js"
     ]
   },
   "src/pages/Sales/TeamPerformance.tsx": {
-    "file": "assets/TeamPerformance-Cmge6VQS.js",
+    "file": "assets/TeamPerformance-BjEqxWaa.js",
     "name": "TeamPerformance",
     "src": "src/pages/Sales/TeamPerformance.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_vendor-react-D_CQBhJw.js",
+      "_vendor-react-B-IsZfrH.js",
       "index.html",
-      "_PageBreadCrumb-BY2AxzZZ.js",
-      "_ErrorState-BTnLT9UR.js",
-      "_EmployeeIdentity-CnW3V_En.js",
-      "_salesOpsService-CgEP6t-Y.js"
+      "_PageBreadCrumb-Djq-mBgK.js",
+      "_ErrorState-Ir4XQvck.js",
+      "_EmployeeIdentity-DXWFp9tU.js",
+      "_salesOpsService-DVaeItjD.js"
     ]
   }
 }

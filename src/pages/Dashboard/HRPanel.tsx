@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import { RequirePermission } from "../../components/auth/RequirePermission";
-import { safeParse } from "../../lib/storage";
 import type { LeaveRequest } from "../Client/Profile";
 import { LeaveRequestService } from "../../services/leaveRequestService";
 import { EmployeeExtraService } from "../../services/employeeExtraService";
@@ -12,18 +11,21 @@ import { notifyUserCreated, logAttendanceModified } from "../../services/notific
 import { useAuth } from "../../context/AuthContext";
 import { useDepartments } from "../../context/DepartmentContext";
 import { PayrollService } from "../../services/payrollService";
+import { AttendanceService, type AttendanceRecord } from "../../services/attendanceService";
 import { UNKNOWN_DEPARTMENT } from "../../domain/department/calculations";
 
-// NOTE: ATTENDANCE_KEY below ("optivax_attendance") is a THIRD, distinct
-// attendance-marking feature (admin marks Present/Absent/Late per employee
-// per date, local to this dashboard widget) — it is NOT the same key as the
-// HR/Attendance.tsx self-check-in log ("mock_attendance", now migrated to
-// AttendanceService.getSelfRecords()/etc.) and is out of scope for this
-// migration; left reading/writing localStorage directly as before.
-const ATTENDANCE_KEY = "optivax_attendance";
-
+// This tab reads/writes the same centralized `attendance_records` data every
+// other attendance surface (HR/Attendance.tsx, AttendanceMonthly/Yearly,
+// Reports, Payroll) already uses via AttendanceService — it previously kept
+// its own independent localStorage log ("optivax_attendance"), invisible to
+// biometric/import-derived attendance and to every other page, which made
+// "Absent Today" and this tab's counts diverge from reality the moment an
+// import or a device sync ran. This local display type is a simplified
+// 3-state view over AttendanceRecord's full status vocabulary (present/
+// absent/late/half-day/leave/weekly-off/holiday) — every non-present,
+// non-late status (including "no record at all") displays as Absent here,
+// same simplification this tab's UI already made before.
 type AttendanceStatus = "Present" | "Absent" | "Late";
-// stored as Record<date-string, Record<userId, AttendanceStatus>>
 
 interface EmployeeExtraData {
   userId: string;
@@ -126,28 +128,62 @@ export default function HRPanel() {
       .catch(() => setLeaveRequests([]));
   }, []);
 
-  // ── Attendance — persisted per date ──────────────────────────────────
+  // ── Attendance — read from the centralized attendance_records table ───
   const todayStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
   const [attendanceDate, setAttendanceDate] = useState(todayStr);
-  const [allAttendance, setAllAttendance] = useState<Record<string, Record<string, AttendanceStatus>>>(() =>
-    safeParse<Record<string, Record<string, AttendanceStatus>>>(localStorage.getItem(ATTENDANCE_KEY), {})
-  );
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
 
-  const saveAttendance = (updated: Record<string, Record<string, AttendanceStatus>>) => {
-    setAllAttendance(updated);
-    localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(updated));
+  useEffect(() => {
+    AttendanceService.getSelfRecords()
+      .then(setAttendanceRecords)
+      .catch(() => setAttendanceRecords([]));
+  }, []);
+
+  // Keyed by date then userId for O(1) lookup — same records
+  // HR/Attendance.tsx, AttendanceMonthly/Yearly, and Reports already derive
+  // their own present/absent/late figures from.
+  const attendanceByDateAndUser = useMemo(() => {
+    const map: Record<string, Record<string, AttendanceRecord>> = {};
+    for (const rec of attendanceRecords) {
+      (map[rec.date] ??= {})[rec.userId] = rec;
+    }
+    return map;
+  }, [attendanceRecords]);
+
+  // No record for that employee/date means no check-in was ever recorded —
+  // that's a true absence, not the "assume Present unless marked otherwise"
+  // default this tab used to fall back to.
+  const getStatusForDate = (userId: string, date: string): AttendanceStatus => {
+    const rec = attendanceByDateAndUser[date]?.[userId];
+    if (rec?.status === "present") return "Present";
+    if (rec?.status === "late") return "Late";
+    return "Absent";
   };
 
-  const getStatusForDate = (userId: string, date: string): AttendanceStatus =>
-    allAttendance[date]?.[userId] ?? "Present";
-
-  const setStatus = (userId: string, status: AttendanceStatus) => {
-    const dateRecord = { ...(allAttendance[attendanceDate] ?? {}) };
-    dateRecord[userId] = status;
-    saveAttendance({ ...allAttendance, [attendanceDate]: dateRecord });
-    if (currentUser) {
-      const emp = employees.find(e => e.id === userId);
-      logAttendanceModified(currentUser.id, currentUser.name, emp?.full_name ?? userId, userId, attendanceDate, status);
+  const setStatus = async (userId: string, status: AttendanceStatus) => {
+    const backendStatus = status.toLowerCase() as "present" | "late" | "absent";
+    const existing = attendanceByDateAndUser[attendanceDate]?.[userId];
+    const emp = employees.find(e => e.id === userId);
+    try {
+      if (existing) {
+        await AttendanceService.updateSelfRecord(existing.id, { status: backendStatus });
+        setAttendanceRecords((prev) => prev.map((r) => (r.id === existing.id ? { ...r, status: backendStatus } : r)));
+      } else {
+        const created = await AttendanceService.createSelfRecord({
+          userId,
+          userName: emp?.full_name || userId,
+          userRole: emp?.role || "client",
+          date: attendanceDate,
+          status: backendStatus,
+        });
+        setAttendanceRecords((prev) => [...prev, created]);
+      }
+      if (currentUser) {
+        logAttendanceModified(currentUser.id, currentUser.name, emp?.full_name ?? userId, userId, attendanceDate, status);
+      }
+    } catch {
+      // no-op — same error-handling style as this file's handleLeaveAction:
+      // the list reflects the last confirmed server state on next reload.
     }
   };
 
@@ -366,7 +402,7 @@ export default function HRPanel() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </div>
-                <RequirePermission domain="hr" action="CREATE" fallback={null}>
+                <RequirePermission domain="employees" action="CREATE" fallback={null}>
                   <Link
                     to="/hr/users"
                     className="px-3 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors whitespace-nowrap"
@@ -473,7 +509,7 @@ export default function HRPanel() {
                         <td className="px-4 py-3 text-sm text-right">
                           {r.status === "Pending" ? (
                             <div className="flex justify-end gap-2">
-                              <RequirePermission domain="hr" action="APPROVE" fallback={<span className="text-gray-400 text-xs">Restricted</span>}>
+                              <RequirePermission domain="employee_leave" action="APPROVE" fallback={<span className="text-gray-400 text-xs">Restricted</span>}>
                                 <button
                                   onClick={() => handleLeaveAction(r.id, "Approved")}
                                   className="text-green-600 hover:text-green-900 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 px-2 py-1 rounded text-xs font-medium"
@@ -481,7 +517,7 @@ export default function HRPanel() {
                                   Approve
                                 </button>
                               </RequirePermission>
-                              <RequirePermission domain="hr" action="APPROVE" fallback={<span className="text-gray-400 text-xs">Restricted</span>}>
+                              <RequirePermission domain="employee_leave" action="APPROVE" fallback={<span className="text-gray-400 text-xs">Restricted</span>}>
                                 <button
                                   onClick={() => handleLeaveAction(r.id, "Rejected")}
                                   className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 px-2 py-1 rounded text-xs font-medium"

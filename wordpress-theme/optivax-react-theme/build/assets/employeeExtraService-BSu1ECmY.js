@@ -1,0 +1,1 @@
+import{i as t}from"./index-BF5lcj23.js";const s="/saas/v1/hr/employee-extra";class r{static async getAll(){return await t.get(s)||{}}static async update(a,e){await t.put(`${s}/${a}`,e)}static async saveAll(a){await t.put(s,a)}}export{r as E};

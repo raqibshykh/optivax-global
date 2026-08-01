@@ -217,7 +217,13 @@ export function computeMonthlyReport(
   const absentDays   = userRecs.filter((r) => r.status === "absent").length;
   const leaveDays    = userRecs.filter((r) => r.status === "leave").length;
   const halfDays     = userRecs.filter((r) => r.status === "half-day").length;
-  const lateArrivals = userRecs.filter((r) => r.status === "late" || (r.checkIn && isLateArrival(r.checkIn))).length;
+  // Relies solely on the stored status — every write path (biometric aggregateDay(),
+  // import aggregateDay(), and self-check-in's isLateForShift() call) already determines
+  // "late" using the employee's own real shift/grace period via ShiftResolver. Falling back to
+  // isLateArrival(r.checkIn) here would re-check against DEFAULT_SHIFT (09:00-17:00), which is
+  // wrong for every HR/Sales/Default night-shift employee and previously mis-counted nearly
+  // every "present" evening/night check-in as an extra late arrival too.
+  const lateArrivals = userRecs.filter((r) => r.status === "late").length;
 
   let totalWorkingHours = 0;
   for (const r of userRecs) {
@@ -277,7 +283,8 @@ export function computeYearlyReport(
   const totalAbsentDays   = userRecs.filter((r) => r.status === "absent").length;
   const totalLeaveDays    = userRecs.filter((r) => r.status === "leave").length;
   const totalHalfDays     = userRecs.filter((r) => r.status === "half-day").length;
-  const totalLateArrivals = userRecs.filter((r) => r.status === "late" || (r.checkIn && isLateArrival(r.checkIn))).length;
+  // See computeMonthlyReport()'s identical fix — status alone is authoritative.
+  const totalLateArrivals = userRecs.filter((r) => r.status === "late").length;
 
   const effective = totalPresentDays + totalHalfDays * 0.5;
   const annualAttendancePercentage = totalWorkingDays > 0

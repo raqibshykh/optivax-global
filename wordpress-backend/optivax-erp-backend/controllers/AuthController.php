@@ -3,6 +3,7 @@
 namespace OptivaxERP\Controllers;
 
 use OptivaxERP\Helpers\ApiResponse;
+use OptivaxERP\Helpers\Logger;
 use OptivaxERP\Helpers\PasswordPolicy;
 use OptivaxERP\Helpers\RateLimiter;
 use OptivaxERP\Helpers\Sanitize;
@@ -206,37 +207,51 @@ final class AuthController
     {
         $body = $request->get_json_params() ?: [];
         $email = Sanitize::email($body['email'] ?? '');
-        if (!$email) {
-            return ApiResponse::validationError('Email is required');
+        if (!$email || !is_email($email)) {
+            return ApiResponse::validationError('A valid email address is required');
         }
 
         $ip = RateLimiter::clientIp();
-        $accountKey = 'reset_acct_' . md5($ip . '|' . $email);
-        $ipKey = 'reset_ip_' . md5($ip);
-        $retryAfter = max(
-            RateLimiter::secondsUntilReset($accountKey, self::RESET_MAX_PER_ACCOUNT, self::RESET_WINDOW_SECONDS),
-            RateLimiter::secondsUntilReset($ipKey, self::RESET_MAX_PER_IP, self::RESET_WINDOW_SECONDS)
-        );
-        if ($retryAfter > 0) {
-            return ApiResponse::error('Too many reset requests. Please try again later.', 429, ['retryAfterSeconds' => $retryAfter]);
+        // Dev-mode escape hatch (RateLimiter::isBypassed doc comment has the
+        // full rationale) — never applies unless APP_ENV=development,
+        // WP_DEBUG=true, or the request IP is explicitly whitelisted, so
+        // production behavior is unchanged.
+        if (RateLimiter::isBypassed($ip)) {
+            Logger::info('auth', 'Password reset rate limit bypassed', ['ip' => $ip]);
+        } else {
+            $accountKey = 'reset_acct_' . md5($ip . '|' . $email);
+            $ipKey = 'reset_ip_' . md5($ip);
+            $retryAfter = max(
+                RateLimiter::secondsUntilReset($accountKey, self::RESET_MAX_PER_ACCOUNT, self::RESET_WINDOW_SECONDS),
+                RateLimiter::secondsUntilReset($ipKey, self::RESET_MAX_PER_IP, self::RESET_WINDOW_SECONDS)
+            );
+            if ($retryAfter > 0) {
+                Logger::warning('auth', 'Password reset rate limited', ['email' => $email, 'ip' => $ip]);
+                return ApiResponse::error('Too many reset requests. Please try again later.', 429, ['retryAfterSeconds' => $retryAfter]);
+            }
+            RateLimiter::recordAttempt($accountKey, self::RESET_WINDOW_SECONDS);
+            RateLimiter::recordAttempt($ipKey, self::RESET_WINDOW_SECONDS);
         }
-        RateLimiter::recordAttempt($accountKey, self::RESET_WINDOW_SECONDS);
-        RateLimiter::recordAttempt($ipKey, self::RESET_WINDOW_SECONDS);
 
         $user = get_user_by('email', $email);
         // Always return success even if the account doesn't exist, so the
         // response body can't be used to enumerate registered email
-        // addresses. Equally important: the "exists" branch below must not
-        // take meaningfully longer than this one, or the *timing* leaks the
-        // same information the response body deliberately hides — that's
-        // why the email is queued (a single fast DB insert) rather than
-        // sent synchronously over SMTP here.
+        // addresses. The per-account/per-IP rate limits above are the
+        // primary defense against timing-based enumeration of the branches
+        // below (a handful of attempts/hour can't reliably distinguish an
+        // SMTP round trip from an early return over a noisy network).
         if (!$user) {
+            Logger::info('auth', 'Password reset requested for unknown email', ['email' => $email, 'ip' => $ip]);
             return ApiResponse::ok(null);
         }
 
         $key = get_password_reset_key($user);
         if (is_wp_error($key)) {
+            Logger::error('auth', 'Password reset token generation failed', [
+                'userId' => $user->ID,
+                'error' => $key->get_error_message(),
+            ]);
+            SecurityAuditLog::record('password_reset_token_failed', null, null, $user->ID, 'failure');
             return ApiResponse::ok(null);
         }
 
@@ -246,11 +261,35 @@ final class AuthController
         // $login requirement in confirmReset() below.
         $token = $user->ID . '.' . $key;
 
-        MailService::queue($email, 'Reset your OptiVax Global password', 'password-reset', [
+        // The SPA is served via HashRouter (see wordpress-theme's 404.php doc
+        // comment) — every in-app route must live after the `#` fragment or
+        // WordPress tries to resolve it as a page/post slug and 404s before
+        // React Router ever sees it.
+        $resetUrl = home_url('/#/reset-password?token=' . rawurlencode($token));
+
+        // Sent synchronously (not MailService::queue()) because this is the
+        // one email the user is actively blocked waiting on: queuing depends
+        // on WP-Cron's pseudo-cron actually firing (it can silently never run
+        // at all if DISABLE_WP_CRON is set, or be delayed well past the
+        // reset window), which previously left requests stuck "pending" in
+        // email_queue with no delivery. MailService::sendNow()'s own doc
+        // comment already earmarks it for exactly this case.
+        $sent = MailService::sendNow($email, 'Reset your OptiVax Global password', 'password-reset', [
             'fullName' => $user->display_name,
-            'resetUrl' => home_url('/reset-password?token=' . rawurlencode($token)),
+            'resetUrl' => $resetUrl,
             'token' => $token,
+            'expiresIn' => '1 hour',
         ]);
+
+        if (!$sent) {
+            Logger::error('auth', 'Password reset email failed to send', ['userId' => $user->ID, 'email' => $email]);
+            SecurityAuditLog::record('password_reset_email_failed', null, null, $user->ID, 'failure');
+            // Still return a generic success response — surfacing SMTP
+            // failures to the client would both leak account existence and
+            // expose infrastructure state to an unauthenticated caller.
+            // Ops visibility comes from the log/audit lines above instead.
+            return ApiResponse::ok(null);
+        }
 
         SecurityAuditLog::record('password_reset_requested', null, null, $user->ID, 'success');
         return ApiResponse::ok(null);
@@ -273,14 +312,24 @@ final class AuthController
         [$userId, $key] = array_pad(explode('.', $token, 2), 2, null);
         $user = $userId ? get_user_by('id', (int) $userId) : null;
         if (!$user || !$key) {
+            Logger::warning('auth', 'Password reset confirm with malformed/unknown token', ['userId' => $userId]);
             return ApiResponse::error('Invalid or expired reset token', 400);
         }
 
         $checked = check_password_reset_key($key, $user->user_login);
         if (is_wp_error($checked)) {
+            Logger::warning('auth', 'Password reset confirm with invalid/expired key', [
+                'userId' => $user->ID,
+                'error' => $checked->get_error_code(),
+            ]);
+            SecurityAuditLog::record('password_reset_failed', null, null, $user->ID, 'failure');
             return ApiResponse::error('Invalid or expired reset token', 400);
         }
 
+        // wp_set_password() (called inside reset_password()) clears
+        // user_activation_key as part of the same update, which is what
+        // makes this token single-use — a second confirm with the same
+        // token fails the check_password_reset_key() call above.
         reset_password($user, $newPassword);
         AuthService::incrementTokenVersion($user->ID);
         SecurityAuditLog::record('password_reset_completed', $user->ID, null, $user->ID, 'success');

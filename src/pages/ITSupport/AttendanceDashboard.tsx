@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import LoadingState from "../../components/common/LoadingState";
@@ -9,7 +9,13 @@ import {
   type BiometricDevice, type AttendanceException, type DeviceSyncLog,
 } from "../../services/itSupportService";
 import { UserService, type UserProfile } from "../../services/userService";
+import { AttendanceService, STATUS_COLORS, type AttendanceRecord } from "../../services/attendanceService";
 import { useDepartments } from "../../context/DepartmentContext";
+
+function statusLabel(status?: string): string {
+  if (!status) return "Absent";
+  return status.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
 
 export default function AttendanceDashboard() {
   const { getDepartmentName } = useDepartments();
@@ -17,6 +23,7 @@ export default function AttendanceDashboard() {
   const [exceptions, setExceptions] = useState<AttendanceException[]>([]);
   const [syncLogs, setSyncLogs]     = useState<DeviceSyncLog[]>([]);
   const [staff, setStaff]           = useState<UserProfile[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
   const [loadError, setLoadError]   = useState<string | null>(null);
 
@@ -24,22 +31,36 @@ export default function AttendanceDashboard() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [devicesData, exceptionsData, syncLogsData, users] = await Promise.all([
+      const [devicesData, exceptionsData, syncLogsData, users, attendanceData] = await Promise.all([
         DeviceService.getAll(),
         AttendanceExceptionService.getAll(),
         DeviceSyncLogService.getAll(),
         UserService.getAll(),
+        AttendanceService.getSelfRecords(),
       ]);
       setDevices(devicesData);
       setExceptions(exceptionsData);
       setSyncLogs(syncLogsData);
       setStaff(users.filter(u => u.role !== "client"));
+      setAttendanceRecords(attendanceData);
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : "Failed to load the attendance dashboard");
     } finally {
       setIsLoading(false);
     }
   }, []);
+
+  // Today's per-employee status from the centralized attendance_records table (same source
+  // HRPanel/ManagementPanel/Reports/Payroll already read) — replaces a hardcoded, index-cycled
+  // fake status list that never reflected real check-ins.
+  const todayStr = new Date().toISOString().split("T")[0];
+  const attendanceTodayByUser = useMemo(() => {
+    const map: Record<string, AttendanceRecord> = {};
+    for (const rec of attendanceRecords) {
+      if (rec.date === todayStr) map[rec.userId] = rec;
+    }
+    return map;
+  }, [attendanceRecords, todayStr]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -101,20 +122,25 @@ export default function AttendanceDashboard() {
         ))}
       </div>
 
-      {/* Department attendance summary */}
+      {/* Department attendance summary — rate computed from today's real attendance_records rows, not a hardcoded figure */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {["Sales", "Production", "Marketing", "HR", "IT Support"].map(dept => {
-          const count = staff.filter(u =>
+          const deptStaff = staff.filter(u =>
             u.departmentId === `dept-${dept.toLowerCase().replace(/\s+/g, "-")}`
-          ).length;
+          );
+          const presentToday = deptStaff.filter(u => {
+            const status = attendanceTodayByUser[u.id]?.status;
+            return status === "present" || status === "late";
+          }).length;
+          const rate = deptStaff.length > 0 ? Math.round((presentToday / deptStaff.length) * 100) : 0;
           return (
             <div key={dept} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{dept}</p>
-              <p className="mt-2 text-xl font-bold text-gray-800 dark:text-white">{count} staff</p>
+              <p className="mt-2 text-xl font-bold text-gray-800 dark:text-white">{deptStaff.length} staff</p>
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
-                <div className="h-1.5 rounded-full bg-brand-500" style={{ width: "85%" }} />
+                <div className="h-1.5 rounded-full bg-brand-500" style={{ width: `${rate}%` }} />
               </div>
-              <p className="text-xs text-gray-400 mt-1">85% attendance rate</p>
+              <p className="text-xs text-gray-400 mt-1">{rate}% attendance rate today</p>
             </div>
           );
         })}
@@ -149,9 +175,10 @@ export default function AttendanceDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                {staff.map((u, i) => {
-                  const statuses = ["Present", "Present", "Present", "Late", "Present", "Absent", "Present", "Remote"];
-                  const s = statuses[i % statuses.length];
+                {staff.map((u) => {
+                  // No record for today means the employee never checked in — a true absence,
+                  // same convention HRPanel/ManagementPanel use for their own "Absent Today" counts.
+                  const status = attendanceTodayByUser[u.id]?.status ?? "absent";
                   return (
                     <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
                       <td className="px-4 py-3">
@@ -163,12 +190,9 @@ export default function AttendanceDashboard() {
                       <td className="px-4 py-3 text-gray-500">{getDepartmentName(u.departmentId)}</td>
                       <td className="px-4 py-3 text-gray-500 capitalize">{u.role.replace(/_/g, " ")}</td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-                          s === "Present" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" :
-                          s === "Late"    ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" :
-                          s === "Absent"  ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" :
-                          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                        }`}>{s}</span>
+                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[status]}`}>
+                          {statusLabel(status)}
+                        </span>
                       </td>
                     </tr>
                   );

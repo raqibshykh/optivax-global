@@ -51,8 +51,8 @@ export default function LeaveRequests() {
   const { user, canView, canApprove } = useAuth();
   const { showToast }                  = useToast();
 
-  const canViewAll      = canView("hr");
-  const canApproveLeave = canApprove("hr");
+  const canViewAll      = canView("employee_leave");
+  const canApproveLeave = canApprove("employee_leave");
   const isStaffMember   = user?.role !== "client" && user?.role !== "super_admin";
   const isDeptAdmin     = user?.role?.endsWith("_admin") && !canViewAll;
   const viewerDeptId    = user ? ((user as { departmentId?: string }).departmentId) : undefined;

@@ -153,10 +153,37 @@ final class ProfileController
             // — never settable via a self-edit, regardless of what's sent.
             unset($data['role'], $data['departmentId'], $data['status']);
         } else {
-            $guard = RbacMiddleware::authorize('system', 'EDIT');
-            if ($guard) {
-                return $guard;
+            // Was 'system' EDIT only — which only super_admin and it_admin
+            // hold, so editing another user's profile 403'd for hr_admin and
+            // management despite Employees.tsx's Edit button checking
+            // canEdit(...) and showing as available. Now passes if the
+            // caller holds EITHER 'system' EDIT (super_admin/it_admin — the
+            // account-administration angle) OR 'employees' EDIT (hr_admin/
+            // management — the HR-profile-data angle: name, designation,
+            // department). Role reassignment specifically stays additionally
+            // gated by UserHierarchy::canCreate() just below, regardless of
+            // which of the two unlocks the base edit.
+            $systemGuard = RbacMiddleware::authorize('system', 'EDIT');
+            $employeesGuard = RbacMiddleware::authorize('employees', 'EDIT');
+            if ($systemGuard !== null && $employeesGuard !== null) {
+                return $systemGuard;
             }
+
+            // Active/inactive account status is a separate, narrower grant:
+            // holding 'employees' EDIT alone (e.g. management) is NOT enough
+            // to flip it — must additionally hold 'system' EDIT or
+            // 'employee_status' EDIT. This keeps account activation out of
+            // the general "edit an employee's profile" permission, mirroring
+            // how salary/leave data was split off in EmployeeExtraController
+            // and LeaveRequestController — see RBAC_MATRIX's "management"
+            // entry in src/utils/rbac.ts.
+            if (array_key_exists('status', $data)) {
+                $statusGuard = RbacMiddleware::authorize('employee_status', 'EDIT');
+                if ($systemGuard !== null && $statusGuard !== null) {
+                    return $statusGuard;
+                }
+            }
+
             if (array_key_exists('role', $data)) {
                 $newRole = Sanitize::key($data['role']);
                 if (!UserHierarchy::canCreate(AuthMiddleware::currentRole(), $newRole)) {

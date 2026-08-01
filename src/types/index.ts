@@ -13,7 +13,12 @@ export type PermissionDomain =
   | "sales" | "production" | "marketing" | "hr" | "it_support"
   | "clients" | "system" | "billing" | "reports"
   | "files" | "notifications" | "revisions" | "conversations" | "budget"
-  | "payroll" | "salary_slips" | "advance_salary";
+  | "payroll" | "salary_slips" | "advance_salary"
+  // Split out of "hr" so employee profile management (name/designation/
+  // department) can be granted separately from payroll data (salary,
+  // deductions, salary status), leave approval, and account activation —
+  // see RBAC_MATRIX's "management" entry in src/utils/rbac.ts for why.
+  | "employees" | "employee_salary" | "employee_leave" | "employee_status";
 
 export type PermissionAction =
   | "VIEW" | "CREATE" | "EDIT" | "DELETE"
@@ -40,6 +45,28 @@ export interface User {
   departmentId?: string;
   mustChangePassword?: boolean;
 }
+
+// Human-readable label for each system role — the single shared source for
+// "pretty-print this UserRole" so it's never duplicated ad hoc per page
+// (previously Employees.tsx kept its own private copy). Distinct from
+// DESIGNATIONS_BY_ROLE below: that's a real job title an employee is
+// assigned (e.g. "Senior Developer"), this is just role_slug -> label
+// (e.g. "production_member" -> "Production Member").
+export const ROLE_LABELS: Record<UserRole, string> = {
+  super_admin: "Super Admin",
+  management: "Management",
+  sales_admin: "Sales Admin",
+  sales_member: "Sales Member",
+  production_admin: "Production Admin",
+  production_member: "Production Member",
+  marketing_admin: "Marketing Admin",
+  marketing_member: "Marketing Member",
+  hr_admin: "HR Admin",
+  hr_member: "HR Member",
+  it_admin: "IT Admin",
+  it_member: "IT Member",
+  client: "Client",
+};
 
 export const DESIGNATIONS_BY_ROLE: Partial<Record<UserRole, string[]>> = {
   production_admin:  ["Production Manager", "Tech Lead", "Senior Developer"],

@@ -19,13 +19,18 @@ if (!defined('ABSPATH')) {
  * /saas/v1/hr/employee-leave-requests/* (employee self-submitted) — two
  * independent sub-resources per src/services/leaveRequestService.ts's own
  * doc comment ("this codebase independently grew *two* unrelated
- * leave-request features"). Gated on the 'hr' RBAC domain throughout.
+ * leave-request features"). Viewing and approving/rejecting are gated on the
+ * 'employee_leave' RBAC domain (split off 'hr' so a role that manages
+ * employee profiles doesn't automatically get to decide leave outcomes — see
+ * RBAC_MATRIX's "management" entry in src/utils/rbac.ts); creating/deleting
+ * an HR-side record stay gated on the general 'hr' domain, unchanged.
  */
 final class LeaveRequestController
 {
     private LeaveRequestHrRepository $hrRepo;
     private LeaveRequestEmployeeRepository $employeeRepo;
     private string $domain = 'hr';
+    private string $leaveDomain = 'employee_leave';
 
     public function __construct()
     {
@@ -38,7 +43,7 @@ final class LeaveRequestController
     /** GET /leave-requests */
     public function listHr(\WP_REST_Request $request): \WP_REST_Response
     {
-        $guard = RbacMiddleware::authorize($this->domain, 'VIEW');
+        $guard = RbacMiddleware::authorize($this->leaveDomain, 'VIEW');
         if ($guard) {
             return $guard;
         }
@@ -72,7 +77,11 @@ final class LeaveRequestController
     /** PUT /leave-requests/{id} — body is { status, reviewedBy, reviewNote? }. */
     public function updateHr(\WP_REST_Request $request): \WP_REST_Response
     {
-        $guard = RbacMiddleware::authorize($this->domain, 'EDIT');
+        // APPROVE (not EDIT) — this endpoint's only real effect is a leave
+        // approve/reject decision, which is exactly what 'employee_leave'
+        // APPROVE gates. A role holding 'employees' EDIT (e.g. management)
+        // does NOT automatically get this.
+        $guard = RbacMiddleware::authorize($this->leaveDomain, 'APPROVE');
         if ($guard) {
             return $guard;
         }
@@ -119,10 +128,11 @@ final class LeaveRequestController
     // Consumed by src/pages/Client/Profile.tsx — the shared "my profile" page
     // mounted for every role (/sales/profile, /production/profile, ...
     // /hr/profile), not just hr staff. Submitting/viewing must therefore be
-    // "any authenticated user, own records" rather than gated on 'hr' domain
-    // CREATE/VIEW, which would lock out every non-HR employee from ever
-    // submitting their own leave request. Only the approve/reject step
-    // (updateEmployee) is a real admin action and stays 'hr'-gated.
+    // "any authenticated user, own records" rather than gated on a domain
+    // CREATE/VIEW check, which would lock out every non-HR employee from
+    // ever submitting their own leave request. Only the approve/reject step
+    // (updateEmployee) is a real admin action and stays gated — on
+    // 'employee_leave' APPROVE.
 
     /** GET /hr/employee-leave-requests */
     public function listEmployee(\WP_REST_Request $request): \WP_REST_Response
@@ -133,10 +143,11 @@ final class LeaveRequestController
 
         // This endpoint serves two audiences (see the class doc comment):
         // HR/management reviewing everyone's submissions, and each employee
-        // viewing their own. Holding 'hr' VIEW is what distinguishes the
-        // former — everyone else must only ever see their own requests, or
-        // any employee could read every colleague's leave reason/dates.
-        if (RbacMiddleware::authorize($this->domain, 'VIEW') === null) {
+        // viewing their own. Holding 'employee_leave' VIEW is what
+        // distinguishes the former — everyone else must only ever see their
+        // own requests, or any employee could read every colleague's leave
+        // reason/dates.
+        if (RbacMiddleware::authorize($this->leaveDomain, 'VIEW') === null) {
             return ApiResponse::ok($this->employeeRepo->list([], 'submitted_at DESC'));
         }
         $ownId = (string) AuthMiddleware::currentUserId();
@@ -171,7 +182,8 @@ final class LeaveRequestController
     /** PUT /hr/employee-leave-requests/{id} — body is { status }. */
     public function updateEmployee(\WP_REST_Request $request): \WP_REST_Response
     {
-        $guard = RbacMiddleware::authorize($this->domain, 'EDIT');
+        // APPROVE — same rationale as updateHr() above.
+        $guard = RbacMiddleware::authorize($this->leaveDomain, 'APPROVE');
         if ($guard) {
             return $guard;
         }

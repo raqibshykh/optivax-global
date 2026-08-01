@@ -27,6 +27,12 @@ final class PasswordGateMiddleware
         'auth/refresh',
         'auth/session',
         'auth/change-password',
+        // change-password requires the user's *current* password, which is
+        // exactly what a must-change-password user who has also forgotten
+        // their password doesn't have — without these two, that user has no
+        // way out of the gate at all.
+        'auth/request-reset',
+        'auth/confirm-reset',
     ];
 
     public static function enforce($result, $server, \WP_REST_Request $request)

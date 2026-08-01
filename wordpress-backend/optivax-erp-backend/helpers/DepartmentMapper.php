@@ -38,17 +38,20 @@ final class DepartmentMapper
 
     /**
      * Roles with NO RBAC domain of their own — domainForRole() returns null for these by
-     * design (RbacMatrix::DOMAINS has no "management" entry; management is cross-cutting, not
-     * domain-scoped) — but that must still resolve to a real, specific department
-     * automatically. This was the actual root cause of "management users never get linked to
-     * the Management department": every OTHER role's department resolution (create/update
-     * auto-assign, the Migrator backfill, ShiftResolver's legacy-slug fallback) is keyed off
-     * domainForRole(), so a role with no domain silently fell through all of it. Resolved by
-     * NAME instead, via DepartmentAutoAssignService — extend this map, not domainForRole(),
-     * for any future domain-less role that needs the same treatment.
+     * design (RbacMatrix::DOMAINS has no "management"/"super_admin"/"client" entry; these are
+     * cross-cutting, not domain-scoped) — but each must still resolve to a real, specific
+     * department automatically. This was the actual root cause of "management users never get
+     * linked to the Management department" (and the same gap for super_admin/client): every
+     * OTHER role's department resolution (create/update auto-assign, the Migrator backfill,
+     * ShiftResolver's legacy-slug fallback) is keyed off domainForRole(), so a role with no
+     * domain silently fell through all of it. Resolved by NAME instead, via
+     * DepartmentAutoAssignService — extend this map, not domainForRole(), for any future
+     * domain-less role that needs the same treatment.
      */
     private const ROLE_TO_DEPARTMENT_NAME = [
         'management' => 'Management',
+        'super_admin' => 'Administration',
+        'client' => 'Client',
     ];
 
     public static function deptSlugForRole(string $role): ?string
@@ -62,8 +65,9 @@ final class DepartmentMapper
      * employee's chosen real `departments` row (its `domain` column) actually matches their
      * role, which is the Department Master's "department admin must belong to that
      * department" rule: a production_admin can never be assigned a Sales department, and vice
-     * versa. Returns null for roles with no department domain (super_admin, management,
-     * client) — nothing to validate for those.
+     * versa. Returns null for roles with no RBAC domain of their own (super_admin, management,
+     * client) — those are resolved by NAME instead (see departmentNameForRole()), so there's no
+     * domain-match rule to enforce for them.
      */
     public static function domainForRole(string $role): ?string
     {
@@ -74,17 +78,18 @@ final class DepartmentMapper
         return str_replace('-', '_', preg_replace('/^dept-/', '', $slug));
     }
 
-    /** The canonical department NAME a domain-less role (see ROLE_TO_DEPARTMENT_NAME) should resolve/auto-create against. Null for every role resolved by domain instead (and for super_admin/client, which aren't department-scoped at all). */
+    /** The canonical department NAME a domain-less role (see ROLE_TO_DEPARTMENT_NAME) should resolve/auto-create against. Null for every role resolved by domain instead. */
     public static function departmentNameForRole(string $role): ?string
     {
         return self::ROLE_TO_DEPARTMENT_NAME[$role] ?? null;
     }
 
-    /** Mirrors deptFromRole() — role-prefix match, "management" -> "Management", else "General". */
+    /** Mirrors deptFromRole() — name-mapped roles first (management/super_admin/client), then role-prefix match, else "General". */
     public static function deptLabelForRole(string $role): string
     {
-        if ($role === 'management') {
-            return 'Management';
+        $named = self::departmentNameForRole($role);
+        if ($named !== null) {
+            return $named;
         }
         foreach (self::ROLE_TO_DEPT_LABEL_PREFIXES as $prefix => $label) {
             if (strpos($role, $prefix) === 0) {

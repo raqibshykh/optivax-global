@@ -92,12 +92,44 @@ final class AttendanceRepository
         return $row ? $this->toDto($row) : null;
     }
 
+    /**
+     * @throws \RuntimeException if the INSERT fails for any reason other than the one this
+     * method self-heals (see below) — a discarded $wpdb->insert() return value previously let
+     * any failure here (including one this table's own UNIQUE KEY was designed to catch) pass
+     * completely silently, returning a DTO built from data that was never actually persisted.
+     */
     public function createSelf(array $data): array
     {
         global $wpdb;
         $row = $this->fromDto($data);
-        $wpdb->insert($this->table(), $row);
+        $inserted = $wpdb->insert($this->table(), $row);
+
+        if ($inserted === false) {
+            // The one failure mode this table's UNIQUE KEY user_date (user_id, date) exists to
+            // catch: a second write for the same employee+day landed between the caller's own
+            // findByUserAndDate() check and this INSERT (e.g. two overlapping import/aggregation
+            // runs for the same employee/day). Rather than let that surface as a raw, opaque SQL
+            // error, treat it as "the row already exists" and fall through to an update — never a
+            // second row for the same (user_id, date), and the caller still gets back that row's
+            // real, current state. Any OTHER insert failure is genuinely unexpected and must not
+            // be swallowed, so it is thrown rather than silently returning unpersisted data.
+            if (self::isDuplicateKeyError($wpdb->last_error)) {
+                $existing = $this->findByUserAndDate($row['user_id'], $row['date']);
+                if ($existing !== null) {
+                    $this->updateSelf($existing['id'], $data);
+                    return $this->findByUserAndDate($row['user_id'], $row['date']) ?? $this->toDto($row);
+                }
+            }
+            throw new \RuntimeException('AttendanceRepository::createSelf insert failed for user ' . $row['user_id'] . ' on ' . $row['date'] . ': ' . $wpdb->last_error);
+        }
+
         return $this->toDto($row);
+    }
+
+    /** True when $wpdbError is a MySQL/MariaDB "Duplicate entry" constraint violation (error 1062) — the only createSelf() failure treated as recoverable; see its own doc comment. */
+    private static function isDuplicateKeyError(string $wpdbError): bool
+    {
+        return $wpdbError !== '' && str_contains($wpdbError, 'Duplicate entry');
     }
 
     public function updateSelf(string $id, array $patch): void

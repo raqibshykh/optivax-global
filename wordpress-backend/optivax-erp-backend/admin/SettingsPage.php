@@ -38,6 +38,12 @@ final class SettingsPage
         // network (a self-hosted/on-premise install) — see
         // DeviceSyncService's doc comment.
         'optivax_erp_enable_lan_device_sync' => ['label' => 'Allow direct LAN device sync (legacy — only if this server is on the same network as the biometric device)', 'type' => 'checkbox'],
+        // Auth rate-limit dev bypass — see RateLimiter::isBypassed(). Bypass
+        // is automatic in a detected dev environment (APP_ENV=development or
+        // WP_DEBUG=true); this checkbox is a kill-switch to keep testing the
+        // limiter itself locally, and never has any effect in production.
+        'optivax_erp_ratelimit_force_in_dev' => ['label' => 'Keep auth rate limiting active in development (overrides the automatic APP_ENV/WP_DEBUG bypass)', 'type' => 'checkbox'],
+        'optivax_erp_ratelimit_ip_whitelist' => ['label' => 'Rate Limit IP Whitelist (comma-separated — these IPs always bypass auth rate limits, in every environment)', 'type' => 'text'],
     ];
 
     public static function registerMenu(): void

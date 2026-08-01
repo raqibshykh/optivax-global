@@ -1,0 +1,1 @@
+import{i as a}from"./index-BF5lcj23.js";const e="/saas/v1/deliverables";class i{static async getAll(){return await a.get(`${e}/list`)||[]}static async create(t){return a.post(`${e}/create`,t)}static async update(t,s){return a.put(`${e}/update`,{id:t,...s})}}export{i as D};

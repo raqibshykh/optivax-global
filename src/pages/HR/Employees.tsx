@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
-import { DESIGNATIONS_BY_ROLE, UserRole } from "../../types";
+import { DESIGNATIONS_BY_ROLE, ROLE_LABELS, UserRole } from "../../types";
 import { EmployeeExtraService } from "../../services/employeeExtraService";
 import { DepartmentService, Department } from "../../services/departmentService";
 import Avatar from "../../components/common/Avatar";
@@ -51,22 +51,6 @@ const ROLE_TO_DEPT_SLUG: Partial<Record<UserRole, string>> = {
   it_admin: "dept-it-support", it_member: "dept-it-support",
 };
 
-const ROLE_LABELS: Partial<Record<UserRole, string>> = {
-  management: "Management",
-  sales_admin: "Sales Admin",
-  sales_member: "Sales Member",
-  production_admin: "Production Admin",
-  production_member: "Production Member",
-  marketing_admin: "Marketing Admin",
-  marketing_member: "Marketing Member",
-  hr_admin: "HR Admin",
-  hr_member: "HR Member",
-  it_admin: "IT Admin",
-  it_member: "IT Member",
-  client: "Client",
-  super_admin: "Super Admin",
-};
-
 // Mirrors the backend's UserHierarchy::creatableRoles() — who may create/
 // assign which role. Client-side only for a better error message; the
 // server enforces this independently and is the real authority.
@@ -80,7 +64,11 @@ const CREATABLE_ROLES: Partial<Record<UserRole, UserRole[]>> = {
   marketing_admin: ["marketing_member"],
   hr_admin: ["hr_member"],
   it_admin: ["it_member"],
-  management: ["client"],
+  // Mirrors UserHierarchy::creatableRoles()['management'] (backend) — member-tier
+  // roles across every department, plus the existing client-onboarding grant.
+  // No *_admin/super_admin/management: creating admin-tier or peer accounts
+  // stays super_admin-only.
+  management: ["client", "sales_member", "production_member", "marketing_member", "hr_member", "it_member"],
 };
 
 export default function Employees() {
@@ -125,10 +113,17 @@ export default function Employees() {
   const isDeptAdmin   = viewerRole?.endsWith("_admin") && !isSuper && !isManager && !isHRAdmin;
   const viewerDomain  = viewerRole ? viewerRole.split("_")[0] : null;
 
-  const isGlobalViewer    = canView("hr");
-  const canSeeSalary      = canView("hr");
-  const canAdd            = canCreate("hr");
-  const canEditEmployee   = () => canEdit("hr");
+  const isGlobalViewer    = canView("employees");
+  // Read access to salary/deduction/status is a separate grant from editing
+  // an employee's profile — e.g. management can view these columns for
+  // oversight but cannot set them (see canSetInitialPayroll below).
+  const canSeeSalary      = canView("employee_salary");
+  // Gates the "Payroll & Leave Settings" section shown at creation time —
+  // writing salary/leave/work-mode data requires 'employee_salary' EDIT,
+  // which management deliberately does not hold.
+  const canSetInitialPayroll = canEdit("employee_salary");
+  const canAdd            = canCreate("employees");
+  const canEditEmployee   = () => canEdit("employees");
   const canDeleteEmployee = () => canDelete("hr");
 
   // When dept admin creates employee, lock department to their own —
@@ -279,9 +274,15 @@ export default function Employees() {
           created_at: new Date().toISOString(),
           password: formPassword,
         } as any);
-        await EmployeeExtraService.update(newEmp.id, {
-          leavesTaken: formLeavesTaken, salary: formSalary, salaryStatus: formSalaryStatus, workMode: formWorkMode,
-        });
+        // Skipped for roles without 'employee_salary' EDIT (e.g. management)
+        // — the form doesn't collect these fields for them either (see
+        // canSetInitialPayroll below), so there's nothing to write, and
+        // calling this would otherwise 403.
+        if (canSetInitialPayroll) {
+          await EmployeeExtraService.update(newEmp.id, {
+            leavesTaken: formLeavesTaken, salary: formSalary, salaryStatus: formSalaryStatus, workMode: formWorkMode,
+          });
+        }
         showToast("Employee created successfully", "success");
       }
       setIsModalOpen(false);
@@ -572,7 +573,7 @@ export default function Employees() {
                       </select>
                     )}
                   </div>
-                  {!editingEmployee && canSeeSalary && (
+                  {!editingEmployee && canSetInitialPayroll && (
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-800 space-y-4">
                       <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Payroll & Leave Settings</h4>
                       <div className="grid grid-cols-2 gap-4">

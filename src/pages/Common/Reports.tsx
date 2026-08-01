@@ -55,7 +55,7 @@ interface KpiCard {
 }
 
 export default function Reports() {
-  const { canExport } = useAuth();
+  const { canView, canExport } = useAuth();
   const location = useLocation();
 
   const domain = useMemo<ReportDomain | null>(() => {
@@ -66,20 +66,33 @@ export default function Reports() {
 
   const isCompanyWide = domain === "admin" || domain === "management" || domain === null;
 
+  // Each flag is ANDed with canView() on the RBAC domain that actually gates
+  // the underlying API call (see the comment on each line for which
+  // controller/route enforces it) — the route/domain heuristic above only
+  // decides which sections a report *page* is scoped to show; it does not
+  // guarantee the viewer's role holds the RBAC grant that section's data
+  // requires. Previously this wasn't checked, so a role reaching a
+  // company-wide (or "hr") report page that lacked one of these grants (e.g.
+  // management holding no 'hr' domain, by design, or sales_admin holding no
+  // 'production' domain) got a 403 buried inside loadData()'s single
+  // Promise.all — which sank the ENTIRE Reports page instead of just hiding
+  // the one section that role isn't authorized for. Gating on the real
+  // permission fixes that: unauthorized sections are simply never fetched or
+  // shown, exactly like every other RBAC-gated part of this app.
   const needs = useMemo(() => ({
-    employees: isCompanyWide || domain === "hr",
-    departments: isCompanyWide || domain === "hr",
-    attendance: isCompanyWide || domain === "hr",
-    leave: isCompanyWide || domain === "hr",
-    payroll: isCompanyWide || domain === "hr",
-    activity: isCompanyWide || domain === "hr",
-    clients: isCompanyWide || domain === "sales",
-    invoices: isCompanyWide || domain === "sales",
-    tasks: isCompanyWide || domain === "sales" || domain === "production" || domain === "marketing",
-    projects: isCompanyWide || domain === "production",
-    budget: isCompanyWide || domain === "production" || domain === "marketing",
-    notifications: isCompanyWide,
-  }), [isCompanyWide, domain]);
+    employees:    (isCompanyWide || domain === "hr") && canView("employees"),      // ProfileController::list() — open, but mirrors the 'employees' domain conceptually
+    departments:  isCompanyWide || domain === "hr",                                 // DepartmentRoutes.php /departments/list — auth-only (every authenticated user needs department names for display), no domain gate
+    attendance:   (isCompanyWide || domain === "hr") && canView("hr"),              // AttendanceController::year() -> 'hr' VIEW
+    leave:        (isCompanyWide || domain === "hr") && canView("employee_leave"),  // LeaveRequestController -> 'employee_leave' VIEW
+    payroll:      (isCompanyWide || domain === "hr") && canView("salary_slips"),    // PayrollController::listSalarySlips() -> 'salary_slips' VIEW
+    activity:     isCompanyWide || domain === "hr",                                 // /activity/sessions — auth only, no domain gate
+    clients:      (isCompanyWide || domain === "sales") && canView("clients"),      // ClientRoutes.php -> 'clients' VIEW
+    invoices:     (isCompanyWide || domain === "sales") && canView("billing"),      // InvoiceController -> 'billing' VIEW
+    tasks:        (isCompanyWide || domain === "sales" || domain === "production" || domain === "marketing") && canView("production"), // TaskRoutes.php -> 'production' VIEW
+    projects:     (isCompanyWide || domain === "production") && canView("production"), // ProjectRoutes.php -> 'production' VIEW
+    budget:       (isCompanyWide || domain === "production" || domain === "marketing") && canView("budget"), // BudgetController -> 'budget' VIEW
+    notifications: isCompanyWide && canView("notifications"),                       // NotificationRoutes.php -> 'notifications' VIEW
+  }), [isCompanyWide, domain, canView]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);

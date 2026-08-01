@@ -6,7 +6,10 @@
       "Bash(tee /tmp/build_after.log)",
       "Bash(npx eslint *)",
       "Bash(npx --no-install tsc --version)",
-      "Bash(tee /c/Users/ARBAZK~1/AppData/Local/Temp/claude/tsc_out.txt)"
+      "Bash(tee /c/Users/ARBAZK~1/AppData/Local/Temp/claude/tsc_out.txt)",
+      "Bash(php -l wordpress-backend/optivax-erp-backend/controllers/AuthController.php)",
+      "Bash(php -l wordpress-backend/optivax-erp-backend/optivax-erp-backend.php)",
+      "Bash(php -l wordpress-backend/optivax-erp-backend/mail/templates/password-reset.php)"
     ]
   }
 }

@@ -33,10 +33,11 @@ final class AttendanceImportFileParser
     private const MAX_ROWS = 5000;
 
     private const COLUMN_SYNONYMS = [
-        'biometricUserId' => ['employee id', 'user id', 'biometric id', 'biometric user id', 'userid', 'employeeid', 'empid', 'emp id', 'id'],
-        'date' => ['date'],
+        'biometricUserId' => ['employee id', 'user id', 'biometric id', 'biometric user id', 'employeeid', 'userid', 'no',' No.','enroll no', 'enrollno', 'pin', 'badge number', 'id number'],
+        'employeeName' => ['name', 'employee name', 'user name'],
+        'timestamp' => ['date time', 'Date/Time', 'date time', 'datetime', 'timestamp', 'punch time', 'date time', 'date time'],
         'time' => ['time'],
-        'status' => ['punch type', 'status', 'type'],
+        'status' => ['punch type', 'status', 'type', 'verifycode', 'verify code'],
     ];
 
     /**
@@ -44,6 +45,15 @@ final class AttendanceImportFileParser
      * @throws \InvalidArgumentException on an unsupported/empty/malformed file, or a header missing a required column
      */
     public static function parse(string $tmpPath, string $originalName): array
+    {
+        return self::parseWithMetadata($tmpPath, $originalName)['rows'];
+    }
+
+    /**
+     * @return array{rows: array<int, array{rowNumber:int, biometricUserId:?string, date:?string, time:?string, rawStatus:?string}>, employeeNames: array<int, ?string>}
+     * @throws \InvalidArgumentException on an unsupported/empty/malformed file, or a header missing a required column
+     */
+    public static function parseWithMetadata(string $tmpPath, string $originalName): array
     {
         $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
         $rawRows = match ($ext) {
@@ -66,11 +76,12 @@ final class AttendanceImportFileParser
         if ($columnMap['biometricUserId'] === null) {
             throw new \InvalidArgumentException('Could not find an Employee ID / User ID / Biometric ID column in the file header.');
         }
-        if ($columnMap['date'] === null) {
-            throw new \InvalidArgumentException('Could not find a Date column in the file header.');
+        if ($columnMap['timestamp'] === null) {
+            throw new \InvalidArgumentException('Could not find a timestamp column in the file header.');
         }
 
         $records = [];
+        $employeeNames = [];
         foreach ($rawRows as $i => $row) {
             // Skip fully blank trailing rows some spreadsheet exports leave behind.
             if (empty(array_filter($row, static fn ($v): bool => trim((string) $v) !== ''))) {
@@ -79,12 +90,13 @@ final class AttendanceImportFileParser
             $records[] = [
                 'rowNumber' => $i + 2, // +1 for the header row, +1 to make it 1-based
                 'biometricUserId' => self::cell($row, $columnMap['biometricUserId']),
-                'date' => self::cell($row, $columnMap['date']),
-                'time' => $columnMap['time'] !== null ? self::cell($row, $columnMap['time']) : null,
+                'date' => self::cell($row, $columnMap['timestamp']),
+                'time' => null,
                 'rawStatus' => $columnMap['status'] !== null ? self::cell($row, $columnMap['status']) : null,
             ];
+            $employeeNames[] = $columnMap['employeeName'] !== null ? self::cell($row, $columnMap['employeeName']) : null;
         }
-        return $records;
+        return ['rows' => $records, 'employeeNames' => $employeeNames];
     }
 
     private static function cell(array $row, int $index): ?string
@@ -99,16 +111,22 @@ final class AttendanceImportFileParser
 
     private static function normalizeHeader(?string $header): string
     {
-        return strtolower(trim((string) $header));
+        $normalized = trim((string) $header);
+        $normalized = strtolower($normalized);
+        $normalized = str_replace('/', ' ', $normalized);
+        $normalized = preg_replace('/[._-]+/', '', $normalized);
+        $normalized = preg_replace('/\s+/', ' ', $normalized);
+        return trim($normalized);
     }
 
-    /** @return array{biometricUserId:?int, date:?int, time:?int, status:?int} */
+    /** @return array{biometricUserId:?int, employeeName:?int, timestamp:?int, time:?int, status:?int} */
     private static function detectColumns(array $header): array
     {
-        $map = ['biometricUserId' => null, 'date' => null, 'time' => null, 'status' => null];
+        $map = ['biometricUserId' => null, 'employeeName' => null, 'timestamp' => null, 'time' => null, 'status' => null];
         foreach (self::COLUMN_SYNONYMS as $field => $candidates) {
             foreach ($header as $index => $col) {
-                if (in_array($col, $candidates, true)) {
+                $normalized = self::normalizeHeader($col);
+                if (in_array($normalized, $candidates, true)) {
                     $map[$field] = $index;
                     break;
                 }

@@ -67,7 +67,7 @@ final class AttendanceImportMigration
             'attendance_import_rows' => "CREATE TABLE {$p}attendance_import_rows (
                 id VARCHAR(36) NOT NULL,
                 import_id VARCHAR(36) NOT NULL,
-                row_number INT UNSIGNED NOT NULL,
+                'row_number' INT UNSIGNED NOT NULL,
                 biometric_user_id VARCHAR(64) NULL,
                 employee_id VARCHAR(36) NULL,
                 record_date DATE NULL,
